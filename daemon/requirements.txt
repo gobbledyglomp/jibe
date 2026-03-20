@@ -1,0 +1,14 @@
+# Jibe daemon dependencies
+
+aiohttp==3.11.18
+zeroconf==0.146.1
+aiosqlite==0.21.0
+pyperclip==1.9.0
+pytest==8.3.5
+
+# dbus-python — Linux D-Bus bindings for notification mirroring.
+# Deferred to a later milestone because it requires system packages
+# (pkgconf, dbus headers) to build:
+#   sudo pacman -S pkgconf dbus
+#   pip install dbus-python
+# dbus-python==1.3.2
