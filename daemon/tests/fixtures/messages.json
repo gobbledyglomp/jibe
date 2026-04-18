@@ -1,0 +1,52 @@
+{
+  "auth.request": {
+    "type": "auth.request",
+    "pin": "482916",
+    "device_name": "Pixel 8 Pro"
+  },
+  "auth.response": {
+    "type": "auth.response",
+    "accepted": true,
+    "reason": ""
+  },
+  "ping": {
+    "type": "ping"
+  },
+  "pong": {
+    "type": "pong"
+  },
+  "clipboard.sync": {
+    "type": "clipboard.sync",
+    "content": "https://example.com/interesting-article"
+  },
+  "notification": {
+    "type": "notification",
+    "app": "com.whatsapp",
+    "title": "Alice",
+    "body": "Hey, are you coming tonight?",
+    "timestamp": 1710892800
+  },
+  "file.start": {
+    "type": "file.start",
+    "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+    "filename": "photo_2024.jpg",
+    "size": 2048576,
+    "total_chunks": 32
+  },
+  "file.chunk": {
+    "type": "file.chunk",
+    "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+    "index": 0,
+    "data": "iVBORw0KGgoAAAANSUhEUgAA..."
+  },
+  "file.done": {
+    "type": "file.done",
+    "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+    "checksum": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "error": {
+    "type": "error",
+    "code": "malformed_json",
+    "message": "Failed to parse JSON"
+  }
+}
