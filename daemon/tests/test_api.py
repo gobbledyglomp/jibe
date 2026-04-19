@@ -1,6 +1,5 @@
 import json
 import pytest
-from pathlib import Path
 
 from jibe.api import (
     parse_message,
@@ -9,13 +8,6 @@ from jibe.api import (
     InvalidMessageError,
 )
 
-FIXTURES_DIR = Path(__file__).parent / "fixtures"
-
-@pytest.fixture
-def valid_messages():
-    """Load valid message examples from the JSON fixture file."""
-    with open(FIXTURES_DIR / "messages.json", "r") as f:
-        return json.load(f)
 
 # ── Valid Message Tests ──────────────────────────────────────────────────
 
