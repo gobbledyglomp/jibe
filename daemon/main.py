@@ -1,15 +1,68 @@
+"""Jibe daemon entrypoint.
+
+Run this file to start the Jibe daemon:
+
+    python main.py
+
+This wires together all daemon components:
+  - JibeDiscovery: broadcasts the daemon on the local network via mDNS
+  - JibeServer: accepts WebSocket connections and serves the HTTP API
+
+Both services run concurrently in a single asyncio event loop.
+"""
+
 import asyncio
 import logging
 
+from jibe.config import LOG_DATE_FORMAT, LOG_FORMAT
+from jibe.discovery import JibeDiscovery
+from jibe.server import JibeServer
+
+logging.basicConfig(
+    level=logging.INFO,
+    format=LOG_FORMAT,
+    datefmt=LOG_DATE_FORMAT,
+)
+
+logger = logging.getLogger("jibe.main")
+
+
+async def run_daemon() -> None:
+    """Run the main daemon loop.
+
+    Starts the server and discovery services, then waits forever until
+    cancelled.
+    """
+    logger.info("Jibe daemon starting...")
+
+    server = JibeServer()
+    discovery = JibeDiscovery()
+
+    try:
+        await asyncio.gather(
+            server.start(),
+            discovery.start(),
+        )
+        logger.info("Ready. Press Ctrl+C to stop.")
+        await asyncio.Event().wait()
+
+    except asyncio.CancelledError:
+        logger.info("Shutting down...")
+
+    finally:
+        await asyncio.gather(
+            discovery.stop(),
+            server.stop(),
+            return_exceptions=True,
+        )
+
 
 def main() -> None:
-    """Start the Jibe daemon.
-
-    This is the top-level entry point. It initialises logging, creates
-    the async services, and runs them in the event loop.
-    """
-    # TODO: Wire up JibeDiscovery + JibeServer with feat/entrypoint
-    print("Jibe daemon — not yet wired up. See Step 7.")
+    """Entry point. Sets up the event loop and handles Ctrl+C."""
+    try:
+        asyncio.run(run_daemon())
+    except KeyboardInterrupt:
+        logger.info("Jibe daemon stopped cleanly.")
 
 
 if __name__ == "__main__":

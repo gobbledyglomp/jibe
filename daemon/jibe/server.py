@@ -24,6 +24,7 @@ import logging
 from aiohttp import web
 
 from jibe import __version__
+from jibe.api import InvalidMessageError, format_error, parse_message
 from jibe.config import DEFAULT_PORT
 
 logger = logging.getLogger(__name__)
@@ -82,8 +83,19 @@ class JibeServer:
         try:
             async for msg in ws:
                 if msg.type == web.WSMsgType.TEXT:
-                    # In Step 5, we will pass this to api.parse_message()
-                    logger.debug("Received message: %s", msg.data)
+                    try:
+                        jibe_msg = parse_message(msg.data)
+                        logger.info("Parsed valid %s message", jibe_msg.type.value)
+
+                        # In future, we will route jibe_msg to specific handlers based
+                        # on its type. For now, we just log it to prove parsing works.
+                        logger.debug("Payload: %s", jibe_msg.payload)
+
+                    except InvalidMessageError as e:
+                        logger.warning("Invalid message from %s: %s", client_ip, str(e))
+                        error_json = format_error(e.code, str(e))
+                        await ws.send_str(error_json)
+
                 elif msg.type == web.WSMsgType.ERROR:
                     logger.error(
                         "WebSocket connection closed with exception %s",
