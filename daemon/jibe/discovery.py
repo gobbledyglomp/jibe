@@ -20,20 +20,22 @@ Why zeroconf (Python library)?
 import logging
 import socket
 
-from zeroconf import ServiceInfo, Zeroconf
+from zeroconf import ServiceInfo
+from zeroconf.asyncio import AsyncZeroconf
 
 from jibe import __version__
 from jibe.config import DEFAULT_PORT, SERVICE_NAME, SERVICE_TYPE
 
 logger = logging.getLogger(__name__)
 
+
 def _get_local_ip() -> str:
     """Get the machine's LAN IP address.
 
-    We open a UDP socket "connected" to an external IP (we never actually
-    send anything) and check which local interface the OS would route
-    through. This avoids hardcoding an interface name and works on any
-    network configuration.
+    This uses a common trick: we open a UDP socket "connected" to an
+    external IP (we never actually send anything) and check which local
+    interface the OS would route through. This avoids hardcoding an
+    interface name and works on any network configuration.
 
     Returns:
         The local IPv4 address as a string (e.g. "192.168.1.42").
@@ -72,15 +74,16 @@ class JibeDiscovery:
                   where to connect.
         """
         self._port = port
-        self._zeroconf: Zeroconf | None = None
+
+        self._async_zc: AsyncZeroconf | None = None
         self._service_info: ServiceInfo | None = None
 
     async def start(self) -> None:
         """Register the Jibe service on the local network.
 
-        Creates a Zeroconf instance and registers a ServiceInfo record.
-        After this call, `avahi-browse -t _jibe._tcp` (or any mDNS
-        browser) will show the Jibe daemon.
+        Creates an AsyncZeroconf instance and registers a ServiceInfo
+        record. After this call, `avahi-browse -t _jibe._tcp` (or any
+        mDNS browser) will show the Jibe daemon.
         """
         local_ip = _get_local_ip()
 
@@ -95,8 +98,8 @@ class JibeDiscovery:
             addresses=[socket.inet_aton(local_ip)],
         )
 
-        self._zeroconf = Zeroconf()
-        self._zeroconf.register_service(self._service_info)
+        self._async_zc = AsyncZeroconf()
+        await self._async_zc.async_register_service(self._service_info)
 
         logger.info(
             "mDNS service registered: %s on %s:%d",
@@ -112,10 +115,10 @@ class JibeDiscovery:
         network know this service is no longer available — they won't
         have to wait for the record to expire.
         """
-        if self._zeroconf and self._service_info:
+        if self._async_zc and self._service_info:
             logger.info("Unregistering mDNS service...")
-            self._zeroconf.unregister_service(self._service_info)
-            self._zeroconf.close()
-            self._zeroconf = None
+            await self._async_zc.async_unregister_service(self._service_info)
+            await self._async_zc.async_close()
+            self._async_zc = None
             self._service_info = None
             logger.info("mDNS service unregistered")
