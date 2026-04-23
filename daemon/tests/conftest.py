@@ -16,6 +16,7 @@ from jibe.auth import AuthManager
 from jibe.connection import ConnectionRegistry, JibeConnection
 from jibe.db import JibeDatabase
 from jibe.server import JibeServer
+from jibe.tls import create_ssl_context, generate_self_signed_cert
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
@@ -29,7 +30,7 @@ def valid_messages():
 
 @pytest.fixture
 def jibe_server(db):
-    """A JibeServer wired to the test database."""
+    """A JibeServer wired to the test database (no TLS)."""
     return JibeServer(db=db)
 
 
@@ -91,3 +92,31 @@ def conn(mock_ws):
 def registry():
     """An empty ConnectionRegistry."""
     return ConnectionRegistry()
+
+
+# ── TLS ──────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def certs_dir(tmp_path):
+    """Temporary directory for test certificates."""
+    return tmp_path / "certs"
+
+
+@pytest.fixture
+def ssl_context(certs_dir):
+    """An SSL context backed by a freshly generated self-signed cert."""
+    cert_path, key_path = generate_self_signed_cert(certs_dir=certs_dir)
+    return create_ssl_context(cert_path, key_path)
+
+
+@pytest.fixture
+def jibe_server_tls(db, ssl_context):
+    """A JibeServer wired to the test database with TLS enabled."""
+    return JibeServer(db=db, ssl_context=ssl_context)
+
+
+@pytest.fixture
+def jibe_app_tls(jibe_server_tls):
+    """The aiohttp application from a TLS-enabled test JibeServer."""
+    return jibe_server_tls._app
