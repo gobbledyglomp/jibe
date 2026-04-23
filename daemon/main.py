@@ -15,6 +15,7 @@ import asyncio
 import logging
 
 from jibe.config import LOG_DATE_FORMAT, LOG_FORMAT
+from jibe.db import JibeDatabase
 from jibe.discovery import JibeDiscovery
 from jibe.server import JibeServer
 
@@ -30,12 +31,15 @@ logger = logging.getLogger("jibe.main")
 async def run_daemon() -> None:
     """Run the main daemon loop.
 
-    Starts the server and discovery services, then waits forever until
-    cancelled.
+    Starts the database, server, and discovery services, then waits
+    forever until cancelled.
     """
     logger.info("Jibe daemon starting...")
 
-    server = JibeServer()
+    db = JibeDatabase()
+    await db.open()
+
+    server = JibeServer(db=db)
     discovery = JibeDiscovery()
 
     try:
@@ -55,6 +59,7 @@ async def run_daemon() -> None:
             server.stop(),
             return_exceptions=True,
         )
+        await db.close()
 
 
 def main() -> None:
