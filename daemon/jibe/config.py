@@ -24,6 +24,12 @@ DATABASE_DIR = _xdg_data_home / "jibe"
 DATABASE_NAME = "jibe.db"
 SCHEMA_VERSION = 1
 
+# ── Authentication ───────────────────────────────────────────────────────
+
+PIN_LENGTH = 6
+PIN_EXPIRY_SECONDS = 120
+MAX_PIN_ATTEMPTS = 3
+
 # ── Logging ──────────────────────────────────────────────────────────────
 
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
