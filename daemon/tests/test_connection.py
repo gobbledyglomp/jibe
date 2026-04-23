@@ -1,13 +1,9 @@
 """Tests for the connection state machine and registry."""
 
-from unittest.mock import AsyncMock
-
-from aiohttp import web
-
-from jibe.connection import ConnectionRegistry, ConnectionState, JibeConnection
-
+from jibe.connection import ConnectionState, JibeConnection
 
 # ── JibeConnection ────────────────────────────────────────────────────────
+
 
 def test_connection_initial_state(conn, mock_ws):
     """A new connection must start in AWAITING_AUTH."""
@@ -60,6 +56,7 @@ def test_connection_repr(conn):
 
 
 # ── ConnectionRegistry ────────────────────────────────────────────────────
+
 
 def test_registry_add_remove(registry, conn):
     """Connections can be added and removed."""

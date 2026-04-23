@@ -12,13 +12,11 @@ test it both with and without a mock to verify the fallback path.
 import socket
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
 from jibe.config import DEFAULT_PORT, SERVICE_NAME, SERVICE_TYPE
 from jibe.discovery import JibeDiscovery, _get_local_ip
 
-
 # ── _get_local_ip ────────────────────────────────────────────────────────
+
 
 def test_get_local_ip_returns_string():
     """The function should return a dotted-quad IPv4 string."""
@@ -41,6 +39,7 @@ def test_get_local_ip_fallback_on_oserror():
 
 
 # ── JibeDiscovery lifecycle ──────────────────────────────────────────────
+
 
 async def test_discovery_starts_with_correct_service_info():
     """start() should register a service with the expected name and type."""
