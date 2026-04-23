@@ -1,10 +1,12 @@
 """Daemon-wide constants and configuration.
 
 Centralises all "magic values" so they can be changed in one place.
-This module will grow as new features are added — for now it holds
-the network and mDNS settings needed by the discovery and server
-modules, plus logging format defaults.
+This module will grow as new features are added. Current sections:
+network, mDNS, database, and logging.
 """
+
+import os
+from pathlib import Path
 
 # ── Network ──────────────────────────────────────────────────────────────
 
@@ -14,6 +16,13 @@ DEFAULT_PORT = 8765
 
 SERVICE_TYPE = "_jibe._tcp.local."
 SERVICE_NAME = "Jibe"
+
+# ── Database ─────────────────────────────────────────────────────────────
+
+_xdg_data_home = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
+DATABASE_DIR = _xdg_data_home / "jibe"
+DATABASE_NAME = "jibe.db"
+SCHEMA_VERSION = 1
 
 # ── Logging ──────────────────────────────────────────────────────────────
 
