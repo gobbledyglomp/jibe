@@ -8,9 +8,12 @@ test files.
 
 import json
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
+from aiohttp import web
 from jibe.auth import AuthManager
+from jibe.connection import ConnectionRegistry, JibeConnection
 from jibe.db import JibeDatabase
 from jibe.server import JibeServer
 
@@ -25,15 +28,20 @@ def valid_messages():
 
 
 @pytest.fixture
-def jibe_app():
-    """Create a bare JibeServer and return its aiohttp application.
+def jibe_server(db):
+    """A JibeServer wired to the test database."""
+    return JibeServer(db=db)
+
+
+@pytest.fixture
+def jibe_app(jibe_server):
+    """The aiohttp application from a test JibeServer.
 
     This is the standard way to test aiohttp apps: create the
     application object without starting the TCP listener, then pass it
     to ``aiohttp_client`` which spins up a lightweight test server.
     """
-    server = JibeServer()
-    return server._app
+    return jibe_server._app
 
 
 @pytest.fixture
@@ -63,3 +71,23 @@ async def auth_pairing(auth):
     """AuthManager with pairing mode already active."""
     auth.start_pairing()
     return auth
+
+
+@pytest.fixture
+def mock_ws():
+    """A mock aiohttp WebSocketResponse."""
+    ws = AsyncMock(spec=web.WebSocketResponse)
+    ws.closed = False
+    return ws
+
+
+@pytest.fixture
+def conn(mock_ws):
+    """A fresh JibeConnection in AWAITING_AUTH state."""
+    return JibeConnection(ws=mock_ws, client_ip="127.0.0.1")
+
+
+@pytest.fixture
+def registry():
+    """An empty ConnectionRegistry."""
+    return ConnectionRegistry()

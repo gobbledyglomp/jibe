@@ -4,18 +4,38 @@ These tests use ``aiohttp_client`` (from pytest-aiohttp) to spin up a
 lightweight test server for each test — no real TCP port is opened.
 This lets us exercise the full WebSocket and HTTP handling code path
 without touching the network.
+
+Now that the server enforces auth-first, these tests cover both
+unauthenticated and authenticated paths through the state machine.
 """
 
-import json
-
-import pytest
-from aiohttp import WSMsgType
-
 from jibe import __version__
-from jibe.api import MessageType
+
+# ── Helpers ──────────────────────────────────────────────────────────────
+
+
+async def _authenticate(ws, jibe_server):
+    """Pair a device over the WebSocket and return the auth response.
+
+    Activates pairing mode, sends the correct PIN, and verifies
+    acceptance. This is the standard way to get an authenticated
+    connection in tests.
+    """
+    pin = jibe_server.auth.start_pairing()
+    await ws.send_json(
+        {
+            "type": "auth.request",
+            "pin": pin,
+            "device_name": "Test Device",
+        }
+    )
+    resp = await ws.receive_json()
+    assert resp["accepted"] is True
+    return resp
 
 
 # ── HTTP Health Endpoint ─────────────────────────────────────────────────
+
 
 async def test_health_returns_status_and_version(aiohttp_client, jibe_app):
     """GET / should return running status and the current version."""
@@ -37,38 +57,41 @@ async def test_health_content_type_is_json(aiohttp_client, jibe_app):
     assert "application/json" in resp.headers["Content-Type"]
 
 
-# ── WebSocket: Valid Messages ────────────────────────────────────────────
+async def test_health_reports_connected_devices(aiohttp_client, jibe_app, jibe_server):
+    """GET / should report the number of authenticated connections."""
+    client = await aiohttp_client(jibe_app)
 
-async def test_ws_accepts_valid_message(aiohttp_client, jibe_app):
-    """Sending a valid protocol message should not trigger an error."""
+    data = await (await client.get("/")).json()
+    assert data["connected_devices"] == 0
+
+    ws = await client.ws_connect("/ws")
+    await _authenticate(ws, jibe_server)
+
+    data = await (await client.get("/")).json()
+    assert data["connected_devices"] == 1
+
+    await ws.close()
+
+
+# ── WebSocket: Auth Gate ─────────────────────────────────────────────────
+
+
+async def test_unauthenticated_non_auth_message_rejected(aiohttp_client, jibe_app):
+    """Non-auth messages before authentication must get auth_required."""
     client = await aiohttp_client(jibe_app)
     ws = await client.ws_connect("/ws")
 
     await ws.send_json({"type": "ping"})
+    resp = await ws.receive_json()
 
-    # The server currently logs but does not respond to valid messages.
-    # Closing the connection cleanly proves the server didn't crash.
-    await ws.close()
-    assert ws.closed
-
-
-async def test_ws_accepts_all_message_types(aiohttp_client, jibe_app, valid_messages):
-    """Every message type defined in the protocol should be accepted."""
-    client = await aiohttp_client(jibe_app)
-    ws = await client.ws_connect("/ws")
-
-    for msg_type in MessageType:
-        payload = valid_messages[msg_type.value]
-        await ws.send_json(payload)
+    assert resp["type"] == "error"
+    assert resp["code"] == "auth_required"
 
     await ws.close()
-    assert ws.closed
 
 
-# ── WebSocket: Error Responses ───────────────────────────────────────────
-
-async def test_ws_malformed_json_returns_error(aiohttp_client, jibe_app):
-    """Sending invalid JSON should return a malformed_json error."""
+async def test_malformed_json_still_rejected_before_auth(aiohttp_client, jibe_app):
+    """Malformed JSON should return malformed_json even before auth."""
     client = await aiohttp_client(jibe_app)
     ws = await client.ws_connect("/ws")
 
@@ -81,8 +104,100 @@ async def test_ws_malformed_json_returns_error(aiohttp_client, jibe_app):
     await ws.close()
 
 
-async def test_ws_unknown_type_returns_error(aiohttp_client, jibe_app):
-    """Sending an unknown message type should return an unknown_type error."""
+async def test_successful_auth_flow(aiohttp_client, jibe_app, jibe_server):
+    """A correct PIN should transition the connection to AUTHENTICATED."""
+    client = await aiohttp_client(jibe_app)
+    ws = await client.ws_connect("/ws")
+
+    resp = await _authenticate(ws, jibe_server)
+    assert resp["type"] == "auth.response"
+    assert "device_id" in resp
+    assert "fingerprint" in resp
+
+    await ws.close()
+
+
+async def test_wrong_pin_rejected(aiohttp_client, jibe_app, jibe_server):
+    """A wrong PIN should return accepted=False."""
+    client = await aiohttp_client(jibe_app)
+    ws = await client.ws_connect("/ws")
+
+    jibe_server.auth.start_pairing()
+    await ws.send_json(
+        {
+            "type": "auth.request",
+            "pin": "000000",
+            "device_name": "Attacker",
+        }
+    )
+    resp = await ws.receive_json()
+
+    assert resp["accepted"] is False
+    assert "Invalid PIN" in resp["reason"]
+
+    await ws.close()
+
+
+async def test_auth_without_pairing_mode(aiohttp_client, jibe_app):
+    """auth.request when pairing mode is inactive must be rejected."""
+    client = await aiohttp_client(jibe_app)
+    ws = await client.ws_connect("/ws")
+
+    await ws.send_json(
+        {
+            "type": "auth.request",
+            "pin": "123456",
+            "device_name": "Phone",
+        }
+    )
+    resp = await ws.receive_json()
+
+    assert resp["accepted"] is False
+    assert "not active" in resp["reason"]
+
+    await ws.close()
+
+
+# ── WebSocket: Authenticated Messages ────────────────────────────────────
+
+
+async def test_authenticated_connection_accepts_messages(
+    aiohttp_client, jibe_app, jibe_server
+):
+    """After auth, other message types should be accepted without error."""
+    client = await aiohttp_client(jibe_app)
+    ws = await client.ws_connect("/ws")
+    await _authenticate(ws, jibe_server)
+
+    await ws.send_json({"type": "ping"})
+
+    await ws.close()
+    assert ws.closed
+
+
+async def test_multiple_messages_after_auth(aiohttp_client, jibe_app, jibe_server):
+    """An authenticated connection should handle multiple messages."""
+    client = await aiohttp_client(jibe_app)
+    ws = await client.ws_connect("/ws")
+    await _authenticate(ws, jibe_server)
+
+    await ws.send_json({"type": "ping"})
+    await ws.send_json({"type": "pong"})
+
+    await ws.send_str("broken")
+    resp = await ws.receive_json()
+    assert resp["code"] == "malformed_json"
+
+    await ws.send_json({"type": "ping"})
+    await ws.close()
+    assert ws.closed
+
+
+# ── WebSocket: Error Handling ────────────────────────────────────────────
+
+
+async def test_unknown_type_returns_error(aiohttp_client, jibe_app):
+    """Sending an unknown message type should return an error."""
     client = await aiohttp_client(jibe_app)
     ws = await client.ws_connect("/ws")
 
@@ -95,7 +210,7 @@ async def test_ws_unknown_type_returns_error(aiohttp_client, jibe_app):
     await ws.close()
 
 
-async def test_ws_missing_type_returns_error(aiohttp_client, jibe_app):
+async def test_missing_type_returns_error(aiohttp_client, jibe_app):
     """Sending a JSON object without a 'type' field should return an error."""
     client = await aiohttp_client(jibe_app)
     ws = await client.ws_connect("/ws")
@@ -110,7 +225,7 @@ async def test_ws_missing_type_returns_error(aiohttp_client, jibe_app):
     await ws.close()
 
 
-async def test_ws_empty_message_returns_error(aiohttp_client, jibe_app):
+async def test_empty_message_returns_error(aiohttp_client, jibe_app):
     """Sending an empty string should return a malformed_json error."""
     client = await aiohttp_client(jibe_app)
     ws = await client.ws_connect("/ws")
@@ -126,27 +241,8 @@ async def test_ws_empty_message_returns_error(aiohttp_client, jibe_app):
 
 # ── WebSocket: Connection Lifecycle ──────────────────────────────────────
 
-async def test_ws_multiple_messages_same_connection(aiohttp_client, jibe_app):
-    """A single WebSocket connection should handle multiple messages."""
-    client = await aiohttp_client(jibe_app)
-    ws = await client.ws_connect("/ws")
 
-    # First: a valid message (no response expected)
-    await ws.send_json({"type": "ping"})
-
-    # Second: an invalid message (error response expected)
-    await ws.send_str("broken")
-    resp = await ws.receive_json()
-    assert resp["code"] == "malformed_json"
-
-    # Third: another valid message to prove the connection survived
-    await ws.send_json({"type": "pong"})
-
-    await ws.close()
-    assert ws.closed
-
-
-async def test_ws_clean_disconnect(aiohttp_client, jibe_app):
+async def test_clean_disconnect(aiohttp_client, jibe_app):
     """The server should handle clean client disconnection gracefully."""
     client = await aiohttp_client(jibe_app)
     ws = await client.ws_connect("/ws")
@@ -156,6 +252,7 @@ async def test_ws_clean_disconnect(aiohttp_client, jibe_app):
 
 
 # ── HTTP: Non-existent Routes ────────────────────────────────────────────
+
 
 async def test_unknown_route_returns_404(aiohttp_client, jibe_app):
     """Requesting a non-existent path should return 404."""

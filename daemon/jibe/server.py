@@ -19,13 +19,23 @@ Why aiohttp?
 """
 
 import asyncio
+import json
 import logging
 
 from aiohttp import web
 
 from jibe import __version__
-from jibe.api import InvalidMessageError, format_error, parse_message
+from jibe.api import (
+    AuthError,
+    InvalidMessageError,
+    MessageType,
+    format_error,
+    parse_message,
+)
+from jibe.auth import AuthManager
 from jibe.config import DEFAULT_PORT
+from jibe.connection import ConnectionRegistry, ConnectionState, JibeConnection
+from jibe.db import JibeDatabase
 
 logger = logging.getLogger(__name__)
 
@@ -36,19 +46,41 @@ class JibeServer:
     Provides `start()` and `stop()` async methods so the server can be
     run alongside other async services (like mDNS discovery) using
     `asyncio.gather()`.
+
+    The server owns the database, auth manager, and connection registry.
+    These are injected via the constructor so tests can provide mocks or
+    in-memory implementations.
     """
 
-    def __init__(self, port: int = DEFAULT_PORT) -> None:
+    def __init__(
+        self,
+        db: JibeDatabase,
+        port: int = DEFAULT_PORT,
+    ) -> None:
         """Initialise the server.
 
         Args:
+            db: The database instance for persistence.
             port: The TCP port to listen on.
         """
         self._port = port
+        self._db = db
+        self._auth = AuthManager(db)
+        self._registry = ConnectionRegistry()
         self._app = web.Application()
         self._setup_routes()
         self._runner: web.AppRunner | None = None
         self._site: web.TCPSite | None = None
+
+    @property
+    def auth(self) -> AuthManager:
+        """Expose the auth manager for CLI commands (e.g. start pairing)."""
+        return self._auth
+
+    @property
+    def registry(self) -> ConnectionRegistry:
+        """Expose the registry for status queries."""
+        return self._registry
 
     def _setup_routes(self) -> None:
         """Configure the HTTP and WebSocket routes."""
@@ -64,50 +96,102 @@ class JibeServer:
             {
                 "status": "running",
                 "version": __version__,
+                "connected_devices": self._registry.authenticated_count,
             }
         )
 
     async def handle_websocket(self, request: web.Request) -> web.WebSocketResponse:
         """Handle incoming WebSocket connections.
 
-        Upgrades the HTTP connection to a WebSocket and processes incoming
-        messages in a loop.
+        Upgrades the HTTP connection to a WebSocket, wraps it in a
+        JibeConnection, and processes messages through the state machine:
+
+        1. AWAITING_AUTH: only `auth.request` is accepted
+        2. AUTHENTICATED: all valid message types are routed
         """
         ws = web.WebSocketResponse()
-
         await ws.prepare(request)
 
-        client_ip = request.remote
-        logger.info("WebSocket connected from %s", client_ip)
+        client_ip = request.remote or "unknown"
+        conn = JibeConnection(ws=ws, client_ip=client_ip)
+        self._registry.add(conn)
+
+        logger.info("WebSocket connected: %s from %s", conn.id, client_ip)
 
         try:
             async for msg in ws:
                 if msg.type == web.WSMsgType.TEXT:
-                    try:
-                        jibe_msg = parse_message(msg.data)
-                        logger.info("Parsed valid %s message", jibe_msg.type.value)
-
-                        # In future, we will route jibe_msg to specific handlers based
-                        # on its type. For now, we just log it to prove parsing works.
-                        logger.debug("Payload: %s", jibe_msg.payload)
-
-                    except InvalidMessageError as e:
-                        logger.warning("Invalid message from %s: %s", client_ip, str(e))
-                        error_json = format_error(e.code, str(e))
-                        await ws.send_str(error_json)
+                    await self._handle_text_message(conn, msg.data)
 
                 elif msg.type == web.WSMsgType.ERROR:
-                    logger.error(
-                        "WebSocket connection closed with exception %s",
-                        ws.exception()
-                    )
+                    logger.error("WebSocket error on %s: %s", conn.id, ws.exception())
         except asyncio.CancelledError:
-            # Handle server shutdown
             pass
         finally:
-            logger.info("WebSocket disconnected from %s", client_ip)
+            self._registry.remove(conn)
+            conn.state = ConnectionState.DISCONNECTED
+            logger.info(
+                "WebSocket disconnected: %s (%s)",
+                conn.id,
+                conn.device_name or "unauthenticated",
+            )
 
         return ws
+
+    async def _handle_text_message(self, conn: JibeConnection, raw: str) -> None:
+        """Parse, validate, and route a single text message.
+
+        Enforces the state machine: unauthenticated connections may
+        only send `auth.request`. Everything else gets an error.
+        """
+        try:
+            jibe_msg = parse_message(raw)
+        except InvalidMessageError as e:
+            logger.warning("Invalid message from %s: %s", conn.id, e)
+            await conn.send(format_error(e.code, str(e)))
+            return
+
+        # ── State: AWAITING_AUTH ─────────────────────────────────────
+        if not conn.is_authenticated:
+            if jibe_msg.type != MessageType.AUTH_REQUEST:
+                await conn.send(
+                    format_error(
+                        "auth_required",
+                        "You must authenticate before sending other messages.",
+                    )
+                )
+                return
+
+            try:
+                response = await self._auth.handle_auth_request(
+                    jibe_msg.payload, conn.client_ip
+                )
+            except AuthError as e:
+                await conn.send(format_error("auth_rejected", str(e)))
+                await conn.close()
+                return
+
+            result = json.loads(response)
+            if result.get("accepted"):
+                conn.state = ConnectionState.AUTHENTICATED
+                conn.device_id = result["device_id"]
+                conn.device_name = result.get(
+                    "device_name", jibe_msg.payload.get("device_name")
+                )
+
+            await conn.send(response)
+            return
+
+        # ── State: AUTHENTICATED ─────────────────────────────────────
+        logger.info(
+            "[%s] %s message from %s",
+            conn.device_name,
+            jibe_msg.type.value,
+            conn.id,
+        )
+        logger.debug("Payload: %s", jibe_msg.payload)
+
+        # TODO: Route to specific handlers via message router (feat/message-router)
 
     async def start(self) -> None:
         """Start listening for incoming connections."""
