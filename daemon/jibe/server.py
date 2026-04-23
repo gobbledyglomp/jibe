@@ -21,6 +21,7 @@ Why aiohttp?
 import asyncio
 import json
 import logging
+import ssl
 
 from aiohttp import web
 
@@ -56,15 +57,18 @@ class JibeServer:
         self,
         db: JibeDatabase,
         port: int = DEFAULT_PORT,
+        ssl_context: ssl.SSLContext | None = None,
     ) -> None:
         """Initialise the server.
 
         Args:
             db: The database instance for persistence.
             port: The TCP port to listen on.
+            ssl_context: If provided, serve wss:// instead of ws://.
         """
         self._port = port
         self._db = db
+        self._ssl_context = ssl_context
         self._auth = AuthManager(db)
         self._registry = ConnectionRegistry()
         self._app = web.Application()
@@ -198,10 +202,21 @@ class JibeServer:
         self._runner = web.AppRunner(self._app)
         await self._runner.setup()
 
-        self._site = web.TCPSite(self._runner, "0.0.0.0", self._port)
+        self._site = web.TCPSite(
+            self._runner,
+            "0.0.0.0",
+            self._port,
+            ssl_context=self._ssl_context,
+        )
         await self._site.start()
 
-        logger.info("WebSocket server listening on ws://0.0.0.0:%d/ws", self._port)
+        protocol = "wss" if self._ssl_context else "ws"
+        logger.info(
+            "%s server listening on %s://0.0.0.0:%d/ws",
+            protocol.upper(),
+            protocol,
+            self._port,
+        )
 
     async def stop(self) -> None:
         """Stop listening and cleanly disconnect all clients."""

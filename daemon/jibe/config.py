@@ -30,6 +30,14 @@ PIN_LENGTH = 6
 PIN_EXPIRY_SECONDS = 120
 MAX_PIN_ATTEMPTS = 3
 
+# ── TLS ──────────────────────────────────────────────────────────────────
+
+CERTS_DIR = _xdg_data_home / "jibe" / "certs"
+CERT_FILE = "jibe.crt"
+KEY_FILE = "jibe.key"
+CERT_VALIDITY_DAYS = 3650
+CERT_KEY_SIZE = 4096
+
 # ── Logging ──────────────────────────────────────────────────────────────
 
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
