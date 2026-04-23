@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 
 import pytest
-
+from jibe.db import JibeDatabase
 from jibe.server import JibeServer
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
@@ -33,3 +33,19 @@ def jibe_app():
     """
     server = JibeServer()
     return server._app
+
+
+@pytest.fixture
+async def db(tmp_path):
+    """Create a JibeDatabase backed by a temp file.
+
+    Using tmp_path (a pytest built-in fixture) instead of :memory:
+    because it lets us test real file creation, directory handling,
+    and persistence across open/close cycles — things an in-memory
+    DB would silently skip.
+    """
+    db_path = tmp_path / "test_jibe.db"
+    database = JibeDatabase(db_path=db_path)
+    await database.open()
+    yield database
+    await database.close()
