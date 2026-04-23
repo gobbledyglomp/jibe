@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 
 import pytest
+from jibe.auth import AuthManager
 from jibe.db import JibeDatabase
 from jibe.server import JibeServer
 
@@ -49,3 +50,16 @@ async def db(tmp_path):
     await database.open()
     yield database
     await database.close()
+
+
+@pytest.fixture
+async def auth(db):
+    """AuthManager wired to the shared test database."""
+    return AuthManager(db)
+
+
+@pytest.fixture
+async def auth_pairing(auth):
+    """AuthManager with pairing mode already active."""
+    auth.start_pairing()
+    return auth
