@@ -17,6 +17,12 @@ Rules:
     `auth_required` error response.
   - After successful authentication, all valid message types are
     accepted and routed to their handlers.
+  - On disconnect, the connection is cleaned up from the registry.
+
+The `ConnectionRegistry` tracks all active connections, keyed by
+device ID. This enables:
+  - "Send clipboard to all connected devices"
+  - Web UI's "connected devices" list
 """
 
 import logging
@@ -87,3 +93,45 @@ class JibeConnection:
     def __repr__(self) -> str:
         device = self.device_name or "unknown"
         return f"<JibeConnection {self.id} [{self.state.value}] device={device}>"
+
+
+class ConnectionRegistry:
+    """Tracks all active WebSocket connections.
+
+    Provides lookup by connection ID and by device ID, plus
+    broadcast capabilities for features like clipboard sync.
+    """
+
+    def __init__(self) -> None:
+        self._connections: dict[str, JibeConnection] = {}
+
+    def add(self, conn: JibeConnection) -> None:
+        """Register a new connection."""
+        self._connections[conn.id] = conn
+        logger.debug("Connection registered: %s", conn)
+
+    def remove(self, conn: JibeConnection) -> None:
+        """Unregister a connection (e.g. on disconnect)."""
+        self._connections.pop(conn.id, None)
+        logger.debug("Connection removed: %s", conn)
+
+    def get_by_device_id(self, device_id: str) -> JibeConnection | None:
+        """Find an active connection for a specific device."""
+        for conn in self._connections.values():
+            if conn.device_id == device_id:
+                return conn
+        return None
+
+    def get_authenticated(self) -> list[JibeConnection]:
+        """Return all currently authenticated connections."""
+        return [conn for conn in self._connections.values() if conn.is_authenticated]
+
+    @property
+    def count(self) -> int:
+        """Total number of active connections (including unauthenticated)."""
+        return len(self._connections)
+
+    @property
+    def authenticated_count(self) -> int:
+        """Number of currently authenticated connections."""
+        return len(self.get_authenticated())
