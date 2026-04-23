@@ -8,9 +8,13 @@ test files.
 
 import json
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
+from aiohttp import web
+
 from jibe.auth import AuthManager
+from jibe.connection import ConnectionRegistry, JibeConnection
 from jibe.db import JibeDatabase
 from jibe.server import JibeServer
 
@@ -63,3 +67,23 @@ async def auth_pairing(auth):
     """AuthManager with pairing mode already active."""
     auth.start_pairing()
     return auth
+
+
+@pytest.fixture
+def mock_ws():
+    """A mock aiohttp WebSocketResponse."""
+    ws = AsyncMock(spec=web.WebSocketResponse)
+    ws.closed = False
+    return ws
+
+
+@pytest.fixture
+def conn(mock_ws):
+    """A fresh JibeConnection in AWAITING_AUTH state."""
+    return JibeConnection(ws=mock_ws, client_ip="127.0.0.1")
+
+
+@pytest.fixture
+def registry():
+    """An empty ConnectionRegistry."""
+    return ConnectionRegistry()
