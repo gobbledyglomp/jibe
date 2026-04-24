@@ -19,7 +19,7 @@ Why aiosqlite?
   async interface, so database operations don't block the event loop.
 
 Storage location:
-  The database file lives at `~/.local/share/jibe/jibe.db`, following
+  The database file lives at `~/.local/share/jibe/jibe.core.db`, following
   the XDG Base Directory Specification.
 """
 
@@ -29,7 +29,7 @@ from pathlib import Path
 
 import aiosqlite
 
-from jibe.config import DATABASE_DIR, DATABASE_NAME, SCHEMA_VERSION
+from jibe.core.config import DATABASE_DIR, DATABASE_NAME, SCHEMA_VERSION
 
 logger = logging.getLogger(__name__)
 

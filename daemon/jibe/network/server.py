@@ -26,17 +26,17 @@ import ssl
 from aiohttp import web
 
 from jibe import __version__
-from jibe.api import (
+from jibe.core.api import (
     AuthError,
     InvalidMessageError,
     MessageType,
     format_error,
     parse_message,
 )
-from jibe.auth import AuthManager
-from jibe.config import DEFAULT_PORT
-from jibe.connection import ConnectionRegistry, ConnectionState, JibeConnection
-from jibe.db import JibeDatabase
+from jibe.core.auth import AuthManager
+from jibe.core.config import DEFAULT_PORT
+from jibe.network.connection import ConnectionRegistry, ConnectionState, JibeConnection
+from jibe.core.db import JibeDatabase
 
 logger = logging.getLogger(__name__)
 

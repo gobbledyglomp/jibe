@@ -24,7 +24,7 @@ from zeroconf import ServiceInfo
 from zeroconf.asyncio import AsyncZeroconf
 
 from jibe import __version__
-from jibe.config import DEFAULT_PORT, SERVICE_NAME, SERVICE_TYPE
+from jibe.core.config import DEFAULT_PORT, SERVICE_NAME, SERVICE_TYPE
 
 logger = logging.getLogger(__name__)
 

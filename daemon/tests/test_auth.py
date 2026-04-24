@@ -11,9 +11,9 @@ from conftest.py provides a fresh in-memory-backed database per test.
 import json
 
 import pytest
-from jibe.api import AuthError, MessageType
-from jibe.auth import PairingSession, _generate_fingerprint, _generate_pin
-from jibe.config import MAX_PIN_ATTEMPTS, PIN_EXPIRY_SECONDS, PIN_LENGTH
+from jibe.core.api import AuthError, MessageType
+from jibe.core.auth import PairingSession, _generate_fingerprint, _generate_pin
+from jibe.core.config import MAX_PIN_ATTEMPTS, PIN_EXPIRY_SECONDS, PIN_LENGTH
 
 # ── PIN generation ────────────────────────────────────────────────────────
 
@@ -76,7 +76,7 @@ def test_pairing_session_invalid_when_expired(monkeypatch):
     """A session must be invalid after its time-to-live."""
     session = PairingSession()
     monkeypatch.setattr(
-        "jibe.auth.time.time",
+        "jibe.core.auth.time.time",
         lambda: session.created_at + PIN_EXPIRY_SECONDS + 1,
     )
     assert session.is_expired()
@@ -128,7 +128,7 @@ async def test_pairing_mode_expires(auth, monkeypatch):
     created_at = auth._pairing_session.created_at
 
     monkeypatch.setattr(
-        "jibe.auth.time.time",
+        "jibe.core.auth.time.time",
         lambda: created_at + PIN_EXPIRY_SECONDS + 1,
     )
     assert not auth.is_pairing_active

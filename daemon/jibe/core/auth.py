@@ -45,9 +45,9 @@ import logging
 import secrets
 import time
 
-from jibe.api import AuthError, MessageType
-from jibe.config import MAX_PIN_ATTEMPTS, PIN_EXPIRY_SECONDS, PIN_LENGTH
-from jibe.db import JibeDatabase
+from jibe.core.api import AuthError, MessageType
+from jibe.core.config import MAX_PIN_ATTEMPTS, PIN_EXPIRY_SECONDS, PIN_LENGTH
+from jibe.core.db import JibeDatabase
 
 logger = logging.getLogger(__name__)
 

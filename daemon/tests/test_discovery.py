@@ -12,8 +12,8 @@ test it both with and without a mock to verify the fallback path.
 import socket
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from jibe.config import DEFAULT_PORT, SERVICE_NAME, SERVICE_TYPE
-from jibe.discovery import JibeDiscovery, _get_local_ip
+from jibe.core.config import DEFAULT_PORT, SERVICE_NAME, SERVICE_TYPE
+from jibe.network.discovery import JibeDiscovery, _get_local_ip
 
 # ── _get_local_ip ────────────────────────────────────────────────────────
 
@@ -30,7 +30,7 @@ def test_get_local_ip_returns_string():
 
 def test_get_local_ip_fallback_on_oserror():
     """When the UDP socket trick fails, fall back to 127.0.0.1."""
-    with patch("jibe.discovery.socket.socket") as mock_socket:
+    with patch("jibe.network.discovery.socket.socket") as mock_socket:
         mock_socket.return_value.__enter__ = MagicMock(
             side_effect=OSError("no network")
         )
@@ -50,8 +50,8 @@ async def test_discovery_starts_with_correct_service_info():
     mock_zc_instance.async_unregister_service = AsyncMock()
     mock_zc_instance.async_close = AsyncMock()
 
-    with patch("jibe.discovery.AsyncZeroconf", return_value=mock_zc_instance):
-        with patch("jibe.discovery._get_local_ip", return_value="192.168.1.42"):
+    with patch("jibe.network.discovery.AsyncZeroconf", return_value=mock_zc_instance):
+        with patch("jibe.network.discovery._get_local_ip", return_value="192.168.1.42"):
             await discovery.start()
 
     # Verify register was called exactly once
@@ -77,8 +77,8 @@ async def test_discovery_stop_unregisters_and_closes():
     mock_zc_instance.async_unregister_service = AsyncMock()
     mock_zc_instance.async_close = AsyncMock()
 
-    with patch("jibe.discovery.AsyncZeroconf", return_value=mock_zc_instance):
-        with patch("jibe.discovery._get_local_ip", return_value="192.168.1.42"):
+    with patch("jibe.network.discovery.AsyncZeroconf", return_value=mock_zc_instance):
+        with patch("jibe.network.discovery._get_local_ip", return_value="192.168.1.42"):
             await discovery.start()
 
     await discovery.stop()
@@ -105,8 +105,8 @@ async def test_discovery_includes_version_in_txt_records():
     mock_zc_instance.async_unregister_service = AsyncMock()
     mock_zc_instance.async_close = AsyncMock()
 
-    with patch("jibe.discovery.AsyncZeroconf", return_value=mock_zc_instance):
-        with patch("jibe.discovery._get_local_ip", return_value="10.0.0.1"):
+    with patch("jibe.network.discovery.AsyncZeroconf", return_value=mock_zc_instance):
+        with patch("jibe.network.discovery._get_local_ip", return_value="10.0.0.1"):
             await discovery.start()
 
     service_info = mock_zc_instance.async_register_service.call_args[0][0]
@@ -126,8 +126,8 @@ async def test_discovery_custom_port():
     mock_zc_instance.async_unregister_service = AsyncMock()
     mock_zc_instance.async_close = AsyncMock()
 
-    with patch("jibe.discovery.AsyncZeroconf", return_value=mock_zc_instance):
-        with patch("jibe.discovery._get_local_ip", return_value="10.0.0.1"):
+    with patch("jibe.network.discovery.AsyncZeroconf", return_value=mock_zc_instance):
+        with patch("jibe.network.discovery._get_local_ip", return_value="10.0.0.1"):
             await discovery.start()
 
     service_info = mock_zc_instance.async_register_service.call_args[0][0]
