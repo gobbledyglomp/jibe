@@ -48,3 +48,35 @@ stateDiagram-v2
 | `AWAITING_AUTH` | Only `auth.request` | `error: auth_required` |
 | `AUTHENTICATED` | Any valid message type | Routed to handler |
 | `DISCONNECTED` | Nothing | Removed from registry |
+
+---
+
+## TLS Certificate Lifecycle
+
+The daemon uses a **permanent self-signed certificate**, following an SSH-like "Trust on First Use" (TOFU) model. Because the daemon runs on a local network without a public domain name, standard Certificate Authorities (like Let's Encrypt) cannot be used.
+
+To ensure strict security and prevent Man-in-the-Middle (MITM) attacks, Jibe relies on **out-of-band certificate pinning** via a QR code.
+
+```mermaid
+sequenceDiagram
+    participant Client as Android App
+    participant Daemon as Linux Daemon
+
+    Note over Daemon: 1. Certificate Lifecycle
+    Daemon->>Daemon: First Run: Generate RSA-4096 Self-Signed Cert
+    Daemon->>Daemon: Subsequent Runs: Load existing permanent cert
+    Daemon->>Daemon: Compute SHA-256 Fingerprint
+
+    Note over Client,Daemon: 2. Out-of-Band Pinning
+    Daemon-->>Client: App scans QR Code (receives Cert Fingerprint)
+
+    Note over Client,Daemon: 3. Secure Transport Handshake
+    Client->>Daemon: Initiate TLS Connection
+    Daemon->>Client: Present Self-Signed Certificate
+    
+    Note over Client: App computes SHA-256 of received cert<br/>and strictly compares against pinned fingerprint
+    
+    Client->>Daemon: TLS Handshake Complete
+    Note over Client,Daemon: Encrypted tunnel established.<br/>All WebSocket traffic (wss://) is now secure.
+```
+
