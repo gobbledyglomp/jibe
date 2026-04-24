@@ -1,7 +1,7 @@
 import json
 import pytest
 
-from jibe.api import (
+from jibe.core.api import (
     parse_message,
     format_error,
     MessageType,

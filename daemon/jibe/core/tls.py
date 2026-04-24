@@ -34,7 +34,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 
-from jibe.config import (
+from jibe.core.config import (
     CERT_FILE,
     CERT_KEY_SIZE,
     CERT_VALIDITY_DAYS,

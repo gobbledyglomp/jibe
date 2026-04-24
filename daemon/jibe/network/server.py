@@ -26,17 +26,17 @@ import ssl
 from aiohttp import web
 
 from jibe import __version__
-from jibe.api import (
+from jibe.core.api import (
     AuthError,
     InvalidMessageError,
     MessageType,
     format_error,
     parse_message,
 )
-from jibe.auth import AuthManager
-from jibe.config import DEFAULT_PORT
-from jibe.connection import ConnectionRegistry, ConnectionState, JibeConnection
-from jibe.db import JibeDatabase
+from jibe.core.auth import AuthManager
+from jibe.core.config import DEFAULT_PORT
+from jibe.core.db import JibeDatabase
+from jibe.network.connection import ConnectionRegistry, ConnectionState, JibeConnection
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +113,7 @@ class JibeServer:
         1. AWAITING_AUTH: only `auth.request` is accepted
         2. AUTHENTICATED: all valid message types are routed
         """
-        ws = web.WebSocketResponse()
+        ws = web.WebSocketResponse(heartbeat=30.0)
         await ws.prepare(request)
 
         client_ip = request.remote or "unknown"
@@ -121,6 +121,14 @@ class JibeServer:
         self._registry.add(conn)
 
         logger.info("WebSocket connected: %s from %s", conn.id, client_ip)
+
+        async def auth_timeout():
+            await asyncio.sleep(10.0)
+            if not conn.is_authenticated:
+                logger.warning("Connection %s timed out waiting for auth", conn.id)
+                await conn.close()
+
+        timeout_task = asyncio.create_task(auth_timeout())
 
         try:
             async for msg in ws:
@@ -132,7 +140,10 @@ class JibeServer:
         except asyncio.CancelledError:
             pass
         finally:
+            timeout_task.cancel()
             self._registry.remove(conn)
+            if conn.is_authenticated and conn.device_id:
+                asyncio.create_task(self._db.end_session(conn.id))
             conn.state = ConnectionState.DISCONNECTED
             logger.info(
                 "WebSocket disconnected: %s (%s)",
@@ -182,6 +193,7 @@ class JibeServer:
                 conn.device_name = result.get(
                     "device_name", jibe_msg.payload.get("device_name")
                 )
+                await self._db.start_session(conn.id, conn.device_id)
 
             await conn.send(response)
             return

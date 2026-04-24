@@ -12,11 +12,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 from aiohttp import web
-from jibe.auth import AuthManager
-from jibe.connection import ConnectionRegistry, JibeConnection
-from jibe.db import JibeDatabase
-from jibe.server import JibeServer
-from jibe.tls import create_ssl_context, generate_self_signed_cert
+from jibe.core.auth import AuthManager
+from jibe.network.connection import ConnectionRegistry, JibeConnection
+from jibe.core.db import JibeDatabase
+from jibe.network.server import JibeServer
+from jibe.core.tls import create_ssl_context, generate_self_signed_cert
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
@@ -54,7 +54,7 @@ async def db(tmp_path):
     and persistence across open/close cycles — things an in-memory
     DB would silently skip.
     """
-    db_path = tmp_path / "test_jibe.db"
+    db_path = tmp_path / "test_jibe.core.db"
     database = JibeDatabase(db_path=db_path)
     await database.open()
     yield database

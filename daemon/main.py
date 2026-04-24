@@ -17,11 +17,11 @@ import argparse
 import asyncio
 import logging
 
-from jibe.config import LOG_DATE_FORMAT, LOG_FORMAT
-from jibe.db import JibeDatabase
-from jibe.discovery import JibeDiscovery
-from jibe.server import JibeServer
-from jibe.tls import create_ssl_context, generate_self_signed_cert
+from jibe.core.config import LOG_DATE_FORMAT, LOG_FORMAT
+from jibe.core.db import JibeDatabase
+from jibe.network.discovery import JibeDiscovery
+from jibe.network.server import JibeServer
+from jibe.core.tls import create_ssl_context, generate_self_signed_cert
 
 logging.basicConfig(
     level=logging.INFO,

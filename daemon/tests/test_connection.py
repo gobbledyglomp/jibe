@@ -1,6 +1,6 @@
 """Tests for the connection state machine and registry."""
 
-from jibe.connection import ConnectionState, JibeConnection
+from jibe.network.connection import ConnectionState, JibeConnection
 
 # ── JibeConnection ────────────────────────────────────────────────────────
 

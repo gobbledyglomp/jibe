@@ -4,7 +4,7 @@ import ssl
 
 from cryptography import x509
 from cryptography.x509.oid import NameOID
-from jibe.tls import (
+from jibe.core.tls import (
     _get_cert_fingerprint,
     create_ssl_context,
     generate_self_signed_cert,

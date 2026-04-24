@@ -11,7 +11,7 @@ database on disk.
 
 import aiosqlite
 import pytest
-from jibe.db import JibeDatabase
+from jibe.core.db import JibeDatabase
 
 # ── Schema & Initialisation ─────────────────────────────────────────────
 
@@ -30,7 +30,7 @@ async def test_schema_created_on_first_open(db):
 
 async def test_schema_version_stored(db):
     """The meta table should contain the current schema version."""
-    from jibe.config import SCHEMA_VERSION
+    from jibe.core.config import SCHEMA_VERSION
 
     cursor = await db._conn.execute(
         "SELECT value FROM meta WHERE key = 'schema_version';"
@@ -64,7 +64,7 @@ async def test_schema_creation_is_idempotent(tmp_path):
 
 async def test_database_creates_parent_directory(tmp_path):
     """The database should create its parent directory if it doesn't exist."""
-    db_path = tmp_path / "nested" / "dirs" / "jibe.db"
+    db_path = tmp_path / "nested" / "dirs" / "jibe.core.db"
     db = JibeDatabase(db_path=db_path)
     await db.open()
 
