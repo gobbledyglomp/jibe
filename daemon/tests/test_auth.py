@@ -114,6 +114,7 @@ async def test_start_pairing_replaces_existing_session(auth):
     """Calling start_pairing() twice must generate a fresh PIN each time."""
     pin1 = auth.start_pairing()
     pin2 = auth.start_pairing()
+    assert pin1 != pin2
     assert auth.is_pairing_active
     assert auth._pairing_session is not None
 
