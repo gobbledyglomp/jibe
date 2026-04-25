@@ -82,7 +82,10 @@ class JibeConnection:
         WebSocket object directly.
         """
         if not self.ws.closed:
-            await self.ws.send_str(data)
+            try:
+                await self.ws.send_str(data)
+            except Exception as e:
+                logger.warning("Failed to send message to %s: %s", self.id, e)
 
     async def close(self) -> None:
         """Close the WebSocket connection and mark state as disconnected."""
