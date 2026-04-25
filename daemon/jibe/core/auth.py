@@ -161,7 +161,7 @@ class AuthManager:
         if self._pairing_session:
             self._pairing_session = None
             self._failed_attempts.clear()
-            logger.info("Pairing mode deactivated")
+            logger.debug("Pairing mode deactivated")
 
     @property
     def is_pairing_active(self) -> bool:
@@ -169,7 +169,7 @@ class AuthManager:
         if self._pairing_session is None:
             return False
         if self._pairing_session.is_expired():
-            logger.info("Pairing PIN expired, deactivating pairing mode")
+            logger.debug("Pairing PIN expired, deactivating pairing mode")
             self._pairing_session = None
             self._failed_attempts.clear()
             return False

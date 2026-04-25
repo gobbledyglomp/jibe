@@ -205,7 +205,7 @@ class JibeServer:
             return
 
         # ── State: AUTHENTICATED ─────────────────────────────────────
-        logger.info(
+        logger.debug(
             "[%s] %s message from %s",
             conn.device_name,
             jibe_msg.type.value,

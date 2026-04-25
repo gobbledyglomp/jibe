@@ -123,7 +123,7 @@ class JibeDatabase:
         await self._create_tables()
         await self._check_schema_version()
 
-        logger.info("Database opened: %s", self._db_path)
+        logger.debug("Database opened: %s", self._db_path)
 
     async def close(self) -> None:
         """Close the database connection cleanly.
@@ -134,7 +134,7 @@ class JibeDatabase:
         if self._conn:
             await self._conn.close()
             self._conn = None
-            logger.info("Database closed")
+            logger.debug("Database closed")
 
     # ── Async context manager ────────────────────────────────────────
 
@@ -181,7 +181,7 @@ class JibeDatabase:
                 (str(SCHEMA_VERSION),),
             )
             await self._conn.commit()
-            logger.info("Initialised schema version %d", SCHEMA_VERSION)
+            logger.debug("Initialised schema version %d", SCHEMA_VERSION)
         else:
             stored_version = int(row[0])
             if stored_version != SCHEMA_VERSION:
@@ -223,7 +223,7 @@ class JibeDatabase:
             (device_id, name, fingerprint, now, now),
         )
         await self._conn.commit()
-        logger.info("Device paired: %s (%s)", name, device_id)
+        logger.debug("Device paired: %s (%s)", name, device_id)
 
         return {
             "id": device_id,
@@ -355,7 +355,7 @@ class JibeDatabase:
 
         removed = cursor.rowcount > 0
         if removed:
-            logger.info("Device unpaired: %s", device_id)
+            logger.debug("Device unpaired: %s", device_id)
         return removed
 
     # ── Session tracking ─────────────────────────────────────────────

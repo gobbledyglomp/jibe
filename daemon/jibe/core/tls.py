@@ -92,7 +92,7 @@ def generate_self_signed_cert(
 
     if cert_path.exists() and key_path.exists():
         fingerprint = _get_cert_fingerprint(cert_path)
-        logger.info("Using existing TLS certificate (fingerprint: %s)", fingerprint)
+        logger.debug("Using existing TLS certificate (fingerprint: %s)", fingerprint)
         return cert_path, key_path
 
     logger.info("Generating new self-signed TLS certificate...")

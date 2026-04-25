@@ -116,9 +116,9 @@ class JibeDiscovery:
         have to wait for the record to expire.
         """
         if self._async_zc and self._service_info:
-            logger.info("Unregistering mDNS service...")
+            logger.debug("Unregistering mDNS service...")
             await self._async_zc.async_unregister_service(self._service_info)
             await self._async_zc.async_close()
             self._async_zc = None
             self._service_info = None
-            logger.info("mDNS service unregistered")
+            logger.debug("mDNS service unregistered")
