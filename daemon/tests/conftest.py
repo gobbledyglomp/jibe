@@ -54,7 +54,7 @@ async def db(tmp_path):
     and persistence across open/close cycles — things an in-memory
     DB would silently skip.
     """
-    db_path = tmp_path / "test_jibe.core.db"
+    db_path = tmp_path / "test_jibe.db"
     database = JibeDatabase(db_path=db_path)
     await database.open()
     yield database

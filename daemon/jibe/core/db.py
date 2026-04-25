@@ -19,7 +19,7 @@ Why aiosqlite?
   async interface, so database operations don't block the event loop.
 
 Storage location:
-  The database file lives at `~/.local/share/jibe/jibe.core.db`, following
+  The database file lives at `~/.local/share/jibe/jibe.db`, following
   the XDG Base Directory Specification.
 """
 

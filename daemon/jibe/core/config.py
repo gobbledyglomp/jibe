@@ -21,7 +21,7 @@ SERVICE_NAME = "Jibe"
 
 _xdg_data_home = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
 DATABASE_DIR = _xdg_data_home / "jibe"
-DATABASE_NAME = "jibe.core.db"
+DATABASE_NAME = "jibe.db"
 SCHEMA_VERSION = 1
 
 # ── Authentication ───────────────────────────────────────────────────────
