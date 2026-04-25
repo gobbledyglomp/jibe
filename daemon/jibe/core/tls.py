@@ -24,6 +24,7 @@ Why RSA 4096?
 """
 
 import hashlib
+import ipaddress
 import logging
 import ssl
 from datetime import datetime, timedelta, timezone
@@ -124,7 +125,7 @@ def generate_self_signed_cert(
                 [
                     x509.DNSName("localhost"),
                     x509.DNSName("jibe.local"),
-                    x509.IPAddress(__import__("ipaddress").IPv4Address("127.0.0.1")),
+                    x509.IPAddress(ipaddress.IPv4Address("127.0.0.1")),
                 ]
             ),
             critical=False,
