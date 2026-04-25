@@ -177,7 +177,7 @@ class AuthManager:
 
     # ── Auth handling ────────────────────────────────────────────────
 
-    async def handle_auth_request(self, payload: dict, client_id: str) -> str:
+    async def handle_auth_request(self, payload: dict, client_id: str) -> dict:
         """Process an incoming `auth.request` message.
 
         Returns a JSON `auth.response` string. Handles three paths:
@@ -261,31 +261,27 @@ class AuthManager:
 
     # ── Response builders ────────────────────────────────────────────
 
-    def _accept_response(self, device_id: str, fingerprint: str) -> str:
+    def _accept_response(self, device_id: str, fingerprint: str) -> dict:
         """Build a successful auth.response JSON string.
 
         Includes the device_id and fingerprint so the Android app can
         store them for automatic reconnection in the future.
         """
-        return json.dumps(
-            {
-                "type": MessageType.AUTH_RESPONSE.value,
-                "accepted": True,
-                "reason": "",
-                "device_id": device_id,
-                "fingerprint": fingerprint,
-            }
-        )
+        return {
+            "type": MessageType.AUTH_RESPONSE.value,
+            "accepted": True,
+            "reason": "",
+            "device_id": device_id,
+            "fingerprint": fingerprint,
+        }
 
-    def _reject_response(self, reason: str) -> str:
+    def _reject_response(self, reason: str) -> dict:
         """Build a failed auth.response JSON string."""
-        return json.dumps(
-            {
-                "type": MessageType.AUTH_RESPONSE.value,
-                "accepted": False,
-                "reason": reason,
-            }
-        )
+        return {
+            "type": MessageType.AUTH_RESPONSE.value,
+            "accepted": False,
+            "reason": reason,
+        }
 
     def _record_failure(self, client_id: str) -> None:
         """Increment the failed attempt counter for a client."""

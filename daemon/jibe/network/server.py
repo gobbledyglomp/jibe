@@ -182,7 +182,7 @@ class JibeServer:
                 return
 
             try:
-                response = await self._auth.handle_auth_request(
+                result = await self._auth.handle_auth_request(
                     jibe_msg.payload, conn.client_ip
                 )
             except AuthError as e:
@@ -190,7 +190,6 @@ class JibeServer:
                 await conn.close()
                 return
 
-            result = json.loads(response)
             if result.get("accepted"):
                 conn.state = ConnectionState.AUTHENTICATED
                 conn.device_id = result["device_id"]
@@ -201,7 +200,7 @@ class JibeServer:
                 if hasattr(conn, "_auth_timeout_task"):
                     conn._auth_timeout_task.cancel()
 
-            await conn.send(response)
+            await conn.send(json.dumps(result))
             return
 
         # ── State: AUTHENTICATED ─────────────────────────────────────

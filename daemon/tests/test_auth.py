@@ -8,8 +8,6 @@ The AuthManager depends on JibeDatabase — the shared `db` fixture
 from conftest.py provides a fresh in-memory-backed database per test.
 """
 
-import json
-
 import pytest
 from jibe.core.api import AuthError, MessageType
 from jibe.core.auth import PairingSession, _generate_fingerprint, _generate_pin
@@ -145,7 +143,7 @@ async def test_correct_pin_accepted(auth_pairing):
     payload = {"device_name": "Pixel 8", "pin": pin}
 
     response_str = await auth_pairing.handle_auth_request(payload, "client-1")
-    response = json.loads(response_str)
+    response = response_str
 
     assert response["type"] == MessageType.AUTH_RESPONSE.value
     assert response["accepted"] is True
@@ -160,7 +158,7 @@ async def test_correct_pin_stores_device_in_db(auth_pairing, db):
     payload = {"device_name": "Pixel 8", "pin": pin}
 
     response_str = await auth_pairing.handle_auth_request(payload, "client-1")
-    response = json.loads(response_str)
+    response = response_str
 
     device = await db.get_device_by_id(response["device_id"])
     assert device is not None
@@ -188,7 +186,7 @@ async def test_pin_cannot_be_reused(auth_pairing):
     response_str = await auth_pairing.handle_auth_request(
         {"device_name": "Other Phone", "pin": pin}, "client-2"
     )
-    response = json.loads(response_str)
+    response = response_str
     assert response["accepted"] is False
 
 
@@ -200,7 +198,7 @@ async def test_wrong_pin_rejected(auth_pairing):
     payload = {"device_name": "Pixel 8", "pin": "000000"}
 
     response_str = await auth_pairing.handle_auth_request(payload, "client-1")
-    response = json.loads(response_str)
+    response = response_str
 
     assert response["accepted"] is False
     assert "Invalid PIN" in response["reason"]
@@ -211,7 +209,7 @@ async def test_missing_pin_rejected(auth_pairing):
     payload = {"device_name": "Pixel 8"}
 
     response_str = await auth_pairing.handle_auth_request(payload, "client-1")
-    response = json.loads(response_str)
+    response = response_str
 
     assert response["accepted"] is False
 
@@ -221,7 +219,7 @@ async def test_no_pairing_mode_rejected(auth):
     payload = {"device_name": "Pixel 8", "pin": "123456"}
 
     response_str = await auth.handle_auth_request(payload, "client-1")
-    response = json.loads(response_str)
+    response = response_str
 
     assert response["accepted"] is False
     assert "not active" in response["reason"]
@@ -263,7 +261,7 @@ async def test_rate_limit_is_per_client(auth_pairing):
     response_str = await auth_pairing.handle_auth_request(
         {"device_name": "Legit Phone", "pin": pin}, "client-2"
     )
-    response = json.loads(response_str)
+    response = response_str
     assert response["accepted"] is True
 
 
@@ -293,7 +291,7 @@ async def test_trusted_device_reconnects_without_pin(auth_pairing, db):
     response_str = await auth_pairing.handle_auth_request(
         {"device_name": "Pixel 8", "pin": pin}, "client-1"
     )
-    response = json.loads(response_str)
+    response = response_str
     fingerprint = response["fingerprint"]
 
     # Stop pairing mode — no PIN exists now
@@ -304,7 +302,7 @@ async def test_trusted_device_reconnects_without_pin(auth_pairing, db):
     reconnect_str = await auth_pairing.handle_auth_request(
         {"device_name": "Pixel 8", "fingerprint": fingerprint}, "client-1"
     )
-    reconnect = json.loads(reconnect_str)
+    reconnect = reconnect_str
     assert reconnect["accepted"] is True
 
 
@@ -313,7 +311,7 @@ async def test_unknown_fingerprint_falls_through_to_pin(auth_pairing):
     response_str = await auth_pairing.handle_auth_request(
         {"device_name": "Stranger", "fingerprint": "a" * 64}, "client-1"
     )
-    response = json.loads(response_str)
+    response = response_str
     # PIN wasn't provided either, so it should be rejected
     assert response["accepted"] is False
 
@@ -321,10 +319,8 @@ async def test_unknown_fingerprint_falls_through_to_pin(auth_pairing):
 async def test_trusted_reconnect_updates_last_seen(auth_pairing, db):
     """Reconnecting a trusted device must update its last_seen timestamp."""
     pin = auth_pairing._pairing_session.pin
-    pair_response = json.loads(
-        await auth_pairing.handle_auth_request(
-            {"device_name": "Pixel 8", "pin": pin}, "client-1"
-        )
+    pair_response = await auth_pairing.handle_auth_request(
+        {"device_name": "Pixel 8", "pin": pin}, "client-1"
     )
     fingerprint = pair_response["fingerprint"]
     device_id = pair_response["device_id"]
