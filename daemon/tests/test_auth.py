@@ -107,15 +107,13 @@ async def test_stop_pairing_deactivates_mode(auth):
 
 async def test_stop_pairing_is_idempotent(auth):
     """stop_pairing() when not in pairing mode must not raise."""
-    auth.stop_pairing()  # should be a no-op
+    auth.stop_pairing()
 
 
 async def test_start_pairing_replaces_existing_session(auth):
     """Calling start_pairing() twice must generate a fresh PIN each time."""
     pin1 = auth.start_pairing()
     pin2 = auth.start_pairing()
-    # PINs are random — they could theoretically collide, but extremely unlikely
-    # What matters is that a new session was created
     assert auth.is_pairing_active
     assert auth._pairing_session is not None
 
@@ -130,7 +128,6 @@ async def test_pairing_mode_expires(auth, monkeypatch):
         lambda: created_at + PIN_EXPIRY_SECONDS + 1,
     )
     assert not auth.is_pairing_active
-    # The expired session must be cleaned up
     assert auth._pairing_session is None
 
 
@@ -142,8 +139,7 @@ async def test_correct_pin_accepted(auth_pairing):
     pin = auth_pairing._pairing_session.pin
     payload = {"device_name": "Pixel 8", "pin": pin}
 
-    response_str = await auth_pairing.handle_auth_request(payload, "client-1")
-    response = response_str
+    response = await auth_pairing.handle_auth_request(payload, "client-1")
 
     assert response["type"] == MessageType.AUTH_RESPONSE.value
     assert response["accepted"] is True
@@ -157,8 +153,7 @@ async def test_correct_pin_stores_device_in_db(auth_pairing, db):
     pin = auth_pairing._pairing_session.pin
     payload = {"device_name": "Pixel 8", "pin": pin}
 
-    response_str = await auth_pairing.handle_auth_request(payload, "client-1")
-    response = response_str
+    response = await auth_pairing.handle_auth_request(payload, "client-1")
 
     device = await db.get_device_by_id(response["device_id"])
     assert device is not None
@@ -182,11 +177,9 @@ async def test_pin_cannot_be_reused(auth_pairing):
         {"device_name": "Pixel 8", "pin": pin}, "client-1"
     )
 
-    # Second device tries the same PIN
-    response_str = await auth_pairing.handle_auth_request(
+    response = await auth_pairing.handle_auth_request(
         {"device_name": "Other Phone", "pin": pin}, "client-2"
     )
-    response = response_str
     assert response["accepted"] is False
 
 
@@ -197,8 +190,7 @@ async def test_wrong_pin_rejected(auth_pairing):
     """Wrong PIN must return accepted=False."""
     payload = {"device_name": "Pixel 8", "pin": "000000"}
 
-    response_str = await auth_pairing.handle_auth_request(payload, "client-1")
-    response = response_str
+    response = await auth_pairing.handle_auth_request(payload, "client-1")
 
     assert response["accepted"] is False
     assert "Invalid PIN" in response["reason"]
@@ -208,8 +200,7 @@ async def test_missing_pin_rejected(auth_pairing):
     """Missing pin field must return accepted=False."""
     payload = {"device_name": "Pixel 8"}
 
-    response_str = await auth_pairing.handle_auth_request(payload, "client-1")
-    response = response_str
+    response = await auth_pairing.handle_auth_request(payload, "client-1")
 
     assert response["accepted"] is False
 
@@ -218,8 +209,7 @@ async def test_no_pairing_mode_rejected(auth):
     """auth.request when pairing mode is inactive must be rejected."""
     payload = {"device_name": "Pixel 8", "pin": "123456"}
 
-    response_str = await auth.handle_auth_request(payload, "client-1")
-    response = response_str
+    response = await auth.handle_auth_request(payload, "client-1")
 
     assert response["accepted"] is False
     assert "not active" in response["reason"]
@@ -252,28 +242,23 @@ async def test_rate_limit_is_per_client(auth_pairing):
     """Rate limiting must be tracked per client_id, not globally."""
     bad_payload = {"device_name": "Attacker", "pin": "000000"}
 
-    # Exhaust attempts for client-1
     for _ in range(MAX_PIN_ATTEMPTS):
         await auth_pairing.handle_auth_request(bad_payload, "client-1")
 
-    # client-2 should still be allowed
     pin = auth_pairing._pairing_session.pin
-    response_str = await auth_pairing.handle_auth_request(
+    response = await auth_pairing.handle_auth_request(
         {"device_name": "Legit Phone", "pin": pin}, "client-2"
     )
-    response = response_str
     assert response["accepted"] is True
 
 
 async def test_successful_auth_clears_failed_attempts(auth_pairing):
     """A successful auth must reset the failed attempts counter."""
-    # One failed attempt first
     await auth_pairing.handle_auth_request(
         {"device_name": "Phone", "pin": "000000"}, "client-1"
     )
     assert auth_pairing._failed_attempts.get("client-1", 0) == 1
 
-    # Now auth correctly
     pin = auth_pairing._pairing_session.pin
     await auth_pairing.handle_auth_request(
         {"device_name": "Phone", "pin": pin}, "client-1"
@@ -286,33 +271,26 @@ async def test_successful_auth_clears_failed_attempts(auth_pairing):
 
 async def test_trusted_device_reconnects_without_pin(auth_pairing, db):
     """A previously paired device must reconnect via fingerprint, no PIN."""
-    # First, pair the device
     pin = auth_pairing._pairing_session.pin
-    response_str = await auth_pairing.handle_auth_request(
+    response = await auth_pairing.handle_auth_request(
         {"device_name": "Pixel 8", "pin": pin}, "client-1"
     )
-    response = response_str
     fingerprint = response["fingerprint"]
 
-    # Stop pairing mode — no PIN exists now
     auth_pairing.stop_pairing()
     assert not auth_pairing.is_pairing_active
 
-    # Reconnect using fingerprint only
-    reconnect_str = await auth_pairing.handle_auth_request(
+    reconnect = await auth_pairing.handle_auth_request(
         {"device_name": "Pixel 8", "fingerprint": fingerprint}, "client-1"
     )
-    reconnect = reconnect_str
     assert reconnect["accepted"] is True
 
 
 async def test_unknown_fingerprint_falls_through_to_pin(auth_pairing):
     """An unrecognised fingerprint must not grant access — falls to PIN check."""
-    response_str = await auth_pairing.handle_auth_request(
+    response = await auth_pairing.handle_auth_request(
         {"device_name": "Stranger", "fingerprint": "a" * 64}, "client-1"
     )
-    response = response_str
-    # PIN wasn't provided either, so it should be rejected
     assert response["accepted"] is False
 
 

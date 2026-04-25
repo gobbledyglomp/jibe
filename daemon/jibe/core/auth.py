@@ -40,7 +40,6 @@ Future enhancement (QR code pairing):
 """
 
 import hashlib
-import json
 import logging
 import secrets
 import time
