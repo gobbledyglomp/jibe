@@ -2,13 +2,17 @@
 
 Run this file to start the Jibe daemon:
 
-    python main.py             # TLS enabled (default)
-    python main.py --no-tls    # plaintext for development
+    python main.py                 # TLS enabled (default)
+    python main.py --no-tls        # plaintext for development
+    python main.py --port 9000     # custom port
+    python main.py --regen-certs   # force regenerate TLS certificate
+    python main.py --verbose       # debug logging
 
 This wires together all daemon components:
   - JibeDatabase: persistent storage (SQLite)
   - JibeServer: WebSocket connections + HTTP API
   - JibeDiscovery: mDNS broadcast on the local network
+  - TLS: self-signed certificate for encrypted connections
 
 All services run concurrently in a single asyncio event loop.
 """
@@ -16,23 +20,22 @@ All services run concurrently in a single asyncio event loop.
 import argparse
 import asyncio
 import logging
+import shutil
 
-from jibe.core.config import LOG_DATE_FORMAT, LOG_FORMAT
+from jibe.core.config import CERTS_DIR, DEFAULT_PORT, LOG_DATE_FORMAT, LOG_FORMAT
 from jibe.core.db import JibeDatabase
+from jibe.core.tls import create_ssl_context, generate_self_signed_cert
 from jibe.network.discovery import JibeDiscovery
 from jibe.network.server import JibeServer
-from jibe.core.tls import create_ssl_context, generate_self_signed_cert
-
-logging.basicConfig(
-    level=logging.INFO,
-    format=LOG_FORMAT,
-    datefmt=LOG_DATE_FORMAT,
-)
 
 logger = logging.getLogger("jibe.main")
 
 
-async def run_daemon(*, use_tls: bool = True) -> None:
+async def run_daemon(
+    *,
+    use_tls: bool = True,
+    port: int = DEFAULT_PORT,
+) -> None:
     """Run the main daemon loop.
 
     Starts the database, server, and discovery services, then waits
@@ -40,6 +43,7 @@ async def run_daemon(*, use_tls: bool = True) -> None:
 
     Args:
         use_tls: If True, generate/load a certificate and serve wss://.
+        port: The TCP port to listen on.
     """
     logger.info("Jibe daemon starting...")
 
@@ -53,8 +57,8 @@ async def run_daemon(*, use_tls: bool = True) -> None:
     else:
         logger.warning("TLS disabled — connections are unencrypted")
 
-    server = JibeServer(db=db, ssl_context=ssl_context)
-    discovery = JibeDiscovery()
+    server = JibeServer(db=db, port=port, ssl_context=ssl_context)
+    discovery = JibeDiscovery(port=port)
 
     try:
         await asyncio.gather(
@@ -84,10 +88,39 @@ def main() -> None:
         action="store_true",
         help="Disable TLS (plaintext WebSocket for development)",
     )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=DEFAULT_PORT,
+        help=f"TCP port to listen on (default: {DEFAULT_PORT})",
+    )
+    parser.add_argument(
+        "--regen-certs",
+        action="store_true",
+        help="Delete existing TLS certificates and regenerate",
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable debug logging",
+    )
     args = parser.parse_args()
 
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.INFO,
+        format=LOG_FORMAT,
+        datefmt=LOG_DATE_FORMAT,
+    )
+
+    if args.regen_certs:
+        if CERTS_DIR.exists():
+            shutil.rmtree(CERTS_DIR)
+            logger.info("Deleted existing certificates in %s", CERTS_DIR)
+        generate_self_signed_cert()
+        logger.info("New certificates generated. Starting daemon...")
+
     try:
-        asyncio.run(run_daemon(use_tls=not args.no_tls))
+        asyncio.run(run_daemon(use_tls=not args.no_tls, port=args.port))
     except KeyboardInterrupt:
         logger.info("Jibe daemon stopped cleanly.")
 
