@@ -80,8 +80,8 @@ async def run_daemon(
         await db.close()
 
 
-def main() -> None:
-    """Entry point. Parses args, sets up the event loop, handles Ctrl+C."""
+def _build_parser() -> argparse.ArgumentParser:
+    """Build the CLI argument parser."""
     parser = argparse.ArgumentParser(description="Jibe daemon")
     parser.add_argument(
         "--no-tls",
@@ -104,7 +104,21 @@ def main() -> None:
         action="store_true",
         help="Enable debug logging",
     )
-    args = parser.parse_args()
+    return parser
+
+
+def _handle_regen_certs() -> None:
+    """Delete existing certificates and regenerate."""
+    if CERTS_DIR.exists():
+        shutil.rmtree(CERTS_DIR)
+        logger.info("Deleted existing certificates in %s", CERTS_DIR)
+    generate_self_signed_cert()
+    logger.info("New certificates generated. Starting daemon...")
+
+
+def main() -> None:
+    """Entry point. Parses args, sets up the event loop, handles Ctrl+C."""
+    args = _build_parser().parse_args()
 
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
@@ -113,11 +127,7 @@ def main() -> None:
     )
 
     if args.regen_certs:
-        if CERTS_DIR.exists():
-            shutil.rmtree(CERTS_DIR)
-            logger.info("Deleted existing certificates in %s", CERTS_DIR)
-        generate_self_signed_cert()
-        logger.info("New certificates generated. Starting daemon...")
+        _handle_regen_certs()
 
     try:
         asyncio.run(run_daemon(use_tls=not args.no_tls, port=args.port))
