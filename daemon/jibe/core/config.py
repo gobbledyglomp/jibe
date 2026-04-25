@@ -30,6 +30,11 @@ PIN_LENGTH = 6
 PIN_EXPIRY_SECONDS = 120
 MAX_PIN_ATTEMPTS = 3
 
+# ── WebSocket ────────────────────────────────────────────────────────────
+
+WS_HEARTBEAT_SECONDS = 30.0
+AUTH_TIMEOUT_SECONDS = 10.0
+
 # ── TLS ──────────────────────────────────────────────────────────────────
 
 CERTS_DIR = _xdg_data_home / "jibe" / "certs"

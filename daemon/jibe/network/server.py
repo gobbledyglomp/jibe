@@ -34,7 +34,7 @@ from jibe.core.api import (
     parse_message,
 )
 from jibe.core.auth import AuthManager
-from jibe.core.config import DEFAULT_PORT
+from jibe.core.config import AUTH_TIMEOUT_SECONDS, DEFAULT_PORT, WS_HEARTBEAT_SECONDS
 from jibe.core.db import JibeDatabase
 from jibe.network.connection import ConnectionRegistry, ConnectionState, JibeConnection
 
@@ -113,7 +113,7 @@ class JibeServer:
         1. AWAITING_AUTH: only `auth.request` is accepted
         2. AUTHENTICATED: all valid message types are routed
         """
-        ws = web.WebSocketResponse(heartbeat=30.0)
+        ws = web.WebSocketResponse(heartbeat=WS_HEARTBEAT_SECONDS)
         await ws.prepare(request)
 
         client_ip = request.remote or "unknown"
@@ -123,7 +123,7 @@ class JibeServer:
         logger.info("WebSocket connected: %s from %s", conn.id, client_ip)
 
         async def auth_timeout():
-            await asyncio.sleep(10.0)
+            await asyncio.sleep(AUTH_TIMEOUT_SECONDS)
             if not conn.is_authenticated:
                 logger.warning("Connection %s timed out waiting for auth", conn.id)
                 await conn.close()
