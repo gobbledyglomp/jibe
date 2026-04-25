@@ -129,6 +129,7 @@ class JibeServer:
                 await conn.close()
 
         timeout_task = asyncio.create_task(auth_timeout())
+        conn._auth_timeout_task = timeout_task
 
         try:
             async for msg in ws:
@@ -143,7 +144,10 @@ class JibeServer:
             timeout_task.cancel()
             self._registry.remove(conn)
             if conn.is_authenticated and conn.device_id:
-                asyncio.create_task(self._db.end_session(conn.id))
+                try:
+                    await self._db.end_session(conn.id)
+                except Exception:
+                    logger.exception("Failed to end session %s", conn.id)
             conn.state = ConnectionState.DISCONNECTED
             logger.info(
                 "WebSocket disconnected: %s (%s)",
@@ -194,6 +198,8 @@ class JibeServer:
                     "device_name", jibe_msg.payload.get("device_name")
                 )
                 await self._db.start_session(conn.id, conn.device_id)
+                if hasattr(conn, "_auth_timeout_task"):
+                    conn._auth_timeout_task.cancel()
 
             await conn.send(response)
             return
