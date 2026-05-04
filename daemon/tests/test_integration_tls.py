@@ -81,7 +81,12 @@ async def test_tls_authenticated_message_flow(
     await _authenticate_tls(ws, jibe_server_tls)
 
     await ws.send_json({"type": "ping"})
+    pong = await ws.receive_json()
+    assert pong["type"] == "pong"
+
     await ws.send_json({"type": "pong"})
+    not_impl = await ws.receive_json()
+    assert not_impl["code"] == "not_implemented"
 
     await ws.send_str("not json")
     resp = await ws.receive_json()

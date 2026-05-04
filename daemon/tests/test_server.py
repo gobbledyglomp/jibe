@@ -182,13 +182,21 @@ async def test_multiple_messages_after_auth(aiohttp_client, jibe_app, jibe_serve
     await _authenticate(ws, jibe_server)
 
     await ws.send_json({"type": "ping"})
+    pong = await ws.receive_json()
+    assert pong["type"] == "pong"
+
     await ws.send_json({"type": "pong"})
+    not_impl = await ws.receive_json()
+    assert not_impl["code"] == "not_implemented"
 
     await ws.send_str("broken")
     resp = await ws.receive_json()
     assert resp["code"] == "malformed_json"
 
     await ws.send_json({"type": "ping"})
+    pong2 = await ws.receive_json()
+    assert pong2["type"] == "pong"
+
     await ws.close()
     assert ws.closed
 
