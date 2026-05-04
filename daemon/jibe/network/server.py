@@ -95,9 +95,14 @@ class JibeServer:
         self._router.register(MessageType.PING, handle_ping)
 
     def _setup_routes(self) -> None:
-        """Configure the HTTP and WebSocket routes."""
+        """Configure the HTTP, WebSocket, and REST API routes."""
         self._app.router.add_get("/", self.handle_health)
         self._app.router.add_get("/ws", self.handle_websocket)
+        self._app.router.add_get("/api/status", self.handle_api_status)
+        self._app.router.add_get("/api/devices", self.handle_api_devices)
+        self._app.router.add_delete(
+            "/api/devices/{device_id}", self.handle_api_delete_device
+        )
 
     async def handle_health(self, request: web.Request) -> web.Response:
         """Handle GET requests to the root path.
@@ -220,6 +225,52 @@ class JibeServer:
         )
 
         await self._router.dispatch(conn, jibe_msg)
+
+    # ── REST API ─────────────────────────────────────────────────────
+
+    @staticmethod
+    def _is_localhost(request: web.Request) -> bool:
+        """Check if the request originates from localhost."""
+        remote = request.remote or ""
+        return remote in ("127.0.0.1", "::1", "localhost")
+
+    async def handle_api_status(self, request: web.Request) -> web.Response:
+        """GET /api/status — daemon status overview."""
+        if not self._is_localhost(request):
+            raise web.HTTPForbidden(text="REST API is localhost-only")
+
+        return web.json_response(
+            {
+                "status": "running",
+                "version": __version__,
+                "connected_devices": self._registry.authenticated_count,
+                "total_connections": self._registry.count,
+            }
+        )
+
+    async def handle_api_devices(self, request: web.Request) -> web.Response:
+        """GET /api/devices — list all paired devices."""
+        if not self._is_localhost(request):
+            raise web.HTTPForbidden(text="REST API is localhost-only")
+
+        devices = await self._db.list_devices()
+        return web.json_response({"devices": devices})
+
+    async def handle_api_delete_device(self, request: web.Request) -> web.Response:
+        """DELETE /api/devices/{device_id} — unpair a device."""
+        if not self._is_localhost(request):
+            raise web.HTTPForbidden(text="REST API is localhost-only")
+
+        device_id = request.match_info["device_id"]
+        removed = await self._db.remove_device(device_id)
+
+        if not removed:
+            raise web.HTTPNotFound(
+                text=json.dumps({"error": f"Device '{device_id}' not found"}),
+                content_type="application/json",
+            )
+
+        return web.json_response({"removed": device_id})
 
     async def start(self) -> None:
         """Start listening for incoming connections."""
