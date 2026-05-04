@@ -36,6 +36,8 @@ from jibe.core.api import (
 from jibe.core.auth import AuthManager
 from jibe.core.config import AUTH_TIMEOUT_SECONDS, DEFAULT_PORT, WS_HEARTBEAT_SECONDS
 from jibe.core.db import JibeDatabase
+from jibe.handlers.ping import handle_ping
+from jibe.handlers.router import MessageRouter
 from jibe.network.connection import ConnectionRegistry, ConnectionState, JibeConnection
 
 logger = logging.getLogger(__name__)
@@ -71,6 +73,8 @@ class JibeServer:
         self._ssl_context = ssl_context
         self._auth = AuthManager(db)
         self._registry = ConnectionRegistry()
+        self._router = MessageRouter()
+        self._register_handlers()
         self._app = web.Application()
         self._setup_routes()
         self._runner: web.AppRunner | None = None
@@ -85,6 +89,10 @@ class JibeServer:
     def registry(self) -> ConnectionRegistry:
         """Expose the registry for status queries."""
         return self._registry
+
+    def _register_handlers(self) -> None:
+        """Register message handlers with the router."""
+        self._router.register(MessageType.PING, handle_ping)
 
     def _setup_routes(self) -> None:
         """Configure the HTTP and WebSocket routes."""
@@ -210,9 +218,8 @@ class JibeServer:
             jibe_msg.type.value,
             conn.id,
         )
-        logger.debug("Payload: %s", jibe_msg.payload)
 
-        # TODO: Route to specific handlers via message router (feat/message-router)
+        await self._router.dispatch(conn, jibe_msg)
 
     async def start(self) -> None:
         """Start listening for incoming connections."""
