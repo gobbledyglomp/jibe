@@ -21,12 +21,15 @@ import argparse
 import asyncio
 import logging
 import shutil
+import sys
 
 from jibe.core.config import CERTS_DIR, DEFAULT_PORT, LOG_DATE_FORMAT, LOG_FORMAT
 from jibe.core.db import JibeDatabase
 from jibe.core.tls import create_ssl_context, generate_self_signed_cert
 from jibe.network.discovery import JibeDiscovery
 from jibe.network.server import JibeServer
+
+_QUIET_LOGGERS = ("aiosqlite", "asyncio", "zeroconf")
 
 logger = logging.getLogger("jibe.main")
 
@@ -116,15 +119,42 @@ def _handle_regen_certs() -> None:
     logger.info("New certificates generated. Starting daemon...")
 
 
-def main() -> None:
-    """Entry point. Parses args, sets up the event loop, handles Ctrl+C."""
-    args = _build_parser().parse_args()
+def _configure_logging(*, verbose: bool) -> None:
+    """Configure logging level, format, and terminal colors.
 
+    Uses logging.addLevelName() to inject ANSI codes into the global level name
+    table — %(levelname)s in LOG_FORMAT then picks up the colors automatically,
+    with no Formatter subclass needed. Colors are suppressed when stderr is not
+    a TTY so piped or redirected output stays clean.
+    """
     logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
+        level=logging.DEBUG if verbose else logging.INFO,
         format=LOG_FORMAT,
         datefmt=LOG_DATE_FORMAT,
     )
+
+    if sys.stderr.isatty():
+        _RESET = "\033[0m"
+        _COLORS = {
+            logging.DEBUG: "\033[36m",  # cyan
+            logging.INFO: "\033[32m",  # green
+            logging.WARNING: "\033[33m",  # yellow
+            logging.ERROR: "\033[31m",  # red
+            logging.CRITICAL: "\033[35m",  # magenta
+        }
+        for level, color in _COLORS.items():
+            name = logging.getLevelName(level)
+            logging.addLevelName(level, f"{color}{name}{_RESET}")
+
+    third_party_level = logging.INFO if verbose else logging.WARNING
+    for name in _QUIET_LOGGERS:
+        logging.getLogger(name).setLevel(third_party_level)
+
+
+def main() -> None:
+    """Entry point. Parses args, sets up the event loop, handles Ctrl+C."""
+    args = _build_parser().parse_args()
+    _configure_logging(verbose=args.verbose)
 
     if args.regen_certs:
         _handle_regen_certs()
