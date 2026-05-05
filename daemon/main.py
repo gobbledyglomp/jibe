@@ -4,9 +4,9 @@ Run this file to start the Jibe daemon:
 
     python main.py                 # TLS enabled (default)
     python main.py --no-tls        # plaintext for development
-    python main.py --port 9000     # custom port
+    python main.py -p 9000         # custom port
     python main.py --regen-certs   # force regenerate TLS certificate
-    python main.py --verbose       # debug logging
+    python main.py -v              # debug logging
 
 This wires together all daemon components:
   - JibeDatabase: persistent storage (SQLite)
@@ -92,7 +92,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Disable TLS (plaintext WebSocket for development)",
     )
     parser.add_argument(
-        "--port",
+        "-p", "--port",
         type=int,
         default=DEFAULT_PORT,
         help=f"TCP port to listen on (default: {DEFAULT_PORT})",
@@ -103,7 +103,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Delete existing TLS certificates and regenerate",
     )
     parser.add_argument(
-        "--verbose",
+        "-v", "--verbose",
         action="store_true",
         help="Enable debug logging",
     )
