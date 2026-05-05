@@ -18,3 +18,15 @@ Thumbs.db
 *.key
 *.p12
 *.jks
+
+# Android
+*.apk
+*.aab
+*.dex
+*.class
+local.properties
+.gradle/
+build/
+captures/
+.externalNativeBuild/
+.cxx/
