@@ -48,6 +48,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.jibe.app.data.repository.ConnectionRepository
 import com.jibe.app.data.repository.ConnectionState
@@ -379,13 +380,15 @@ private fun ForgetConfirmation(onConfirm: () -> Unit, onCancel: () -> Unit) {
                 shape = RoundedCornerShape(12.dp)
         ) {
                 Column(
-                        modifier = Modifier.padding(20.dp),
+                        modifier = Modifier.padding(20.dp).fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                         Text(
                                 text = "Forget this device?",
                                 style = MaterialTheme.typography.titleMedium,
-                                color = JibeOnSurface
+                                color = JibeOnSurface,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
                         )
 
                         Spacer(modifier = Modifier.height(8.dp))
@@ -393,22 +396,31 @@ private fun ForgetConfirmation(onConfirm: () -> Unit, onCancel: () -> Unit) {
                         Text(
                                 text = "You'll need to re-enter the PIN to reconnect.",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = JibeOnSurfaceVariant
+                                color = JibeOnSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
                         )
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                        ) {
                                 OutlinedButton(
                                         onClick = onCancel,
                                         shape = RoundedCornerShape(8.dp)
                                 ) { Text("Cancel") }
 
+                                Spacer(modifier = Modifier.width(12.dp))
+
                                 Button(
                                         onClick = onConfirm,
                                         colors =
                                                 ButtonDefaults.buttonColors(
-                                                        containerColor = JibeError
+                                                        containerColor = JibeError,
+                                                        contentColor = Color.White
                                                 ),
                                         shape = RoundedCornerShape(8.dp)
                                 ) { Text("Forget") }
