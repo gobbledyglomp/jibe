@@ -147,9 +147,9 @@ fun HomeScreen(repository: ConnectionRepository, onDeviceForgotten: () -> Unit) 
 // ── Sub-components ──────────────────────────────────────────────────
 
 /**
- * Arc spinner that works even when "Animator Duration Scale" is set to 0x.
- * Uses withFrameNanos to derive angle from raw Choreographer timestamps,
- * bypassing MotionDurationScale entirely. See PairingScreen for full explanation.
+ * Arc spinner that works even when "Animator Duration Scale" is set to 0x. Uses withFrameNanos to
+ * derive angle from raw Choreographer timestamps, bypassing MotionDurationScale entirely. See
+ * PairingScreen for full explanation.
  */
 @Composable
 private fun JibeSpinner(
@@ -272,7 +272,7 @@ private fun ConnectionStatusCard(state: ConnectionState) {
                         if (host != null) {
                                 Spacer(modifier = Modifier.height(12.dp))
 
-                                Row {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(
                                                 text = "Host",
                                                 style = MaterialTheme.typography.labelSmall,
@@ -293,7 +293,7 @@ private fun ConnectionStatusCard(state: ConnectionState) {
                         if (state is ConnectionState.Connected) {
                                 Spacer(modifier = Modifier.height(4.dp))
 
-                                Row {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(
                                                 text = "Device",
                                                 style = MaterialTheme.typography.labelSmall,
