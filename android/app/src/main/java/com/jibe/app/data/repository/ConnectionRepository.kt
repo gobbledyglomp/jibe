@@ -101,6 +101,7 @@ class ConnectionRepository(
     private var trustManager: JibeTrustManager? = null
     private var eventCollectorJob: Job? = null
     private var reconnectJob: Job? = null
+    private var discoveryJob: Job? = null
     private var pingSentAt: Long = 0
     private var fastReconnectAttempts = 0
 
@@ -135,26 +136,32 @@ class ConnectionRepository(
 
     /** Begin NSD discovery — used both for first-time pairing and phase-2 reconnection. */
     fun startDiscovery() {
+        discoveryJob?.cancel()
         _state.value = ConnectionState.Discovering
         discovery.startDiscovery()
 
-        scope.launch {
-            discovery.state.collect { discoveryState ->
-                if (discoveryState is DiscoveryState.Found) {
-                    val daemon = discoveryState.daemon
-                    Log.i(TAG, "Daemon found: ${daemon.name} at ${daemon.host}:${daemon.port}")
-                    discovery.stopDiscovery()
+        discoveryJob =
+                scope.launch {
+                    discovery.state.collect { discoveryState ->
+                        if (discoveryState is DiscoveryState.Found) {
+                            val daemon = discoveryState.daemon
+                            Log.i(
+                                    TAG,
+                                    "Daemon found: ${daemon.name} at ${daemon.host}:${daemon.port}"
+                            )
+                            discovery.stopDiscovery()
 
-                    val credentials = dataStore.credentials.first()
-                    connectToDaemon(
-                            host = daemon.host,
-                            port = daemon.port,
-                            // Use pinned cert if we have credentials (reconnect), else TOFU (pair)
-                            certFingerprint = credentials?.certFingerprint
-                    )
+                            val credentials = dataStore.credentials.first()
+                            connectToDaemon(
+                                    host = daemon.host,
+                                    port = daemon.port,
+                                    // Use pinned cert if we have credentials (reconnect), else TOFU
+                                    // (pair)
+                                    certFingerprint = credentials?.certFingerprint
+                            )
+                        }
+                    }
                 }
-            }
-        }
     }
 
     /**
@@ -200,6 +207,8 @@ class ConnectionRepository(
     fun disconnect() {
         reconnectJob?.cancel()
         reconnectJob = null
+        discoveryJob?.cancel()
+        discoveryJob = null
         eventCollectorJob?.cancel()
         eventCollectorJob = null
         wsClient?.disconnect()
@@ -325,29 +334,29 @@ class ConnectionRepository(
         }
     }
 
-    /**
-     * Handle disconnection using a two-phase reconnection strategy.
-     *
-     * **Phase 1 — fast reconnect:** Retry directly to the saved host/port with exponential backoff:
-     * 3s → 6s → 12s → 24s → 48s. Good for transient glitches and quick daemon restarts.
-     *
-     * **Phase 2 — NSD re-discovery:** After [MAX_FAST_RECONNECTS] failures, switch to mDNS
-     * discovery. The app stays in [ConnectionState.Discovering] until the daemon re-registers on
-     * the LAN. Handles daemon restarts on any IP, including DHCP reassignment.
-     *
-     * The loop runs indefinitely while credentials exist — no user interaction required.
-     */
+    /** Handle disconnection using a two-phase reconnection strategy. */
     private fun handleDisconnection() {
+        val stateAtDisconnect = _state.value
+
         reconnectJob?.cancel()
         reconnectJob =
                 scope.launch {
                     val credentials = dataStore.credentials.first()
 
-                    // No credentials = first-time pairing flow or device forgotten.
-                    // Don't auto-reconnect — let the user stay on the Pairing screen.
                     if (credentials == null) {
-                        _state.value = ConnectionState.Disconnected
                         fastReconnectAttempts = 0
+
+                        val wasMidPairing =
+                                stateAtDisconnect is ConnectionState.Connecting ||
+                                        stateAtDisconnect is ConnectionState.Authenticating
+
+                        if (wasMidPairing) {
+                            Log.i(TAG, "Daemon died during pairing — restarting discovery")
+                            delay(RECONNECT_BASE_DELAY_MS)
+                            startDiscovery()
+                        } else {
+                            _state.value = ConnectionState.Disconnected
+                        }
                         return@launch
                     }
 
@@ -381,10 +390,6 @@ class ConnectionRepository(
                     }
 
                     // ── Phase 2: NSD re-discovery ───────────────────────────────────
-                    // Fast reconnects exhausted — daemon is probably down for a while.
-                    // Switch to discovery mode. When the daemon comes back up and re-registers
-                    // _jibe._tcp, startDiscovery() will fire connectToDaemon() and reset
-                    // fastReconnectAttempts on the next successful auth.
                     Log.i(TAG, "Fast reconnects exhausted — switching to NSD re-discovery")
                     fastReconnectAttempts = 0
                     startDiscovery()
