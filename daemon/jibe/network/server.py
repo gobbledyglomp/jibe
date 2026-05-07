@@ -296,6 +296,7 @@ class JibeServer:
     async def stop(self) -> None:
         """Stop listening and cleanly disconnect all clients."""
         logger.info("Stopping server...")
+        await self._registry.close_all()
         if self._runner:
             await self._runner.cleanup()
             self._runner = None

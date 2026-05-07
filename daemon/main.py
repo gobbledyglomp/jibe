@@ -20,7 +20,9 @@ All services run concurrently in a single asyncio event loop.
 import argparse
 import asyncio
 import logging
+import os
 import shutil
+import signal
 import sys
 
 from jibe.core.config import CERTS_DIR, DEFAULT_PORT, LOG_DATE_FORMAT, LOG_FORMAT
@@ -48,8 +50,10 @@ async def run_daemon(
     Args:
         use_tls: If True, generate/load a certificate and serve wss://.
         port: The TCP port to listen on.
+        start_pairing: If True, immediately start pairing mode on startup.
     """
-    logger.info("Jibe daemon starting...")
+    logger.info("Jibe daemon starting... (PID %d)", os.getpid())
+    logger.info("  To pair a new device at any time: kill -USR1 %d", os.getpid())
 
     db = JibeDatabase()
     await db.open()
@@ -63,6 +67,14 @@ async def run_daemon(
 
     server = JibeServer(db=db, port=port, ssl_context=ssl_context)
     discovery = JibeDiscovery(port=port)
+
+    # Install SIGUSR1 handler so pairing mode can be triggered at runtime
+    # without restarting the daemon: kill -USR1 <pid>
+    loop = asyncio.get_running_loop()
+    loop.add_signal_handler(
+        signal.SIGUSR1,
+        lambda: server.auth.start_pairing()
+    )
 
     try:
         await asyncio.gather(

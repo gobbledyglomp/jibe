@@ -138,3 +138,17 @@ class ConnectionRegistry:
     def authenticated_count(self) -> int:
         """Number of currently authenticated connections."""
         return len(self.get_authenticated())
+
+    async def close_all(self) -> None:
+        """Close all active WebSocket connections.
+
+        Called during server shutdown so runner.cleanup() doesn't hang
+        waiting for the WebSocket handler coroutines to finish. Without
+        this, each connection stays open until the client notices the
+        server socket is gone — which can take several seconds.
+        """
+        conns = list(self._connections.values())
+        if conns:
+            logger.debug("Closing %d active connection(s) for shutdown", len(conns))
+        for conn in conns:
+            await conn.close()
