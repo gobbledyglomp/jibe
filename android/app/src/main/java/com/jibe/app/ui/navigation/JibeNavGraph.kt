@@ -12,7 +12,7 @@ import com.jibe.app.data.local.DeviceCredentials
 import com.jibe.app.data.repository.ConnectionRepository
 import com.jibe.app.ui.screens.HomeScreen
 import com.jibe.app.ui.screens.PairingScreen
-import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.Flow
 
 /**
  * Root navigation graph — decides where the user starts based on whether saved credentials exist.
@@ -26,7 +26,7 @@ import kotlinx.coroutines.flow.StateFlow
  * @param repository The connection state machine, shared between screens.
  */
 @Composable
-fun JibeNavGraph(credentialsFlow: StateFlow<DeviceCredentials?>, repository: ConnectionRepository) {
+fun JibeNavGraph(credentialsFlow: Flow<DeviceCredentials?>, repository: ConnectionRepository) {
     val credentials by credentialsFlow.collectAsState(initial = null)
     val navController = rememberNavController()
 
