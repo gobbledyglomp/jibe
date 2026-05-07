@@ -351,7 +351,6 @@ class ConnectionRepository(
 
                         if (wasMidPairing) {
                             Log.i(TAG, "Daemon died during pairing — restarting discovery")
-                            delay(RECONNECT_BASE_DELAY_MS)
                             startDiscovery()
                         } else {
                             _state.value = ConnectionState.Disconnected
