@@ -2,29 +2,36 @@ package com.jibe.app.ui.screens
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -42,6 +49,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -59,13 +71,12 @@ import com.jibe.app.ui.theme.RobotoMono
  * Discovery & PIN pairing screen — the first screen new users see.
  *
  * Flow:
- * 1. Automatic NSD discovery (scanning animation)
+ * 1. Automatic NSD discovery (spinner)
  * 2. Daemon found → WebSocket connection
- * 3. PIN input field appears
- * 4. User enters 6-digit PIN from daemon
- * 5. Auth success → onPaired callback → navigate to Home
+ * 3. PIN input field appears — user types the PIN shown on the daemon terminal
+ * 4. Auth success → onPaired callback → navigate to Home
  *
- * No carousel, no tutorial. Drop the user straight into discovery.
+ * Start the daemon with: python main.py --pair The PIN will appear in the daemon terminal output.
  */
 @Composable
 fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
@@ -143,7 +154,6 @@ fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
                                     },
                                     focusRequester = focusRequester
                             )
-
                             LaunchedEffect(Unit) { focusRequester.requestFocus() }
                         }
                         is ConnectionState.Connected -> {
@@ -171,14 +181,53 @@ fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
 
 // ── Sub-components ──────────────────────────────────────────────────
 
+/** Coroutine-driven arc spinner. */
+@Composable
+private fun JibeSpinner(
+        modifier: Modifier = Modifier,
+        color: Color = JibePrimary,
+        strokeWidth: Float = 4f
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "spinner")
+    val angle by
+            infiniteTransition.animateFloat(
+                    initialValue = 0f,
+                    targetValue = 360f,
+                    animationSpec =
+                            infiniteRepeatable(
+                                    animation = tween(durationMillis = 900, easing = LinearEasing)
+                            ),
+                    label = "spin_angle"
+            )
+
+    Canvas(modifier = modifier) {
+        val stroke = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+        val inset = strokeWidth / 2
+        drawArc(
+                color = color.copy(alpha = 0.15f),
+                startAngle = 0f,
+                sweepAngle = 360f,
+                useCenter = false,
+                topLeft = Offset(inset, inset),
+                size = Size(size.width - strokeWidth, size.height - strokeWidth),
+                style = stroke
+        )
+        drawArc(
+                color = color,
+                startAngle = angle,
+                sweepAngle = 260f,
+                useCenter = false,
+                topLeft = Offset(inset, inset),
+                size = Size(size.width - strokeWidth, size.height - strokeWidth),
+                style = stroke
+        )
+    }
+}
+
 @Composable
 private fun DiscoveringIndicator() {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        CircularProgressIndicator(
-                modifier = Modifier.size(32.dp),
-                color = JibePrimary,
-                strokeWidth = 2.dp
-        )
+        JibeSpinner(modifier = Modifier.size(32.dp))
 
         Spacer(modifier = Modifier.height(20.dp))
 
@@ -191,9 +240,9 @@ private fun DiscoveringIndicator() {
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-                text = "Make sure the daemon is running on your Linux machine",
-                style = MaterialTheme.typography.labelSmall,
-                color = JibeOnSurfaceVariant.copy(alpha = 0.6f),
+                text = "Run: python main.py --pair",
+                style = MaterialTheme.typography.labelSmall.copy(fontFamily = RobotoMono),
+                color = JibeOnSurfaceVariant.copy(alpha = 0.5f),
                 textAlign = TextAlign.Center
         )
     }
@@ -202,11 +251,7 @@ private fun DiscoveringIndicator() {
 @Composable
 private fun ConnectingIndicator(host: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        CircularProgressIndicator(
-                modifier = Modifier.size(32.dp),
-                color = JibePrimary,
-                strokeWidth = 2.dp
-        )
+        JibeSpinner(modifier = Modifier.size(32.dp))
 
         Spacer(modifier = Modifier.height(20.dp))
 
@@ -242,10 +287,15 @@ private fun PinInput(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // ── Visual PIN boxes ────────────────────────────────────
+        // ── Visual PIN boxes ────────────────────────────────────────
+
         Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(horizontal = 16.dp)
+                modifier =
+                        Modifier.fillMaxWidth().clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null
+                                ) { focusRequester.requestFocus() }
         ) {
             for (i in 0 until 6) {
                 val char = value.getOrNull(i)
@@ -253,7 +303,10 @@ private fun PinInput(
 
                 Box(
                         modifier =
-                                Modifier.size(48.dp)
+                                Modifier.weight(1f)
+                                        .aspectRatio(
+                                                1f
+                                        ) // keep boxes square regardless of weight size
                                         .clip(RoundedCornerShape(8.dp))
                                         .background(
                                                 if (isFilled) JibeSurfaceContainerHigh
@@ -319,7 +372,7 @@ private fun PinInput(
                     onClick = onSubmit,
                     colors = ButtonDefaults.buttonColors(containerColor = JibePrimary),
                     shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp)
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
             ) {
                 Text(
                         text = "Pair",
