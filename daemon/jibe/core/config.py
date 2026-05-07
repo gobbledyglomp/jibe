@@ -33,7 +33,7 @@ MAX_PIN_ATTEMPTS = 3
 # ── WebSocket ────────────────────────────────────────────────────────────
 
 WS_HEARTBEAT_SECONDS = 30.0
-AUTH_TIMEOUT_SECONDS = 10.0
+AUTH_TIMEOUT_SECONDS = PIN_EXPIRY_SECONDS
 
 # ── TLS ──────────────────────────────────────────────────────────────────
 
