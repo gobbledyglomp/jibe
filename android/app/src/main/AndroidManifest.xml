@@ -2,6 +2,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- NsdManager (mDNS discovery) requires INTERNET on Android 12+ -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- CHANGE_NETWORK_STATE is the correct choice for WiFi LAN connections. Normal permission -->
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+
     <!-- Foreground service for persistent WebSocket connection -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
