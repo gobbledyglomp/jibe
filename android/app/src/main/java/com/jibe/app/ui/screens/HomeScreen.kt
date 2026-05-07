@@ -2,11 +2,6 @@ package com.jibe.app.ui.screens
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -38,10 +33,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -150,9 +147,9 @@ fun HomeScreen(repository: ConnectionRepository, onDeviceForgotten: () -> Unit) 
 // ── Sub-components ──────────────────────────────────────────────────
 
 /**
- * Coroutine-driven arc spinner — works even when Animator Duration Scale is 0x. Identical to the
- * one in PairingScreen; extracted here to avoid importing across screen files (they share no module
- * boundary yet).
+ * Arc spinner that works even when "Animator Duration Scale" is set to 0x.
+ * Uses withFrameNanos to derive angle from raw Choreographer timestamps,
+ * bypassing MotionDurationScale entirely. See PairingScreen for full explanation.
  */
 @Composable
 private fun JibeSpinner(
@@ -160,18 +157,18 @@ private fun JibeSpinner(
         color: Color = JibePrimary,
         strokeWidth: Float = 3f
 ) {
-        val infiniteTransition = rememberInfiniteTransition(label = "spinner")
-        val angle by
-                infiniteTransition.animateFloat(
-                        initialValue = 0f,
-                        targetValue = 360f,
-                        animationSpec =
-                                infiniteRepeatable(
-                                        animation =
-                                                tween(durationMillis = 900, easing = LinearEasing)
-                                ),
-                        label = "spin_angle"
-                )
+        var angle by remember { mutableFloatStateOf(0f) }
+
+        LaunchedEffect(Unit) {
+                val periodNs = 900_000_000L
+                val startNs = withFrameNanos { it }
+                while (true) {
+                        withFrameNanos { frameNs ->
+                                angle = ((frameNs - startNs) % periodNs).toFloat() / periodNs * 360f
+                        }
+                }
+        }
+
         Canvas(modifier = modifier) {
                 val stroke = Stroke(width = strokeWidth, cap = StrokeCap.Round)
                 val inset = strokeWidth / 2
