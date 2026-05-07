@@ -104,6 +104,7 @@ class ConnectionRepository(
     private var discoveryJob: Job? = null
     private var pingSentAt: Long = 0
     private var fastReconnectAttempts = 0
+    private var pairingRetryCount = 0
 
     private var currentHost: String? = null
     private var currentPort: Int? = null
@@ -214,6 +215,8 @@ class ConnectionRepository(
         wsClient = null
         trustManager = null
         discovery.stopDiscovery()
+        fastReconnectAttempts = 0
+        pairingRetryCount = 0
         _state.value = ConnectionState.Disconnected
     }
 
@@ -253,6 +256,8 @@ class ConnectionRepository(
             is WebSocketEvent.Connected -> {
                 val host = currentHost ?: "unknown"
                 _state.value = ConnectionState.Authenticating(host)
+
+                pairingRetryCount = 0
 
                 val credentials = dataStore.credentials.first()
                 if (credentials != null) {
@@ -350,6 +355,18 @@ class ConnectionRepository(
                                         stateAtDisconnect is ConnectionState.Authenticating
 
                         if (wasMidPairing) {
+                            if (stateAtDisconnect is ConnectionState.Connecting) {
+                                pairingRetryCount++
+                                val backoffMs =
+                                        min(1_000L * pairingRetryCount, RECONNECT_MAX_DELAY_MS)
+                                Log.d(
+                                        TAG,
+                                        "Stale mDNS bounce #$pairingRetryCount — waiting ${backoffMs}ms"
+                                )
+                                delay(backoffMs)
+                            } else {
+                                pairingRetryCount = 0
+                            }
                             Log.i(TAG, "Daemon died during pairing — restarting discovery")
                             startDiscovery()
                         } else {
