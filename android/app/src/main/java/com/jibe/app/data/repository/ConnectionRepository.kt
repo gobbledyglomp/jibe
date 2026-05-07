@@ -15,6 +15,8 @@ import com.jibe.app.network.JibeWebSocketClient
 import com.jibe.app.network.MessageParser
 import com.jibe.app.network.OkHttpFactory
 import com.jibe.app.network.WebSocketEvent
+import kotlin.math.min
+import kotlin.math.pow
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -62,10 +64,18 @@ data class PingResult(val latencyMs: Long)
  * Orchestrates: NSD discovery ↔ WebSocket ↔ DataStore persistence. Exposes state as a StateFlow
  * that the ViewModel observes.
  *
- * This is the "Repository" in MVVM — it owns the data layer and hides the complexity of networking,
- * TLS, and persistence from the UI.
+ * ## Reconnection strategy (two-phase)
  *
- * Lifecycle: owned by the Foreground Service, survives Activity recreation.
+ * When the daemon drops, we don't give up. Instead:
+ *
+ * **Phase 1 — Fast reconnect** (up to [MAX_FAST_RECONNECTS] attempts): Retry directly to the saved
+ * host/port with exponential backoff (3s → 6s → 12s → 24s → 48s). Handles transient glitches and
+ * brief daemon restarts on the same IP.
+ *
+ * **Phase 2 — NSD re-discovery** (indefinite): After fast reconnects are exhausted, fall back to
+ * mDNS discovery. When the daemon comes back up it re-registers `_jibe._tcp`, the phone finds it,
+ * and reconnects automatically. This also handles the daemon restarting on a different IP (DHCP
+ * reassignment).
  */
 class ConnectionRepository(
         private val dataStore: JibeDataStore,
@@ -74,8 +84,11 @@ class ConnectionRepository(
 ) {
     companion object {
         private const val TAG = "ConnectionRepo"
-        private const val RECONNECT_DELAY_MS = 3000L
-        private const val MAX_RECONNECT_ATTEMPTS = 5
+
+        // Phase 1: fast direct reconnect
+        private const val MAX_FAST_RECONNECTS = 5
+        private const val RECONNECT_BASE_DELAY_MS = 3_000L
+        private const val RECONNECT_MAX_DELAY_MS = 60_000L
     }
 
     private val _state = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
@@ -87,8 +100,9 @@ class ConnectionRepository(
     private var wsClient: JibeWebSocketClient? = null
     private var trustManager: JibeTrustManager? = null
     private var eventCollectorJob: Job? = null
+    private var reconnectJob: Job? = null
     private var pingSentAt: Long = 0
-    private var reconnectAttempts = 0
+    private var fastReconnectAttempts = 0
 
     private var currentHost: String? = null
     private var currentPort: Int? = null
@@ -119,7 +133,7 @@ class ConnectionRepository(
         }
     }
 
-    /** Begin NSD discovery for first-time pairing. */
+    /** Begin NSD discovery — used both for first-time pairing and phase-2 reconnection. */
     fun startDiscovery() {
         _state.value = ConnectionState.Discovering
         discovery.startDiscovery()
@@ -130,7 +144,14 @@ class ConnectionRepository(
                     val daemon = discoveryState.daemon
                     Log.i(TAG, "Daemon found: ${daemon.name} at ${daemon.host}:${daemon.port}")
                     discovery.stopDiscovery()
-                    connectToDaemon(daemon.host, daemon.port, certFingerprint = null)
+
+                    val credentials = dataStore.credentials.first()
+                    connectToDaemon(
+                            host = daemon.host,
+                            port = daemon.port,
+                            // Use pinned cert if we have credentials (reconnect), else TOFU (pair)
+                            certFingerprint = credentials?.certFingerprint
+                    )
                 }
             }
         }
@@ -144,7 +165,6 @@ class ConnectionRepository(
      */
     fun pairWithPin(pin: String, deviceName: String) {
         val client = wsClient ?: return
-
         val authRequest = AuthRequest(deviceName = deviceName, pin = pin)
         client.send(MessageParser.toJson(authRequest))
         Log.d(TAG, "Sent auth.request with PIN")
@@ -176,8 +196,10 @@ class ConnectionRepository(
         }
     }
 
-    /** Clean disconnect — close WebSocket, stop discovery. */
+    /** Clean disconnect — close WebSocket, stop discovery, cancel pending reconnects. */
     fun disconnect() {
+        reconnectJob?.cancel()
+        reconnectJob = null
         eventCollectorJob?.cancel()
         eventCollectorJob = null
         wsClient?.disconnect()
@@ -234,7 +256,7 @@ class ConnectionRepository(
                     wsClient?.send(MessageParser.toJson(authRequest))
                     Log.d(TAG, "Sent auto-reconnect auth.request with fingerprint")
                 }
-                // If no credentials, we're in pairing mode — wait for user to enter PIN
+                // If no credentials: pairing mode — wait for user to enter PIN via pairWithPin()
             }
             is WebSocketEvent.MessageReceived -> {
                 handleMessage(event.message)
@@ -265,7 +287,6 @@ class ConnectionRepository(
             MessageType.ERROR -> {
                 val error = MessageParser.payloadAs<ErrorMessage>(message)
                 Log.w(TAG, "Server error: [${error.code}] ${error.message}")
-
                 if (error.code == "auth_rejected" || error.code == "auth_required") {
                     _state.value = ConnectionState.Failed(error.message)
                 }
@@ -295,7 +316,7 @@ class ConnectionRepository(
                     )
             )
 
-            reconnectAttempts = 0
+            fastReconnectAttempts = 0
             _state.value = ConnectionState.Connected(host, port, deviceId)
             Log.i(TAG, "Authenticated as device $deviceId")
         } else {
@@ -305,35 +326,68 @@ class ConnectionRepository(
     }
 
     /**
-     * Handle disconnection with auto-reconnect logic.
+     * Handle disconnection using a two-phase reconnection strategy.
      *
-     * Only auto-reconnects if we were previously connected (have credentials) and haven't exceeded
-     * the retry limit.
+     * **Phase 1 — fast reconnect:** Retry directly to the saved host/port with exponential backoff:
+     * 3s → 6s → 12s → 24s → 48s. Good for transient glitches and quick daemon restarts.
+     *
+     * **Phase 2 — NSD re-discovery:** After [MAX_FAST_RECONNECTS] failures, switch to mDNS
+     * discovery. The app stays in [ConnectionState.Discovering] until the daemon re-registers on
+     * the LAN. Handles daemon restarts on any IP, including DHCP reassignment.
+     *
+     * The loop runs indefinitely while credentials exist — no user interaction required.
      */
     private fun handleDisconnection() {
-        val wasConnected = _state.value is ConnectionState.Connected
+        reconnectJob?.cancel()
+        reconnectJob =
+                scope.launch {
+                    val credentials = dataStore.credentials.first()
 
-        scope.launch {
-            val credentials = dataStore.credentials.first()
+                    // No credentials = first-time pairing flow or device forgotten.
+                    // Don't auto-reconnect — let the user stay on the Pairing screen.
+                    if (credentials == null) {
+                        _state.value = ConnectionState.Disconnected
+                        fastReconnectAttempts = 0
+                        return@launch
+                    }
 
-            if ((wasConnected || _state.value is ConnectionState.Authenticating) &&
-                            credentials != null &&
-                            reconnectAttempts < MAX_RECONNECT_ATTEMPTS
-            ) {
-                reconnectAttempts++
-                Log.i(TAG, "Reconnecting (attempt $reconnectAttempts/$MAX_RECONNECT_ATTEMPTS)")
-                _state.value =
-                        ConnectionState.Connecting(credentials.daemonHost, credentials.daemonPort)
-                delay(RECONNECT_DELAY_MS)
-                connectToDaemon(
-                        credentials.daemonHost,
-                        credentials.daemonPort,
-                        credentials.certFingerprint
-                )
-            } else {
-                _state.value = ConnectionState.Disconnected
-                reconnectAttempts = 0
-            }
-        }
+                    // ── Phase 1: fast reconnect with exponential backoff ────────────
+                    if (fastReconnectAttempts < MAX_FAST_RECONNECTS) {
+                        fastReconnectAttempts++
+                        val delayMs =
+                                min(
+                                        (RECONNECT_BASE_DELAY_MS *
+                                                        2.0.pow(fastReconnectAttempts - 1))
+                                                .toLong(),
+                                        RECONNECT_MAX_DELAY_MS
+                                )
+                        Log.i(
+                                TAG,
+                                "Fast reconnect $fastReconnectAttempts/$MAX_FAST_RECONNECTS " +
+                                        "in ${delayMs}ms → ${credentials.daemonHost}:${credentials.daemonPort}"
+                        )
+                        _state.value =
+                                ConnectionState.Connecting(
+                                        credentials.daemonHost,
+                                        credentials.daemonPort
+                                )
+                        delay(delayMs)
+                        connectToDaemon(
+                                credentials.daemonHost,
+                                credentials.daemonPort,
+                                credentials.certFingerprint
+                        )
+                        return@launch
+                    }
+
+                    // ── Phase 2: NSD re-discovery ───────────────────────────────────
+                    // Fast reconnects exhausted — daemon is probably down for a while.
+                    // Switch to discovery mode. When the daemon comes back up and re-registers
+                    // _jibe._tcp, startDiscovery() will fire connectToDaemon() and reset
+                    // fastReconnectAttempts on the next successful auth.
+                    Log.i(TAG, "Fast reconnects exhausted — switching to NSD re-discovery")
+                    fastReconnectAttempts = 0
+                    startDiscovery()
+                }
     }
 }
