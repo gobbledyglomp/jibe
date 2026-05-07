@@ -29,13 +29,16 @@ def test_get_local_ip_returns_string():
 
 
 def test_get_local_ip_fallback_on_oserror():
-    """When the UDP socket trick fails, fall back to 127.0.0.1."""
-    with patch("jibe.network.discovery.socket.socket") as mock_socket:
-        mock_socket.return_value.__enter__ = MagicMock(
-            side_effect=OSError("no network")
-        )
-        ip = _get_local_ip()
-        assert ip == "127.0.0.1"
+    """When all detection methods fail, fall back to 127.0.0.1."""
+    with patch(
+        "jibe.network.discovery.socket.getaddrinfo", side_effect=OSError("no network")
+    ):
+        with patch("jibe.network.discovery.socket.socket") as mock_socket:
+            mock_socket.return_value.__enter__ = MagicMock(
+                side_effect=OSError("no network")
+            )
+            ip = _get_local_ip()
+            assert ip == "127.0.0.1"
 
 
 # ── JibeDiscovery lifecycle ──────────────────────────────────────────────
