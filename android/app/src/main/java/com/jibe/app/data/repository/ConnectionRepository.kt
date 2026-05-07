@@ -190,16 +190,15 @@ class ConnectionRepository(
     }
 
     /**
-     * Forget the paired device — clears credentials and disconnects.
-     *
-     * After this, the credentials flow emits null, which triggers the UI to navigate back to the
-     * pairing screen.
+     * Forget the paired device — clears credentials, disconnects, and immediately restarts
+     * discovery so the app is ready to re-pair without any user action.
      */
     fun forgetDevice() {
         scope.launch {
             disconnect()
             dataStore.clearCredentials()
             Log.i(TAG, "Device forgotten, credentials cleared")
+            startDiscovery()
         }
     }
 

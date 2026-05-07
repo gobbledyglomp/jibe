@@ -366,7 +366,7 @@ class ConnectionRepositoryTest {
                 }
 
         @Test
-        fun `forgetDevice clears datastore and disconnects`() =
+        fun `forgetDevice clears datastore and restarts discovery`() =
                 testScope.runTest {
                         repository.startDiscovery()
                         advanceUntilIdle()
@@ -375,9 +375,14 @@ class ConnectionRepositoryTest {
                         advanceUntilIdle()
 
                         coVerify { dataStore.clearCredentials() }
-                        verify { discovery.stopDiscovery() }
+                        // stopDiscovery called by disconnect(), startDiscovery called again after
+                        verify(atLeast = 1) { discovery.stopDiscovery() }
+                        verify(atLeast = 2) { discovery.startDiscovery() }
 
-                        assertEquals(ConnectionState.Disconnected, repository.state.value)
+                        // After forgetDevice, app should be in Discovering mode, not Disconnected,
+                        // so it's ready to re-pair without user interaction.
+                        assertEquals(ConnectionState.Discovering, repository.state.value)
+
                 }
 
         @Test
