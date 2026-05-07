@@ -206,9 +206,19 @@ async def test_missing_pin_rejected(auth_pairing):
     assert response["accepted"] is False
 
 
-async def test_no_pairing_mode_rejected(auth):
-    """auth.request when pairing mode is inactive must be rejected."""
+async def test_no_pairing_mode_auto_starts_on_unknown_device(auth):
+    """auth.request with no fingerprint when pairing is inactive must auto-start pairing."""
     payload = {"device_name": "Pixel 8", "pin": "123456"}
+    response = await auth.handle_auth_request(payload, "client-1")
+
+    assert response["accepted"] is False
+    assert "Pairing started" in response["reason"]
+    assert auth.is_pairing_active
+
+
+async def test_fingerprint_with_no_pairing_mode_rejected(auth):
+    """auth.request with an unrecognised fingerprint still gets the old 'not active' message."""
+    payload = {"device_name": "Pixel 8", "fingerprint": "a" * 64, "pin": "123456"}
 
     response = await auth.handle_auth_request(payload, "client-1")
 

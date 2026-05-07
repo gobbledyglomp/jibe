@@ -136,6 +136,7 @@ fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
                         is ConnectionState.Authenticating -> {
                             PinInput(
                                     value = pinValue,
+                                    hint = currentState.hint,
                                     onValueChange = { newValue ->
                                         if (newValue.length <= 6 && newValue.all { it.isDigit() }) {
                                             pinValue = newValue
@@ -271,6 +272,7 @@ private fun ConnectingIndicator(host: String) {
 @Composable
 private fun PinInput(
         value: String,
+        hint: String?,
         onValueChange: (String) -> Unit,
         onSubmit: () -> Unit,
         focusRequester: FocusRequester
@@ -281,6 +283,16 @@ private fun PinInput(
                 style = MaterialTheme.typography.bodyMedium,
                 color = JibeOnSurfaceVariant
         )
+
+        if (hint != null) {
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                    text = hint,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = JibePrimary,
+                    textAlign = TextAlign.Center
+            )
+        }
 
         Spacer(modifier = Modifier.height(24.dp))
 

@@ -225,6 +225,12 @@ class AuthManager:
             )
 
         if not self.is_pairing_active:
+            if not fingerprint:
+                self.start_pairing()
+                self._record_failure(client_id)
+                return self._reject_response(
+                    "Pairing started — check daemon terminal for PIN, then tap Try again."
+                )
             self._record_failure(client_id)
             return self._reject_response(
                 "Pairing mode is not active. Start pairing on the daemon first."

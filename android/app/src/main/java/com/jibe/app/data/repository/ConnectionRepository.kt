@@ -45,8 +45,8 @@ sealed class ConnectionState {
     /** Found a daemon, opening WebSocket + TLS handshake. */
     data class Connecting(val host: String, val port: Int) : ConnectionState()
 
-    /** WebSocket open, waiting for auth.response from daemon. */
-    data class Authenticating(val host: String) : ConnectionState()
+    /** WebSocket open, waiting for PIN from user. Optional hint shown below the PIN boxes. */
+    data class Authenticating(val host: String, val hint: String? = null) : ConnectionState()
 
     /** Fully authenticated — ready for message exchange. */
     data class Connected(val host: String, val port: Int, val deviceId: String) : ConnectionState()
@@ -268,8 +268,11 @@ class ConnectionRepository(
                             )
                     wsClient?.send(MessageParser.toJson(authRequest))
                     Log.d(TAG, "Sent auto-reconnect auth.request with fingerprint")
+                } else {
+                    val probe = AuthRequest(deviceName = android.os.Build.MODEL)
+                    wsClient?.send(MessageParser.toJson(probe))
+                    Log.d(TAG, "Sent pairing probe to trigger daemon PIN generation")
                 }
-                // If no credentials: pairing mode — wait for user to enter PIN via pairWithPin()
             }
             is WebSocketEvent.MessageReceived -> {
                 handleMessage(event.message)
@@ -333,8 +336,22 @@ class ConnectionRepository(
             _state.value = ConnectionState.Connected(host, port, deviceId)
             Log.i(TAG, "Authenticated as device $deviceId")
         } else {
-            Log.w(TAG, "Auth rejected: ${response.reason}")
-            _state.value = ConnectionState.Failed(response.reason)
+            val credentials = dataStore.credentials.first()
+            if (credentials == null) {
+                // Pairing probe was rejected by the daemon (expected — daemon just
+                // started pairing and logged the PIN). Stay on the PIN entry screen
+                // and show the daemon's message as a hint.
+                val host = currentHost ?: "unknown"
+                Log.d(
+                        TAG,
+                        "Probe rejected (pairing not yet active or just started): ${response.reason}"
+                )
+                _state.value = ConnectionState.Authenticating(host, hint = response.reason)
+            } else {
+                // A real auth attempt (with fingerprint) was rejected — show error.
+                Log.w(TAG, "Auth rejected: ${response.reason}")
+                _state.value = ConnectionState.Failed(response.reason)
+            }
         }
     }
 
