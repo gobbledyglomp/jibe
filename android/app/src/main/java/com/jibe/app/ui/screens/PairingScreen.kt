@@ -61,6 +61,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.jibe.app.data.repository.ConnectionRepository
 import com.jibe.app.data.repository.ConnectionState
 import com.jibe.app.ui.theme.JibeOnSurface
@@ -485,10 +486,3 @@ private fun FailedIndicator(reason: String, onRetry: () -> Unit) {
                 ) { Text("Retry") }
         }
 }
-
-private val Int.sp
-        get() =
-                androidx.compose.ui.unit.TextUnit(
-                        this.toFloat(),
-                        androidx.compose.ui.unit.TextUnitType.Sp
-                )

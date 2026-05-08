@@ -50,6 +50,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.jibe.app.data.repository.ConnectionRepository
 import com.jibe.app.data.repository.ConnectionState
 import com.jibe.app.data.repository.PingResult
@@ -83,8 +84,6 @@ fun HomeScreen(repository: ConnectionRepository, onDeviceForgotten: () -> Unit) 
                 }
         }
 
-        LaunchedEffect(state) { if (state is ConnectionState.Disconnected) {} }
-
         Scaffold(containerColor = MaterialTheme.colorScheme.surface) { innerPadding ->
                 Column(
                         modifier =
@@ -100,7 +99,8 @@ fun HomeScreen(repository: ConnectionRepository, onDeviceForgotten: () -> Unit) 
                                 style =
                                         MaterialTheme.typography.headlineLarge.copy(
                                                 fontFamily = RobotoMono,
-                                                fontWeight = FontWeight.Bold
+                                                fontWeight = FontWeight.Bold,
+                                                letterSpacing = (-1).sp
                                         ),
                                 color = JibePrimary
                         )
