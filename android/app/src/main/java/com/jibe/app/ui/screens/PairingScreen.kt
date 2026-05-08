@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -50,9 +51,11 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.jibe.app.data.repository.ConnectionRepository
@@ -77,12 +80,13 @@ import com.jibe.app.ui.theme.RobotoMono
 @Composable
 fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
         val state by repository.state.collectAsState()
-        var pinValue by remember { mutableStateOf("") }
+        var pinValue by remember { mutableStateOf(TextFieldValue("")) }
         val focusRequester = remember { FocusRequester() }
+        val keyboardController = LocalSoftwareKeyboardController.current
 
         LaunchedEffect(state) {
                 if (state is ConnectionState.Authenticating) {
-                        pinValue = ""
+                        pinValue = TextFieldValue("")
                 }
         }
 
@@ -97,6 +101,7 @@ fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
                         modifier =
                                 Modifier.fillMaxSize()
                                         .padding(innerPadding)
+                                        .imePadding()
                                         .padding(horizontal = 32.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
@@ -148,8 +153,9 @@ fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
                                                                 value = pinValue,
                                                                 hint = currentState.hint,
                                                                 onValueChange = { newValue ->
-                                                                        if (newValue.length <= 6 &&
-                                                                                        newValue
+                                                                        if (newValue.text.length <=
+                                                                                        6 &&
+                                                                                        newValue.text
                                                                                                 .all {
                                                                                                         it.isDigit()
                                                                                                 }
@@ -158,11 +164,13 @@ fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
                                                                         }
                                                                 },
                                                                 onSubmit = {
-                                                                        if (pinValue.length == 6) {
+                                                                        if (pinValue.text.length ==
+                                                                                        6
+                                                                        ) {
                                                                                 repository
                                                                                         .pairWithPin(
                                                                                                 pin =
-                                                                                                        pinValue,
+                                                                                                        pinValue.text,
                                                                                                 deviceName =
                                                                                                         android.os
                                                                                                                 .Build
@@ -170,10 +178,13 @@ fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
                                                                                         )
                                                                         }
                                                                 },
-                                                                focusRequester = focusRequester
+                                                                focusRequester = focusRequester,
+                                                                keyboardController =
+                                                                        keyboardController
                                                         )
                                                         LaunchedEffect(currentState) {
                                                                 focusRequester.requestFocus()
+                                                                keyboardController?.show()
                                                         }
                                                 }
                                                 is ConnectionState.Connected -> {
@@ -189,7 +200,8 @@ fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
                                                         FailedIndicator(
                                                                 reason = currentState.reason,
                                                                 onRetry = {
-                                                                        pinValue = ""
+                                                                        pinValue =
+                                                                                TextFieldValue("")
                                                                         repository.startDiscovery()
                                                                 }
                                                         )
@@ -295,11 +307,12 @@ private fun ConnectingIndicator(host: String) {
 
 @Composable
 private fun PinInput(
-        value: String,
+        value: TextFieldValue,
         hint: String?,
-        onValueChange: (String) -> Unit,
+        onValueChange: (TextFieldValue) -> Unit,
         onSubmit: () -> Unit,
-        focusRequester: FocusRequester
+        focusRequester: FocusRequester,
+        keyboardController: androidx.compose.ui.platform.SoftwareKeyboardController?
 ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
@@ -329,10 +342,13 @@ private fun PinInput(
                                                 interactionSource =
                                                         remember { MutableInteractionSource() },
                                                 indication = null
-                                        ) { focusRequester.requestFocus() }
+                                        ) {
+                                        focusRequester.requestFocus()
+                                        keyboardController?.show()
+                                }
                 ) {
                         for (i in 0 until 6) {
-                                val char = value.getOrNull(i)
+                                val char = value.text.getOrNull(i)
                                 val isFilled = char != null
 
                                 Box(
@@ -415,7 +431,7 @@ private fun PinInput(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                AnimatedVisibility(visible = value.length == 6) {
+                AnimatedVisibility(visible = value.text.length == 6) {
                         Button(
                                 onClick = onSubmit,
                                 colors = ButtonDefaults.buttonColors(containerColor = JibePrimary),
