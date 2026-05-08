@@ -23,13 +23,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -77,104 +76,129 @@ import com.jibe.app.ui.theme.RobotoMono
  */
 @Composable
 fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
-    val state by repository.state.collectAsState()
-    var pinValue by remember { mutableStateOf("") }
-    val focusRequester = remember { FocusRequester() }
+        val state by repository.state.collectAsState()
+        var pinValue by remember { mutableStateOf("") }
+        val focusRequester = remember { FocusRequester() }
 
-    // Navigate to Home when authentication succeeds
-    LaunchedEffect(state) {
-        if (state is ConnectionState.Connected) {
-            onPaired()
-        }
-    }
-
-    Scaffold(containerColor = MaterialTheme.colorScheme.surface) { innerPadding ->
-        Column(
-                modifier = Modifier.fillMaxSize().padding(innerPadding).padding(horizontal = 32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-        ) {
-            // ── Header ──────────────────────────────────────────────
-            Text(
-                    text = "jibe",
-                    style =
-                            MaterialTheme.typography.headlineLarge.copy(
-                                    fontFamily = RobotoMono,
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = (-1).sp
-                            ),
-                    color = JibePrimary
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                    text = "Android ↔ Linux",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = JibeOnSurfaceVariant
-            )
-
-            Spacer(modifier = Modifier.height(48.dp))
-
-            // ── State-driven content ────────────────────────────────
-            AnimatedContent(
-                    targetState = state,
-                    transitionSpec = { fadeIn() togetherWith fadeOut() },
-                    label = "pairing_state"
-            ) { currentState ->
-                Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.fillMaxWidth()
-                ) {
-                    when (currentState) {
-                        is ConnectionState.Disconnected, is ConnectionState.Discovering -> {
-                            DiscoveringIndicator()
-                        }
-                        is ConnectionState.Connecting -> {
-                            ConnectingIndicator(host = currentState.host)
-                        }
-                        is ConnectionState.Authenticating -> {
-                            PinInput(
-                                    value = pinValue,
-                                    hint = currentState.hint,
-                                    onValueChange = { newValue ->
-                                        if (newValue.length <= 6 && newValue.all { it.isDigit() }) {
-                                            pinValue = newValue
-                                        }
-                                    },
-                                    onSubmit = {
-                                        if (pinValue.length == 6) {
-                                            repository.pairWithPin(
-                                                    pin = pinValue,
-                                                    deviceName = android.os.Build.MODEL
-                                            )
-                                        }
-                                    },
-                                    focusRequester = focusRequester
-                            )
-                            LaunchedEffect(Unit) { focusRequester.requestFocus() }
-                        }
-                        is ConnectionState.Connected -> {
-                            Text(
-                                    text = "Connected",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = JibePrimary
-                            )
-                        }
-                        is ConnectionState.Failed -> {
-                            FailedIndicator(
-                                    reason = currentState.reason,
-                                    onRetry = {
-                                        pinValue = ""
-                                        repository.startDiscovery()
-                                    }
-                            )
-                        }
-                    }
+        LaunchedEffect(state) {
+                if (state is ConnectionState.Authenticating) {
+                        pinValue = ""
                 }
-            }
         }
-    }
+
+        LaunchedEffect(state) {
+                if (state is ConnectionState.Connected) {
+                        onPaired()
+                }
+        }
+
+        Scaffold(containerColor = MaterialTheme.colorScheme.surface) { innerPadding ->
+                Column(
+                        modifier =
+                                Modifier.fillMaxSize()
+                                        .padding(innerPadding)
+                                        .padding(horizontal = 32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                ) {
+                        // ── Header ──────────────────────────────────────────────
+                        Text(
+                                text = "jibe",
+                                style =
+                                        MaterialTheme.typography.headlineLarge.copy(
+                                                fontFamily = RobotoMono,
+                                                fontWeight = FontWeight.Bold,
+                                                letterSpacing = (-1).sp
+                                        ),
+                                color = JibePrimary
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Text(
+                                text = "Android ↔ Linux",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = JibeOnSurfaceVariant
+                        )
+
+                        Spacer(modifier = Modifier.height(48.dp))
+
+                        // ── State-driven content ────────────────────────────────
+                        AnimatedContent(
+                                targetState = state,
+                                transitionSpec = { fadeIn() togetherWith fadeOut() },
+                                label = "pairing_state"
+                        ) { currentState ->
+                                Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        modifier = Modifier.fillMaxWidth()
+                                ) {
+                                        when (currentState) {
+                                                is ConnectionState.Disconnected,
+                                                is ConnectionState.Discovering -> {
+                                                        DiscoveringIndicator()
+                                                }
+                                                is ConnectionState.Connecting -> {
+                                                        ConnectingIndicator(
+                                                                host = currentState.host
+                                                        )
+                                                }
+                                                is ConnectionState.Authenticating -> {
+                                                        PinInput(
+                                                                value = pinValue,
+                                                                hint = currentState.hint,
+                                                                onValueChange = { newValue ->
+                                                                        if (newValue.length <= 6 &&
+                                                                                        newValue
+                                                                                                .all {
+                                                                                                        it.isDigit()
+                                                                                                }
+                                                                        ) {
+                                                                                pinValue = newValue
+                                                                        }
+                                                                },
+                                                                onSubmit = {
+                                                                        if (pinValue.length == 6) {
+                                                                                repository
+                                                                                        .pairWithPin(
+                                                                                                pin =
+                                                                                                        pinValue,
+                                                                                                deviceName =
+                                                                                                        android.os
+                                                                                                                .Build
+                                                                                                                .MODEL
+                                                                                        )
+                                                                        }
+                                                                },
+                                                                focusRequester = focusRequester
+                                                        )
+                                                        LaunchedEffect(currentState) {
+                                                                focusRequester.requestFocus()
+                                                        }
+                                                }
+                                                is ConnectionState.Connected -> {
+                                                        Text(
+                                                                text = "Connected",
+                                                                style =
+                                                                        MaterialTheme.typography
+                                                                                .titleMedium,
+                                                                color = JibePrimary
+                                                        )
+                                                }
+                                                is ConnectionState.Failed -> {
+                                                        FailedIndicator(
+                                                                reason = currentState.reason,
+                                                                onRetry = {
+                                                                        pinValue = ""
+                                                                        repository.startDiscovery()
+                                                                }
+                                                        )
+                                                }
+                                        }
+                                }
+                        }
+                }
+        }
 }
 
 // ── Sub-components ──────────────────────────────────────────────────
@@ -186,87 +210,87 @@ private fun JibeSpinner(
         color: Color = JibePrimary,
         strokeWidth: Float = 4f
 ) {
-    var angle by remember { mutableFloatStateOf(0f) }
+        var angle by remember { mutableFloatStateOf(0f) }
 
-    LaunchedEffect(Unit) {
-        val periodNs = 900_000_000L // one full rotation every 900ms
-        val startNs = withFrameNanos { it }
-        while (true) {
-            withFrameNanos { frameNs ->
-                angle = ((frameNs - startNs) % periodNs).toFloat() / periodNs * 360f
-            }
+        LaunchedEffect(Unit) {
+                val periodNs = 900_000_000L // one full rotation every 900ms
+                val startNs = withFrameNanos { it }
+                while (true) {
+                        withFrameNanos { frameNs ->
+                                angle = ((frameNs - startNs) % periodNs).toFloat() / periodNs * 360f
+                        }
+                }
         }
-    }
 
-    Canvas(modifier = modifier) {
-        val stroke = Stroke(width = strokeWidth, cap = StrokeCap.Round)
-        val inset = strokeWidth / 2
-        drawArc(
-                color = color.copy(alpha = 0.15f),
-                startAngle = 0f,
-                sweepAngle = 360f,
-                useCenter = false,
-                topLeft = Offset(inset, inset),
-                size = Size(size.width - strokeWidth, size.height - strokeWidth),
-                style = stroke
-        )
-        drawArc(
-                color = color,
-                startAngle = angle,
-                sweepAngle = 260f,
-                useCenter = false,
-                topLeft = Offset(inset, inset),
-                size = Size(size.width - strokeWidth, size.height - strokeWidth),
-                style = stroke
-        )
-    }
+        Canvas(modifier = modifier) {
+                val stroke = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                val inset = strokeWidth / 2
+                drawArc(
+                        color = color.copy(alpha = 0.15f),
+                        startAngle = 0f,
+                        sweepAngle = 360f,
+                        useCenter = false,
+                        topLeft = Offset(inset, inset),
+                        size = Size(size.width - strokeWidth, size.height - strokeWidth),
+                        style = stroke
+                )
+                drawArc(
+                        color = color,
+                        startAngle = angle,
+                        sweepAngle = 260f,
+                        useCenter = false,
+                        topLeft = Offset(inset, inset),
+                        size = Size(size.width - strokeWidth, size.height - strokeWidth),
+                        style = stroke
+                )
+        }
 }
 
 @Composable
 private fun DiscoveringIndicator() {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        JibeSpinner(modifier = Modifier.size(32.dp))
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                JibeSpinner(modifier = Modifier.size(32.dp))
 
-        Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(20.dp))
 
-        Text(
-                text = "Searching for daemon…",
-                style = MaterialTheme.typography.bodyMedium,
-                color = JibeOnSurfaceVariant
-        )
+                Text(
+                        text = "Searching for daemon…",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = JibeOnSurfaceVariant
+                )
 
-        Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
-        Text(
-                text = "Run: python main.py --pair",
-                style = MaterialTheme.typography.labelSmall.copy(fontFamily = RobotoMono),
-                color = JibeOnSurfaceVariant.copy(alpha = 0.5f),
-                textAlign = TextAlign.Center
-        )
-    }
+                Text(
+                        text = "Run: python main.py --pair",
+                        style = MaterialTheme.typography.labelSmall.copy(fontFamily = RobotoMono),
+                        color = JibeOnSurfaceVariant.copy(alpha = 0.5f),
+                        textAlign = TextAlign.Center
+                )
+        }
 }
 
 @Composable
 private fun ConnectingIndicator(host: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        JibeSpinner(modifier = Modifier.size(32.dp))
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                JibeSpinner(modifier = Modifier.size(32.dp))
 
-        Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(20.dp))
 
-        Text(
-                text = "Connecting…",
-                style = MaterialTheme.typography.bodyMedium,
-                color = JibeOnSurfaceVariant
-        )
+                Text(
+                        text = "Connecting…",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = JibeOnSurfaceVariant
+                )
 
-        Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(4.dp))
 
-        Text(
-                text = host,
-                style = MaterialTheme.typography.bodySmall.copy(fontFamily = RobotoMono),
-                color = JibeOnSurfaceVariant.copy(alpha = 0.7f)
-        )
-    }
+                Text(
+                        text = host,
+                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = RobotoMono),
+                        color = JibeOnSurfaceVariant.copy(alpha = 0.7f)
+                )
+        }
 }
 
 @Composable
@@ -277,153 +301,168 @@ private fun PinInput(
         onSubmit: () -> Unit,
         focusRequester: FocusRequester
 ) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-                text = "Enter the PIN shown on your daemon",
-                style = MaterialTheme.typography.bodyMedium,
-                color = JibeOnSurfaceVariant
-        )
-
-        if (hint != null) {
-            Spacer(modifier = Modifier.height(6.dp))
-            Text(
-                    text = hint,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = JibePrimary,
-                    textAlign = TextAlign.Center
-            )
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // ── Visual PIN boxes ────────────────────────────────────────
-
-        Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier =
-                        Modifier.fillMaxWidth().clickable(
-                                        interactionSource = remember { MutableInteractionSource() },
-                                        indication = null
-                                ) { focusRequester.requestFocus() }
-        ) {
-            for (i in 0 until 6) {
-                val char = value.getOrNull(i)
-                val isFilled = char != null
-
-                Box(
-                        modifier =
-                                Modifier.weight(1f)
-                                        .aspectRatio(
-                                                1f
-                                        ) // keep boxes square regardless of weight size
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(
-                                                if (isFilled) JibeSurfaceContainerHigh
-                                                else MaterialTheme.colorScheme.surface
-                                        )
-                                        .border(
-                                                width = 1.dp,
-                                                color =
-                                                        if (isFilled) JibePrimary.copy(alpha = 0.5f)
-                                                        else
-                                                                JibeOnSurfaceVariant.copy(
-                                                                        alpha = 0.2f
-                                                                ),
-                                                shape = RoundedCornerShape(8.dp)
-                                        ),
-                        contentAlignment = Alignment.Center
-                ) {
-                    if (isFilled) {
-                        Text(
-                                text = char.toString(),
-                                style =
-                                        MaterialTheme.typography.headlineSmall.copy(
-                                                fontFamily = RobotoMono,
-                                                fontWeight = FontWeight.Medium
-                                        ),
-                                color = JibeOnSurface
-                        )
-                    } else {
-                        Box(
-                                modifier =
-                                        Modifier.size(6.dp)
-                                                .clip(CircleShape)
-                                                .background(
-                                                        JibeOnSurfaceVariant.copy(alpha = 0.15f)
-                                                )
-                        )
-                    }
-                }
-            }
-        }
-
-        OutlinedTextField(
-                value = value,
-                onValueChange = onValueChange,
-                modifier = Modifier.size(1.dp).focusRequester(focusRequester),
-                keyboardOptions =
-                        KeyboardOptions(
-                                keyboardType = KeyboardType.NumberPassword,
-                                imeAction = ImeAction.Done
-                        ),
-                keyboardActions = KeyboardActions(onDone = { onSubmit() }),
-                colors =
-                        OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = MaterialTheme.colorScheme.surface,
-                                unfocusedBorderColor = MaterialTheme.colorScheme.surface
-                        )
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        AnimatedVisibility(visible = value.length == 6) {
-            Button(
-                    onClick = onSubmit,
-                    colors = ButtonDefaults.buttonColors(containerColor = JibePrimary),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
-            ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                        text = "Pair",
-                        style = MaterialTheme.typography.labelLarge,
-                        modifier = Modifier.padding(vertical = 4.dp)
+                        text = "Enter the PIN shown on your daemon",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = JibeOnSurfaceVariant
                 )
-            }
+
+                if (hint != null) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                                text = hint,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = JibePrimary,
+                                textAlign = TextAlign.Center
+                        )
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // ── Visual PIN boxes ────────────────────────────────────────
+
+                Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier =
+                                Modifier.fillMaxWidth().clickable(
+                                                interactionSource =
+                                                        remember { MutableInteractionSource() },
+                                                indication = null
+                                        ) { focusRequester.requestFocus() }
+                ) {
+                        for (i in 0 until 6) {
+                                val char = value.getOrNull(i)
+                                val isFilled = char != null
+
+                                Box(
+                                        modifier =
+                                                Modifier.weight(1f)
+                                                        .aspectRatio(
+                                                                1f
+                                                        ) // keep boxes square regardless of weight
+                                                        // size
+                                                        .clip(RoundedCornerShape(8.dp))
+                                                        .background(
+                                                                if (isFilled)
+                                                                        JibeSurfaceContainerHigh
+                                                                else
+                                                                        MaterialTheme.colorScheme
+                                                                                .surface
+                                                        )
+                                                        .border(
+                                                                width = 1.dp,
+                                                                color =
+                                                                        if (isFilled)
+                                                                                JibePrimary.copy(
+                                                                                        alpha = 0.5f
+                                                                                )
+                                                                        else
+                                                                                JibeOnSurfaceVariant
+                                                                                        .copy(
+                                                                                                alpha =
+                                                                                                        0.2f
+                                                                                        ),
+                                                                shape = RoundedCornerShape(8.dp)
+                                                        ),
+                                        contentAlignment = Alignment.Center
+                                ) {
+                                        if (isFilled) {
+                                                Text(
+                                                        text = char.toString(),
+                                                        style =
+                                                                MaterialTheme.typography
+                                                                        .headlineSmall.copy(
+                                                                        fontFamily = RobotoMono,
+                                                                        fontWeight =
+                                                                                FontWeight.Medium
+                                                                ),
+                                                        color = JibeOnSurface
+                                                )
+                                        } else {
+                                                Box(
+                                                        modifier =
+                                                                Modifier.size(6.dp)
+                                                                        .clip(CircleShape)
+                                                                        .background(
+                                                                                JibeOnSurfaceVariant
+                                                                                        .copy(
+                                                                                                alpha =
+                                                                                                        0.15f
+                                                                                        )
+                                                                        )
+                                                )
+                                        }
+                                }
+                        }
+                }
+
+                // Invisible text field that captures keyboard input.
+                // BasicTextField (no decorations) is more reliable than OutlinedTextField
+                // at 1dp size — it doesn't fight Compose's focus system.
+                BasicTextField(
+                        value = value,
+                        onValueChange = onValueChange,
+                        modifier = Modifier.size(1.dp).focusRequester(focusRequester),
+                        keyboardOptions =
+                                KeyboardOptions(
+                                        keyboardType = KeyboardType.NumberPassword,
+                                        imeAction = ImeAction.Done
+                                ),
+                        keyboardActions = KeyboardActions(onDone = { onSubmit() }),
+                        decorationBox = {}
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                AnimatedVisibility(visible = value.length == 6) {
+                        Button(
+                                onClick = onSubmit,
+                                colors = ButtonDefaults.buttonColors(containerColor = JibePrimary),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+                        ) {
+                                Text(
+                                        text = "Pair",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        modifier = Modifier.padding(vertical = 4.dp)
+                                )
+                        }
+                }
         }
-    }
 }
 
 @Composable
 private fun FailedIndicator(reason: String, onRetry: () -> Unit) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-                text = "Pairing failed",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.error
-        )
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                        text = "Pairing failed",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.error
+                )
 
-        Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
-        Text(
-                text = reason,
-                style = MaterialTheme.typography.bodyMedium,
-                color = JibeOnSurfaceVariant,
-                textAlign = TextAlign.Center
-        )
+                Text(
+                        text = reason,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = JibeOnSurfaceVariant,
+                        textAlign = TextAlign.Center
+                )
 
-        Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
-        Button(
-                onClick = onRetry,
-                colors = ButtonDefaults.buttonColors(containerColor = JibePrimary),
-                shape = RoundedCornerShape(8.dp)
-        ) { Text("Retry") }
-    }
+                Button(
+                        onClick = onRetry,
+                        colors = ButtonDefaults.buttonColors(containerColor = JibePrimary),
+                        shape = RoundedCornerShape(8.dp)
+                ) { Text("Retry") }
+        }
 }
 
 private val Int.sp
-    get() =
-            androidx.compose.ui.unit.TextUnit(
-                    this.toFloat(),
-                    androidx.compose.ui.unit.TextUnitType.Sp
-            )
+        get() =
+                androidx.compose.ui.unit.TextUnit(
+                        this.toFloat(),
+                        androidx.compose.ui.unit.TextUnitType.Sp
+                )
