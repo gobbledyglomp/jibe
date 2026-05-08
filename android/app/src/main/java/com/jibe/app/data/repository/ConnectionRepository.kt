@@ -87,7 +87,7 @@ class ConnectionRepository(
 
         // Phase 1: fast direct reconnect
         private const val MAX_FAST_RECONNECTS = 5
-        private const val RECONNECT_BASE_DELAY_MS = 3_000L
+        private const val RECONNECT_BASE_DELAY_MS = 1_500L
         private const val RECONNECT_MAX_DELAY_MS = 60_000L
     }
 
