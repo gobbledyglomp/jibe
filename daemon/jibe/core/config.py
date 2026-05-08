@@ -28,7 +28,7 @@ SCHEMA_VERSION = 1
 
 PIN_LENGTH = 6
 PIN_EXPIRY_SECONDS = 120
-MAX_PIN_ATTEMPTS = 3
+MAX_PIN_ATTEMPTS = 5
 
 # ── WebSocket ────────────────────────────────────────────────────────────
 

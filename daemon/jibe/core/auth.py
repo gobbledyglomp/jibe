@@ -144,10 +144,14 @@ class AuthManager:
         Any existing pairing session is replaced. The PIN is logged
         and returned so callers (tray, web UI) can display it.
 
+        Also resets the per-client failure counters so the new session
+        starts with a clean slate of MAX_PIN_ATTEMPTS.
+
         Returns:
             The generated 6-digit PIN string.
         """
         self._pairing_session = PairingSession()
+        self._failed_attempts.clear()
         logger.info(
             "Pairing mode active — PIN: %s (expires in %ds)",
             self._pairing_session.pin,
