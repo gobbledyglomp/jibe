@@ -4,25 +4,25 @@ import androidx.compose.ui.graphics.Color
 
 // ── Jibe color palette ──────────────────────────────────────────────
 
-// Primary: a muted teal/cyan
-val JibePrimary = Color(0xFF5EC4B6)
-val JibePrimaryVariant = Color(0xFF3DA396)
-val JibeOnPrimary = Color(0xFF00201C)
+// Background layers — slight brightness steps, much darker base
+val JibeSurfaceDark = Color(0xFF131519)
+val JibeSurfaceContainer = Color(0xFF1D1F25)
+val JibeSurfaceContainerHigh = Color(0xFF262930)
+val JibeSurfaceContainerHighest = Color(0xFF30333B)
 
-// Surface layers: dark grays with slight warmth
-val JibeSurfaceDark = Color(0xFF111318)
-val JibeSurfaceContainer = Color(0xFF1A1C22)
-val JibeSurfaceContainerHigh = Color(0xFF22252B)
-val JibeSurfaceContainerHighest = Color(0xFF2C2F36)
+// Text hierarchy — white with opacity steps
+val JibeOnSurface = Color(0xFFFFFFFF)
+val JibeOnSurfaceVariant = Color(0xFFD3D7E0)
 
-// Text hierarchy
-val JibeOnSurface = Color(0xFFE2E2E6)
-val JibeOnSurfaceVariant = Color(0xFF8E9099)
+// Primary — The brand color, completely white as requested
+val JibePrimary = Color(0xFFFFFFFF)
+val JibePrimaryVariant = Color(0xFFE0E0E0)
+val JibeOnPrimary = Color(0xFF090C12)
 
-// Status colors — muted, not alarm-red
+// Status colors — muted, functional
 val JibeSuccess = Color(0xFF6FCF97)
 val JibeWarning = Color(0xFFF2C94C)
-val JibeError = Color(0xFFEB5757)
+val JibeError = Color(0xFFCF6679)
 
-// Accent for interactive elements
-val JibeAccent = Color(0xFF7B8CDE)
+// Accent — a subtle white for interactive hints
+val JibeAccent = Color(0xFFFFFFFF)
