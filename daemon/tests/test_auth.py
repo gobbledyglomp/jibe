@@ -197,23 +197,26 @@ async def test_wrong_pin_rejected(auth_pairing):
     assert "Invalid PIN" in response["reason"]
 
 
-async def test_missing_pin_rejected(auth_pairing):
-    """Missing pin field must return accepted=False."""
+async def test_missing_pin_not_counted_as_failure(auth_pairing):
+    """A request with no PIN should be rejected but NOT counted as a failed attempt."""
     payload = {"device_name": "Pixel 8"}
 
     response = await auth_pairing.handle_auth_request(payload, "client-1")
 
     assert response["accepted"] is False
+    assert auth_pairing._failed_attempts.get("client-1", 0) == 0
 
 
 async def test_no_pairing_mode_auto_starts_on_unknown_device(auth):
-    """auth.request with no fingerprint when pairing is inactive must auto-start pairing."""
-    payload = {"device_name": "Pixel 8", "pin": "123456"}
+    """Probe (no PIN, no fingerprint) when pairing is inactive must auto-start pairing
+    WITHOUT consuming an attempt."""
+    payload = {"device_name": "Pixel 8"}
     response = await auth.handle_auth_request(payload, "client-1")
 
     assert response["accepted"] is False
     assert "Pairing started" in response["reason"]
     assert auth.is_pairing_active
+    assert auth._failed_attempts.get("client-1", 0) == 0
 
 
 async def test_fingerprint_with_no_pairing_mode_rejected(auth):

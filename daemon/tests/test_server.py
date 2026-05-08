@@ -139,14 +139,13 @@ async def test_wrong_pin_rejected(aiohttp_client, jibe_app, jibe_server):
 
 
 async def test_auth_without_pairing_mode(aiohttp_client, jibe_app):
-    """auth.request from an unknown device when pairing mode is inactive auto-starts pairing."""
+    """Probe (no PIN) from an unknown device when pairing is inactive auto-starts pairing."""
     client = await aiohttp_client(jibe_app)
     ws = await client.ws_connect("/ws")
 
     await ws.send_json(
         {
             "type": "auth.request",
-            "pin": "123456",
             "device_name": "Phone",
         }
     )

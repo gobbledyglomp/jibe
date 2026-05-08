@@ -227,9 +227,8 @@ class AuthManager:
         if not self.is_pairing_active:
             if not fingerprint:
                 self.start_pairing()
-                self._record_failure(client_id)
                 return self._reject_response(
-                    "Pairing started — check daemon terminal for PIN, then tap Try again."
+                    "Pairing started — check daemon terminal for PIN."
                 )
             self._record_failure(client_id)
             return self._reject_response(
@@ -237,8 +236,7 @@ class AuthManager:
             )
 
         if not pin:
-            self._record_failure(client_id)
-            return self._reject_response("No PIN provided")
+            return self._reject_response("Enter the PIN shown on the daemon.")
 
         if pin != self._pairing_session.pin:
             self._record_failure(client_id)
