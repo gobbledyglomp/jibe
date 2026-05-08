@@ -1,7 +1,6 @@
 package com.jibe.app.ui.screens
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -15,13 +14,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -96,12 +99,13 @@ fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
                 }
         }
 
-        Scaffold(containerColor = MaterialTheme.colorScheme.surface) { innerPadding ->
+        Scaffold(containerColor = MaterialTheme.colorScheme.surface) { _ ->
                 Column(
                         modifier =
                                 Modifier.fillMaxSize()
-                                        .padding(innerPadding)
-                                        .imePadding()
+                                        .windowInsetsPadding(
+                                                WindowInsets.navigationBars.union(WindowInsets.ime)
+                                        )
                                         .padding(horizontal = 32.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
@@ -431,19 +435,25 @@ private fun PinInput(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                AnimatedVisibility(visible = value.text.length == 6) {
-                        Button(
-                                onClick = onSubmit,
-                                colors = ButtonDefaults.buttonColors(containerColor = JibePrimary),
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
-                        ) {
-                                Text(
-                                        text = "Pair",
-                                        style = MaterialTheme.typography.labelLarge,
-                                        modifier = Modifier.padding(vertical = 4.dp)
-                                )
-                        }
+                Button(
+                        onClick = onSubmit,
+                        enabled = value.text.length == 6,
+                        colors =
+                                ButtonDefaults.buttonColors(
+                                        containerColor = JibePrimary,
+                                        contentColor = MaterialTheme.colorScheme.surface,
+                                        disabledContainerColor = JibePrimary.copy(alpha = 0.5f),
+                                        disabledContentColor =
+                                                MaterialTheme.colorScheme.surface.copy(alpha = 0.5f)
+                                ),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+                ) {
+                        Text(
+                                text = "Pair",
+                                style = MaterialTheme.typography.labelLarge,
+                                modifier = Modifier.padding(vertical = 4.dp)
+                        )
                 }
         }
 }
