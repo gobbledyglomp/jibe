@@ -367,11 +367,12 @@ class ConnectionRepository(
                     if (credentials == null) {
                         fastReconnectAttempts = 0
 
-                        val wasMidPairing =
+                        val shouldRecover =
                                 stateAtDisconnect is ConnectionState.Connecting ||
-                                        stateAtDisconnect is ConnectionState.Authenticating
+                                        stateAtDisconnect is ConnectionState.Authenticating ||
+                                        stateAtDisconnect is ConnectionState.Failed
 
-                        if (wasMidPairing) {
+                        if (shouldRecover) {
                             if (stateAtDisconnect is ConnectionState.Connecting) {
                                 pairingRetryCount++
                                 val backoffMs =
@@ -381,10 +382,13 @@ class ConnectionRepository(
                                         "Stale mDNS bounce #$pairingRetryCount — waiting ${backoffMs}ms"
                                 )
                                 delay(backoffMs)
+                            } else if (stateAtDisconnect is ConnectionState.Failed) {
+                                Log.i(TAG, "Rate-limited or failed — recovering in 3s")
+                                delay(3_000L)
                             } else {
                                 pairingRetryCount = 0
                             }
-                            Log.i(TAG, "Daemon died during pairing — restarting discovery")
+                            Log.i(TAG, "Restarting discovery after disconnect during pairing")
                             startDiscovery()
                         } else {
                             _state.value = ConnectionState.Disconnected
