@@ -81,6 +81,8 @@ class JibeService : Service() {
         serviceScope.launch { repository.state.collect { state -> updateNotification(state) } }
     }
 
+    private var started = false
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.i(TAG, "Service started")
 
@@ -94,7 +96,10 @@ class JibeService : Service() {
             startForeground(NOTIFICATION_ID, buildNotification(ConnectionState.Disconnected))
         }
 
-        repository.start()
+        if (!started) {
+            started = true
+            repository.start()
+        }
 
         // If the system kills the service, restart it.
         return START_STICKY
@@ -136,7 +141,9 @@ class JibeService : Service() {
                 PendingIntent.getActivity(
                         this,
                         0,
-                        Intent(this, MainActivity::class.java),
+                        Intent(this, MainActivity::class.java).apply {
+                            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
+                        },
                         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
 
