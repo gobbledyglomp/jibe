@@ -100,10 +100,11 @@ fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
                 }
         }
 
-        Scaffold(containerColor = MaterialTheme.colorScheme.surface) { _ ->
+        Scaffold(containerColor = MaterialTheme.colorScheme.surface) { innerPadding ->
                 Column(
                         modifier =
                                 Modifier.fillMaxSize()
+                                        .padding(innerPadding)
                                         .windowInsetsPadding(
                                                 WindowInsets.navigationBars.union(WindowInsets.ime)
                                         )

@@ -2,9 +2,18 @@ package com.jibe.app.ui.navigation
 
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -13,6 +22,7 @@ import com.jibe.app.data.repository.ConnectionRepository
 import com.jibe.app.ui.screens.HomeScreen
 import com.jibe.app.ui.screens.PairingScreen
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 
 /**
  * Root navigation graph — decides where the user starts based on whether saved credentials exist.
@@ -27,11 +37,26 @@ import kotlinx.coroutines.flow.Flow
  */
 @Composable
 fun JibeNavGraph(credentialsFlow: Flow<DeviceCredentials?>, repository: ConnectionRepository) {
-    val credentials by credentialsFlow.collectAsState(initial = null)
+    /** Wait for DataStore's first emission so startDestination matches persisted credentials. */
+    var bootstrapCredentials by remember { mutableStateOf<DeviceCredentials?>(null) }
+    var bootstrapDone by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        bootstrapCredentials = credentialsFlow.first()
+        bootstrapDone = true
+    }
+
+    if (!bootstrapDone) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+        }
+        return
+    }
+
     val navController = rememberNavController()
 
-    // Start destination depends on whether we have saved credentials
-    val startRoute = if (credentials != null) Route.Home.path else Route.Pairing.path
+    val startRoute =
+            if (bootstrapCredentials != null) Route.Home.path else Route.Pairing.path
 
     NavHost(
             navController = navController,
