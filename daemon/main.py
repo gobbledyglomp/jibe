@@ -20,7 +20,9 @@ All services run concurrently in a single asyncio event loop.
 import argparse
 import asyncio
 import logging
+import os
 import shutil
+import signal
 import sys
 
 from jibe.core.config import CERTS_DIR, DEFAULT_PORT, LOG_DATE_FORMAT, LOG_FORMAT
@@ -38,6 +40,7 @@ async def run_daemon(
     *,
     use_tls: bool = True,
     port: int = DEFAULT_PORT,
+    start_pairing: bool = False,
 ) -> None:
     """Run the main daemon loop.
 
@@ -47,8 +50,10 @@ async def run_daemon(
     Args:
         use_tls: If True, generate/load a certificate and serve wss://.
         port: The TCP port to listen on.
+        start_pairing: If True, immediately start pairing mode on startup.
     """
-    logger.info("Jibe daemon starting...")
+    logger.info("Jibe daemon starting... (PID %d)", os.getpid())
+    logger.info("  To pair a new device at any time: kill -USR1 %d", os.getpid())
 
     db = JibeDatabase()
     await db.open()
@@ -63,11 +68,23 @@ async def run_daemon(
     server = JibeServer(db=db, port=port, ssl_context=ssl_context)
     discovery = JibeDiscovery(port=port)
 
+    # Install SIGUSR1 handler so pairing mode can be triggered at runtime
+    # without restarting the daemon: kill -USR1 <pid>
+    loop = asyncio.get_running_loop()
+    loop.add_signal_handler(
+        signal.SIGUSR1,
+        lambda: server.auth.start_pairing()
+    )
+
     try:
         await asyncio.gather(
             server.start(),
             discovery.start(),
         )
+
+        if start_pairing:
+            server.auth.start_pairing()
+
         logger.info("Ready. Press Ctrl+C to stop.")
         await asyncio.Event().wait()
 
@@ -92,10 +109,16 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Disable TLS (plaintext WebSocket for development)",
     )
     parser.add_argument(
-        "-p", "--port",
+        "-p",
+        "--port",
         type=int,
         default=DEFAULT_PORT,
         help=f"TCP port to listen on (default: {DEFAULT_PORT})",
+    )
+    parser.add_argument(
+        "--pair",
+        action="store_true",
+        help="Start pairing mode immediately — prints a 6-digit PIN to pair a new Android device",
     )
     parser.add_argument(
         "--regen-certs",
@@ -103,7 +126,8 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Delete existing TLS certificates and regenerate",
     )
     parser.add_argument(
-        "-v", "--verbose",
+        "-v",
+        "--verbose",
         action="store_true",
         help="Enable debug logging",
     )
@@ -160,7 +184,13 @@ def main() -> None:
         _handle_regen_certs()
 
     try:
-        asyncio.run(run_daemon(use_tls=not args.no_tls, port=args.port))
+        asyncio.run(
+            run_daemon(
+                use_tls=not args.no_tls,
+                port=args.port,
+                start_pairing=args.pair,
+            )
+        )
     except KeyboardInterrupt:
         logger.info("Jibe daemon stopped cleanly.")
 

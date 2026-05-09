@@ -13,9 +13,6 @@ import aiosqlite
 import pytest
 from jibe.core.db import JibeDatabase
 
-# ── Schema & Initialisation ─────────────────────────────────────────────
-
-
 async def test_schema_created_on_first_open(db):
     """All tables should exist after opening the database."""
     cursor = await db._conn.execute(
@@ -83,9 +80,6 @@ async def test_database_context_manager(tmp_path):
         assert devices == []
 
     assert db._conn is None
-
-
-# ── Device CRUD ──────────────────────────────────────────────────────────
 
 
 async def test_add_device(db):
@@ -230,9 +224,6 @@ async def test_remove_device_twice(db):
     assert second is False
 
 
-# ── Session tracking ─────────────────────────────────────────────────────
-
-
 async def test_start_session(db):
     """Starting a session should create a record with no end time."""
     await db.add_device("dev-001", "Pixel 8", "fp-001")
@@ -278,9 +269,6 @@ async def test_cascade_delete_removes_sessions(db):
     )
     row = await cursor.fetchone()
     assert row[0] == 0
-
-
-# ── Close safety ─────────────────────────────────────────────────────────
 
 
 async def test_close_is_idempotent(tmp_path):

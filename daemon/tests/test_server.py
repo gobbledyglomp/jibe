@@ -11,9 +11,6 @@ unauthenticated and authenticated paths through the state machine.
 
 from jibe import __version__
 
-# ── Helpers ──────────────────────────────────────────────────────────────
-
-
 async def _authenticate(ws, jibe_server):
     """Pair a device over the WebSocket and return the auth response.
 
@@ -32,9 +29,6 @@ async def _authenticate(ws, jibe_server):
     resp = await ws.receive_json()
     assert resp["accepted"] is True
     return resp
-
-
-# ── HTTP Health Endpoint ─────────────────────────────────────────────────
 
 
 async def test_health_returns_status_and_version(aiohttp_client, jibe_app):
@@ -71,9 +65,6 @@ async def test_health_reports_connected_devices(aiohttp_client, jibe_app, jibe_s
     assert data["connected_devices"] == 1
 
     await ws.close()
-
-
-# ── WebSocket: Auth Gate ─────────────────────────────────────────────────
 
 
 async def test_unauthenticated_non_auth_message_rejected(aiohttp_client, jibe_app):
@@ -139,26 +130,22 @@ async def test_wrong_pin_rejected(aiohttp_client, jibe_app, jibe_server):
 
 
 async def test_auth_without_pairing_mode(aiohttp_client, jibe_app):
-    """auth.request when pairing mode is inactive must be rejected."""
+    """Probe (no PIN) from an unknown device when pairing is inactive auto-starts pairing."""
     client = await aiohttp_client(jibe_app)
     ws = await client.ws_connect("/ws")
 
     await ws.send_json(
         {
             "type": "auth.request",
-            "pin": "123456",
             "device_name": "Phone",
         }
     )
     resp = await ws.receive_json()
 
     assert resp["accepted"] is False
-    assert "not active" in resp["reason"]
+    assert "Pairing started" in resp["reason"]
 
     await ws.close()
-
-
-# ── WebSocket: Authenticated Messages ────────────────────────────────────
 
 
 async def test_authenticated_connection_accepts_messages(
@@ -199,9 +186,6 @@ async def test_multiple_messages_after_auth(aiohttp_client, jibe_app, jibe_serve
 
     await ws.close()
     assert ws.closed
-
-
-# ── WebSocket: Error Handling ────────────────────────────────────────────
 
 
 async def test_unknown_type_returns_error(aiohttp_client, jibe_app):
@@ -247,9 +231,6 @@ async def test_empty_message_returns_error(aiohttp_client, jibe_app):
     await ws.close()
 
 
-# ── WebSocket: Connection Lifecycle ──────────────────────────────────────
-
-
 async def test_clean_disconnect(aiohttp_client, jibe_app):
     """The server should handle clean client disconnection gracefully."""
     client = await aiohttp_client(jibe_app)
@@ -257,9 +238,6 @@ async def test_clean_disconnect(aiohttp_client, jibe_app):
 
     await ws.close()
     assert ws.closed
-
-
-# ── HTTP: Non-existent Routes ────────────────────────────────────────────
 
 
 async def test_unknown_route_returns_404(aiohttp_client, jibe_app):

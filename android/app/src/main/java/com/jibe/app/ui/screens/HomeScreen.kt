@@ -1,0 +1,411 @@
+package com.jibe.app.ui.screens
+
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.jibe.app.data.repository.ConnectionRepository
+import com.jibe.app.data.repository.ConnectionState
+import com.jibe.app.data.repository.PingResult
+import com.jibe.app.ui.components.JibeSpinner
+import com.jibe.app.ui.theme.JibeError
+import com.jibe.app.ui.theme.JibeOnSurface
+import com.jibe.app.ui.theme.JibeOnSurfaceVariant
+import com.jibe.app.ui.theme.JibePrimary
+import com.jibe.app.ui.theme.JibeSuccess
+import com.jibe.app.ui.theme.JibeSurfaceContainer
+import com.jibe.app.ui.theme.JibeSurfaceContainerHigh
+import com.jibe.app.ui.theme.JibeWarning
+import com.jibe.app.ui.theme.RobotoMono
+
+/**
+ * Home dashboard — the main screen after pairing.
+ *
+ * Shows:
+ * - Connection status (live dot + text)
+ * - Daemon info (host, device ID)
+ * - Ping button with round-trip latency display
+ * - "Forget device" destructive action
+ */
+@Composable
+fun HomeScreen(repository: ConnectionRepository, onDeviceForgotten: () -> Unit) {
+        val state by repository.state.collectAsState()
+        var lastLatency by remember { mutableLongStateOf(-1L) }
+        var pingInFlight by remember { mutableStateOf(false) }
+        var showForgetConfirm by remember { mutableStateOf(false) }
+
+        LaunchedEffect(Unit) {
+                repository.pingResults.collect { result: PingResult ->
+                        pingInFlight = false
+                        lastLatency = result.latencyMs
+                }
+        }
+
+        LaunchedEffect(state) {
+                if (state !is ConnectionState.Connected) pingInFlight = false
+        }
+
+        Scaffold(containerColor = MaterialTheme.colorScheme.surface) { innerPadding ->
+                Column(
+                        modifier =
+                                Modifier.fillMaxSize()
+                                        .padding(innerPadding)
+                                        .padding(horizontal = 24.dp)
+                                        .padding(top = 48.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                        Text(
+                                text = "jibe",
+                                style =
+                                        MaterialTheme.typography.headlineLarge.copy(
+                                                fontFamily = RobotoMono,
+                                                fontWeight = FontWeight.Bold,
+                                                letterSpacing = (-1).sp
+                                        ),
+                                color = JibePrimary
+                        )
+
+                        Spacer(modifier = Modifier.height(32.dp))
+
+                        ConnectionStatusCard(state = state)
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        PingCard(
+                                isConnected = state is ConnectionState.Connected,
+                                pingInFlight = pingInFlight,
+                                lastLatency = lastLatency,
+                                onPing = {
+                                        if (!pingInFlight) {
+                                                pingInFlight = true
+                                                repository.sendPing()
+                                        }
+                                }
+                        )
+
+                        Spacer(modifier = Modifier.weight(1f))
+
+                        if (showForgetConfirm) {
+                                ForgetConfirmation(
+                                        onConfirm = {
+                                                repository.forgetDevice()
+                                                onDeviceForgotten()
+                                        },
+                                        onCancel = { showForgetConfirm = false }
+                                )
+                        } else {
+                                TextButton(onClick = { showForgetConfirm = true }) {
+                                        Text(
+                                                text = "Forget device",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = JibeOnSurfaceVariant.copy(alpha = 0.5f)
+                                        )
+                                }
+                        }
+
+                        Spacer(modifier = Modifier.height(32.dp))
+                }
+        }
+}
+
+@Composable
+private fun ConnectionStatusCard(state: ConnectionState) {
+        val statusColor by
+                animateColorAsState(
+                        targetValue =
+                                when (state) {
+                                        is ConnectionState.Connected -> JibeSuccess
+                                        is ConnectionState.Connecting,
+                                        is ConnectionState.Authenticating,
+                                        is ConnectionState.Discovering -> JibeWarning
+                                        is ConnectionState.PairingFailed -> JibeError
+                                        is ConnectionState.Failed -> JibeError
+                                        is ConnectionState.Disconnected ->
+                                                JibeOnSurfaceVariant.copy(alpha = 0.3f)
+                                },
+                        label = "status_color"
+                )
+
+        Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = JibeSurfaceContainer),
+                shape = RoundedCornerShape(12.dp)
+        ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                        modifier =
+                                                Modifier.size(8.dp)
+                                                        .clip(CircleShape)
+                                                        .background(statusColor)
+                                )
+
+                                Spacer(modifier = Modifier.width(10.dp))
+
+                                AnimatedContent(
+                                        targetState = state,
+                                        transitionSpec = { fadeIn() togetherWith fadeOut() },
+                                        label = "status_text"
+                                ) { currentState ->
+                                        Text(
+                                                text =
+                                                        when (currentState) {
+                                                                is ConnectionState.Connected ->
+                                                                        "Connected"
+                                                                is ConnectionState.Connecting ->
+                                                                        "Connecting…"
+                                                                is ConnectionState.Authenticating ->
+                                                                        "Authenticating…"
+                                                                is ConnectionState.Discovering ->
+                                                                        "Discovering…"
+                                                                is ConnectionState.PairingFailed ->
+                                                                        "Pairing failed"
+                                                                is ConnectionState.Failed ->
+                                                                        "Failed"
+                                                                is ConnectionState.Disconnected ->
+                                                                        "Disconnected"
+                                                        },
+                                                style = MaterialTheme.typography.titleMedium,
+                                                color = JibeOnSurface
+                                        )
+                                }
+
+                                if (state is ConnectionState.Connecting ||
+                                                state is ConnectionState.Authenticating ||
+                                                state is ConnectionState.Discovering
+                                ) {
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        JibeSpinner(modifier = Modifier.size(16.dp))
+                                }
+                        }
+
+                        val connectionHost =
+                                when (state) {
+                                        is ConnectionState.Connected -> state.host
+                                        is ConnectionState.Connecting -> state.host
+                                        is ConnectionState.Authenticating -> state.host
+                                        else -> null
+                                }
+
+                        if (connectionHost != null) {
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                                text = "Host",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = JibeOnSurfaceVariant
+                                        )
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Text(
+                                                text = connectionHost,
+                                                style =
+                                                        MaterialTheme.typography.labelSmall.copy(
+                                                                fontFamily = RobotoMono
+                                                        ),
+                                                color = JibeOnSurface
+                                        )
+                                }
+                        }
+
+                        if (state is ConnectionState.PairingFailed) {
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                        text = state.reason,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = JibeError.copy(alpha = 0.85f)
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                        text = state.guidance,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = JibeOnSurfaceVariant
+                                )
+                        }
+
+                        if (state is ConnectionState.Connected) {
+                                Spacer(modifier = Modifier.height(4.dp))
+
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                                text = "Device",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = JibeOnSurfaceVariant
+                                        )
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Text(
+                                                text = state.deviceId,
+                                                style =
+                                                        MaterialTheme.typography.labelSmall.copy(
+                                                                fontFamily = RobotoMono
+                                                        ),
+                                                color = JibeOnSurface,
+                                                maxLines = 1
+                                        )
+                                }
+                        }
+
+                        if (state is ConnectionState.Failed) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                        text = state.reason,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = JibeError.copy(alpha = 0.8f)
+                                )
+                        }
+                }
+        }
+}
+
+@Composable
+private fun PingCard(
+        isConnected: Boolean,
+        pingInFlight: Boolean,
+        lastLatency: Long,
+        onPing: () -> Unit
+) {
+        Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = JibeSurfaceContainer),
+                shape = RoundedCornerShape(12.dp)
+        ) {
+                Row(
+                        modifier = Modifier.padding(20.dp).fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                        Column {
+                                Text(
+                                        text = "Ping",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = JibeOnSurface
+                                )
+
+                                Spacer(modifier = Modifier.height(4.dp))
+
+                                Text(
+                                        text = if (lastLatency >= 0) "${lastLatency}ms" else "—",
+                                        style =
+                                                MaterialTheme.typography.headlineSmall.copy(
+                                                        fontFamily = RobotoMono,
+                                                        fontWeight = FontWeight.Medium
+                                                ),
+                                        color =
+                                                if (lastLatency >= 0) JibePrimary
+                                                else JibeOnSurfaceVariant
+                                )
+                        }
+
+                        OutlinedButton(
+                                onClick = onPing,
+                                enabled = isConnected && !pingInFlight,
+                                shape = RoundedCornerShape(8.dp),
+                                colors =
+                                        ButtonDefaults.outlinedButtonColors(
+                                                contentColor = JibePrimary
+                                        )
+                        ) { Text(text = "Send", style = MaterialTheme.typography.labelLarge) }
+                }
+        }
+}
+
+@Composable
+private fun ForgetConfirmation(onConfirm: () -> Unit, onCancel: () -> Unit) {
+        Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = JibeSurfaceContainerHigh),
+                shape = RoundedCornerShape(18.dp)
+        ) {
+                Column(
+                        modifier = Modifier.padding(20.dp).fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                        Text(
+                                text = "Forget this device?",
+                                style =
+                                        MaterialTheme.typography.titleMedium.copy(
+                                                fontWeight = FontWeight.SemiBold
+                                        ),
+                                color = JibeOnSurface,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Text(
+                                text =
+                                        "This removes the saved certificate and returns Jibe to pairing mode.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = JibeOnSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                        ) {
+                                OutlinedButton(
+                                        onClick = onCancel,
+                                        shape = RoundedCornerShape(8.dp)
+                                ) { Text("Cancel") }
+
+                                Spacer(modifier = Modifier.width(12.dp))
+
+                                Button(
+                                        onClick = onConfirm,
+                                        colors =
+                                                ButtonDefaults.buttonColors(
+                                                        containerColor = JibeError.copy(alpha = 0.14f),
+                                                        contentColor = JibeError
+                                                ),
+                                        shape = RoundedCornerShape(8.dp)
+                                ) { Text("Forget") }
+                        }
+                }
+        }
+}

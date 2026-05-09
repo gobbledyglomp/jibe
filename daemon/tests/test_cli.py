@@ -10,9 +10,6 @@ from unittest.mock import patch
 import pytest
 from main import _build_parser, _handle_regen_certs, main
 
-# ── Argument Parsing ─────────────────────────────────────────────────────
-
-
 class TestBuildParser:
     """Tests for _build_parser()."""
 
@@ -63,20 +60,19 @@ class TestBuildParser:
                 "1234",
                 "--verbose",
                 "--regen-certs",
+                "--pair",
             ]
         )
         assert args.no_tls is True
         assert args.port == 1234
         assert args.verbose is True
         assert args.regen_certs is True
+        assert args.pair is True
 
     def test_unknown_flag_rejected(self):
         """Unknown flags should cause a parse error."""
         with pytest.raises(SystemExit):
             _build_parser().parse_args(["--unknown"])
-
-
-# ── --regen-certs ────────────────────────────────────────────────────────
 
 
 class TestHandleRegenCerts:
@@ -104,9 +100,6 @@ class TestHandleRegenCerts:
                 _handle_regen_certs()
 
         mock_gen.assert_called_once()
-
-
-# ── --verbose ────────────────────────────────────────────────────────────
 
 
 class TestVerboseFlag:
@@ -139,9 +132,6 @@ class TestVerboseFlag:
         assert mock_basic.call_args.kwargs["level"] == logging.INFO
 
 
-# ── --port ───────────────────────────────────────────────────────────────
-
-
 class TestPortFlag:
     """Tests for --port flag forwarding to run_daemon."""
 
@@ -149,7 +139,7 @@ class TestPortFlag:
         """--port value should be passed through to run_daemon()."""
         captured_port = {}
 
-        async def fake_run_daemon(*, use_tls, port):
+        async def fake_run_daemon(*, use_tls, port, start_pairing):
             captured_port["port"] = port
 
         with patch("main.run_daemon", fake_run_daemon):
@@ -159,9 +149,6 @@ class TestPortFlag:
         assert captured_port["port"] == 4242
 
 
-# ── --no-tls ─────────────────────────────────────────────────────────────
-
-
 class TestNoTlsFlag:
     """Tests for --no-tls flag forwarding."""
 
@@ -169,7 +156,7 @@ class TestNoTlsFlag:
         """--no-tls should pass use_tls=False to run_daemon."""
         captured = {}
 
-        async def fake_run_daemon(*, use_tls, port):
+        async def fake_run_daemon(*, use_tls, port, start_pairing):
             captured["use_tls"] = use_tls
 
         with patch("main.run_daemon", fake_run_daemon):
@@ -179,10 +166,10 @@ class TestNoTlsFlag:
         assert captured["use_tls"] is False
 
     def test_default_tls_enabled(self):
-        """Default should pass use_tls=True to run_daemon."""
+        """Default (no --no-tls) should pass use_tls=True to run_daemon."""
         captured = {}
 
-        async def fake_run_daemon(*, use_tls, port):
+        async def fake_run_daemon(*, use_tls, port, start_pairing):
             captured["use_tls"] = use_tls
 
         with patch("main.run_daemon", fake_run_daemon):
@@ -190,3 +177,33 @@ class TestNoTlsFlag:
                 main()
 
         assert captured["use_tls"] is True
+
+
+class TestPairFlag:
+    """Tests for --pair flag forwarding to run_daemon."""
+
+    def test_pair_flag_forwarded(self):
+        """--pair should pass start_pairing=True to run_daemon."""
+        captured = {}
+
+        async def fake_run_daemon(*, use_tls, port, start_pairing):
+            captured["start_pairing"] = start_pairing
+
+        with patch("main.run_daemon", fake_run_daemon):
+            with patch("sys.argv", ["main.py", "--pair", "--no-tls"]):
+                main()
+
+        assert captured["start_pairing"] is True
+
+    def test_pair_flag_default_false(self):
+        """Without --pair, start_pairing should default to False."""
+        captured = {}
+
+        async def fake_run_daemon(*, use_tls, port, start_pairing):
+            captured["start_pairing"] = start_pairing
+
+        with patch("main.run_daemon", fake_run_daemon):
+            with patch("sys.argv", ["main.py", "--no-tls"]):
+                main()
+
+        assert captured["start_pairing"] is False

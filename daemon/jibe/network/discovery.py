@@ -1,20 +1,7 @@
 """mDNS service discovery for the Jibe daemon.
 
-This module broadcasts the daemon's presence on the local network using
-mDNS (multicast DNS) via the zeroconf library. When the daemon starts,
-it registers a service of type `_jibe._tcp.local.` so that Android
-clients can discover it automatically without any manual IP configuration.
-
-This is the same mechanism used by Chromecast, AirPlay, and similar
-zero-configuration protocols. The Android app scans for `_jibe._tcp`
-services and connects to whichever daemon it finds.
-
-Why zeroconf (Python library)?
-  The `zeroconf` library is a pure-Python, cross-platform mDNS/DNS-SD
-  implementation. Unlike `python-avahi` (which requires the Avahi D-Bus
-  daemon and only works on Linux), `zeroconf` works anywhere Python runs
-  and has no system dependencies. This keeps the daemon portable and the
-  dependency tree simple.
+Registers a `_jibe._tcp.local.` service so Android clients can discover the
+daemon without manual IP configuration.
 """
 
 import logging
@@ -30,24 +17,69 @@ logger = logging.getLogger(__name__)
 
 
 def _get_local_ip() -> str:
-    """Get the machine's LAN IP address.
+    """Get the machine's LAN IP address, preferring real WiFi/Ethernet interfaces.
 
-    This uses a common trick: we open a UDP socket "connected" to an
-    external IP (we never actually send anything) and check which local
-    interface the OS would route through. This avoids hardcoding an
-    interface name and works on any network configuration.
+    This version enumerates all available addresses and picks the best one:
+      1. Prefer 192.168.x.x (home/office WiFi — most common case)
+      2. Fall back to 172.16-31.x.x (some corporate LANs)
+      3. Fall back to 10.x.x.x ONLY if it looks like a real LAN (not a VPN
+         tunnel, which typically uses /30 or smaller subnets)
+      4. Last resort: the UDP trick (original behaviour)
 
     Returns:
         The local IPv4 address as a string (e.g. "192.168.1.42").
         Falls back to "127.0.0.1" if detection fails.
     """
+    import ipaddress
+
+    candidates: list[str] = []
+
+    try:
+        hostname = socket.gethostname()
+        infos = socket.getaddrinfo(hostname, None, socket.AF_INET)
+        for info in infos:
+            ip_str = info[4][0]
+            try:
+                addr = ipaddress.IPv4Address(ip_str)
+                if addr.is_private and not addr.is_loopback and not addr.is_link_local:
+                    candidates.append(ip_str)
+            except ValueError:
+                continue
+    except OSError:
+        pass
+
+    # Prefer 192.168.x
+    for ip in candidates:
+        if ip.startswith("192.168."):
+            logger.debug("Using LAN IP (192.168.x): %s", ip)
+            return ip
+
+    # Then 172.16-31.x (corporate LANs)
+    for ip in candidates:
+        if ip.startswith("172."):
+            second_octet = int(ip.split(".")[1])
+            if 16 <= second_octet <= 31:
+                logger.debug("Using LAN IP (172.x): %s", ip)
+                return ip
+
+    # Then 10.x
+    for ip in candidates:
+        if ip.startswith("10."):
+            logger.debug("Using 10.x IP (may be VPN): %s", ip)
+            return ip
+
+    # Last resort
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
             sock.connect(("1.1.1.1", 80))
-            return sock.getsockname()[0]
+            ip = sock.getsockname()[0]
+            logger.debug("Using UDP-trick IP: %s", ip)
+            return ip
     except OSError:
-        logger.warning("Could not detect LAN IP, falling back to 127.0.0.1")
-        return "127.0.0.1"
+        pass
+
+    logger.warning("Could not detect LAN IP, falling back to 127.0.0.1")
+    return "127.0.0.1"
 
 
 class JibeDiscovery:

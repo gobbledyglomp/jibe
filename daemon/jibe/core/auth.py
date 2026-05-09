@@ -1,42 +1,8 @@
-"""Device pairing and trust management for the Jibe daemon.
+"""Device authentication for the Jibe daemon.
 
-This module implements the authentication flow described in
-`docs/protocol.md`:
-
-  1. Daemon enters pairing mode
-  2. Daemon generates a one-time PIN
-  3. Android sends `auth.request` with the PIN + device name
-  4. Daemon verifies the PIN and either accepts or rejects
-    a. On accept: device fingerprint stored for future reconnection
-    b. On reject: client may retry until rate limit is hit
-
-Two authentication paths exist:
-
-  **New device (first-time pairing):**
-    Requires a valid PIN. The daemon must be in pairing mode (PIN active).
-    On success, a unique device fingerprint is generated and persisted.
-
-  **Trusted device (reconnection):**
-    If the `auth.request` includes a `fingerprint` field that matches a
-    known device in the database, the device is accepted immediately
-    without a PIN. This is how devices reconnect after the first pairing.
-
-Security decisions:
-  - `secrets` module for PIN generation — cryptographically secure,
-    unlike `random` which uses a predictable PRNG. PINs are short-lived
-    but security-sensitive (they grant persistent device access).
-  - Device fingerprints are SHA-256 hashes of device name + timestamp +
-    random salt. The salt ensures two devices with the same name get
-    different fingerprints.
-  - PINs are on-demand only: no PIN exists during normal operation,
-    so there is nothing to brute-force when pairing mode is inactive.
-
-Future enhancement (QR code pairing):
-  When the tray icon / web UI exists, a QR code will replace manual PIN
-  entry as the primary pairing method. The QR will encode the cert
-  fingerprint for out-of-band TLS pinning (TOFU). The auth module is
-  designed so this is a drop-in addition — the QR simply delivers the
-  PIN + cert fingerprint through the camera instead of the keyboard.
+Handles two flows:
+1. First-time pairing via a short-lived PIN (pairing mode).
+2. Trusted reconnection via a stored device fingerprint.
 """
 
 import hashlib
@@ -136,18 +102,20 @@ class AuthManager:
         self._pairing_session: PairingSession | None = None
         self._failed_attempts: dict[str, int] = {}
 
-    # ── Pairing mode ─────────────────────────────────────────────────
-
     def start_pairing(self) -> str:
         """Enter pairing mode by generating a new PIN.
 
         Any existing pairing session is replaced. The PIN is logged
         and returned so callers (tray, web UI) can display it.
 
+        Also resets the per-client failure counters so the new session
+        starts with a clean slate of MAX_PIN_ATTEMPTS.
+
         Returns:
             The generated 6-digit PIN string.
         """
         self._pairing_session = PairingSession()
+        self._failed_attempts.clear()
         logger.info(
             "Pairing mode active — PIN: %s (expires in %ds)",
             self._pairing_session.pin,
@@ -174,8 +142,6 @@ class AuthManager:
             return False
         return self._pairing_session.is_valid()
 
-    # ── Auth handling ────────────────────────────────────────────────
-
     async def handle_auth_request(self, payload: dict, client_id: str) -> dict:
         """Process an incoming `auth.request` message.
 
@@ -198,8 +164,6 @@ class AuthManager:
         device_name = payload.get("device_name", "Unknown device")
         fingerprint = payload.get("fingerprint")
         pin = payload.get("pin")
-
-        # ── Path 1: Trusted device reconnection ─────────────────
         if fingerprint:
             device = await self._db.get_device_by_fingerprint(fingerprint)
             if device:
@@ -211,7 +175,6 @@ class AuthManager:
                 )
                 return self._accept_response(device["id"], device["fingerprint"])
 
-        # ── Path 2: New device pairing via PIN ───────────────────
         attempts = self._failed_attempts.get(client_id, 0)
         if attempts >= MAX_PIN_ATTEMPTS:
             logger.warning(
@@ -225,14 +188,18 @@ class AuthManager:
             )
 
         if not self.is_pairing_active:
+            if not fingerprint:
+                self.start_pairing()
+                return self._reject_response(
+                    "Pairing started — check daemon terminal for PIN."
+                )
             self._record_failure(client_id)
             return self._reject_response(
                 "Pairing mode is not active. Start pairing on the daemon first."
             )
 
         if not pin:
-            self._record_failure(client_id)
-            return self._reject_response("No PIN provided")
+            return self._reject_response("Enter the PIN shown on the daemon.")
 
         if pin != self._pairing_session.pin:
             self._record_failure(client_id)
@@ -240,8 +207,6 @@ class AuthManager:
             return self._reject_response(
                 f"Invalid PIN. {remaining} attempt(s) remaining."
             )
-
-        # ── PIN correct → pair the device ────────────────────────
         new_fingerprint = _generate_fingerprint(device_name)
         device_id = secrets.token_hex(16)
 
@@ -257,8 +222,6 @@ class AuthManager:
         self._failed_attempts.pop(client_id, None)
 
         return self._accept_response(device_id, new_fingerprint)
-
-    # ── Response builders ────────────────────────────────────────────
 
     def _accept_response(self, device_id: str, fingerprint: str) -> dict:
         """Build a successful auth.response JSON string.

@@ -13,9 +13,6 @@ from jibe.core.api import AuthError, MessageType
 from jibe.core.auth import PairingSession, _generate_fingerprint, _generate_pin
 from jibe.core.config import MAX_PIN_ATTEMPTS, PIN_EXPIRY_SECONDS, PIN_LENGTH
 
-# ── PIN generation ────────────────────────────────────────────────────────
-
-
 def test_generate_pin_length():
     """PIN must be exactly PIN_LENGTH digits."""
     pin = _generate_pin()
@@ -34,10 +31,6 @@ def test_generate_pin_randomness():
     pins = {_generate_pin() for _ in range(50)}
     assert len(pins) > 1
 
-
-# ── Fingerprint generation ────────────────────────────────────────────────
-
-
 def test_generate_fingerprint_format():
     """Fingerprint must be a 64-character hex string (SHA-256)."""
     fp = _generate_fingerprint("Pixel 8")
@@ -50,10 +43,6 @@ def test_generate_fingerprint_unique():
     fp1 = _generate_fingerprint("Pixel 8")
     fp2 = _generate_fingerprint("Pixel 8")
     assert fp1 != fp2
-
-
-# ── PairingSession lifecycle ──────────────────────────────────────────────
-
 
 def test_pairing_session_is_valid_on_creation():
     """A freshly created session must be valid."""
@@ -79,10 +68,6 @@ def test_pairing_session_invalid_when_expired(monkeypatch):
     )
     assert session.is_expired()
     assert not session.is_valid()
-
-
-# ── AuthManager: pairing mode ─────────────────────────────────────────────
-
 
 async def test_start_pairing_returns_pin(auth):
     """start_pairing() must return a valid 6-digit PIN string."""
@@ -130,9 +115,6 @@ async def test_pairing_mode_expires(auth, monkeypatch):
     )
     assert not auth.is_pairing_active
     assert auth._pairing_session is None
-
-
-# ── AuthManager: new device pairing ──────────────────────────────────────
 
 
 async def test_correct_pin_accepted(auth_pairing):
@@ -184,9 +166,6 @@ async def test_pin_cannot_be_reused(auth_pairing):
     assert response["accepted"] is False
 
 
-# ── AuthManager: rejection scenarios ─────────────────────────────────────
-
-
 async def test_wrong_pin_rejected(auth_pairing):
     """Wrong PIN must return accepted=False."""
     payload = {"device_name": "Pixel 8", "pin": "000000"}
@@ -197,18 +176,31 @@ async def test_wrong_pin_rejected(auth_pairing):
     assert "Invalid PIN" in response["reason"]
 
 
-async def test_missing_pin_rejected(auth_pairing):
-    """Missing pin field must return accepted=False."""
+async def test_missing_pin_not_counted_as_failure(auth_pairing):
+    """A request with no PIN should be rejected but NOT counted as a failed attempt."""
     payload = {"device_name": "Pixel 8"}
 
     response = await auth_pairing.handle_auth_request(payload, "client-1")
 
     assert response["accepted"] is False
+    assert auth_pairing._failed_attempts.get("client-1", 0) == 0
 
 
-async def test_no_pairing_mode_rejected(auth):
-    """auth.request when pairing mode is inactive must be rejected."""
-    payload = {"device_name": "Pixel 8", "pin": "123456"}
+async def test_no_pairing_mode_auto_starts_on_unknown_device(auth):
+    """Probe (no PIN, no fingerprint) when pairing is inactive must auto-start pairing
+    WITHOUT consuming an attempt."""
+    payload = {"device_name": "Pixel 8"}
+    response = await auth.handle_auth_request(payload, "client-1")
+
+    assert response["accepted"] is False
+    assert "Pairing started" in response["reason"]
+    assert auth.is_pairing_active
+    assert auth._failed_attempts.get("client-1", 0) == 0
+
+
+async def test_fingerprint_with_no_pairing_mode_rejected(auth):
+    """auth.request with an unrecognised fingerprint still gets the old 'not active' message."""
+    payload = {"device_name": "Pixel 8", "fingerprint": "a" * 64, "pin": "123456"}
 
     response = await auth.handle_auth_request(payload, "client-1")
 
@@ -225,9 +217,6 @@ async def test_wrong_pin_does_not_store_device(auth_pairing, db):
     assert devices == []
 
 
-# ── AuthManager: rate limiting ────────────────────────────────────────────
-
-
 async def test_rate_limit_triggered_after_max_attempts(auth_pairing):
     """After MAX_PIN_ATTEMPTS failures, the next attempt must raise AuthError."""
     payload = {"device_name": "Attacker", "pin": "000000"}
@@ -237,6 +226,17 @@ async def test_rate_limit_triggered_after_max_attempts(auth_pairing):
 
     with pytest.raises(AuthError):
         await auth_pairing.handle_auth_request(payload, "client-1")
+
+
+async def test_probe_without_pin_still_rate_limited_after_lockout(auth_pairing):
+    """Retry probes must not bypass lockout until pairing is restarted on the daemon."""
+    bad = {"device_name": "Phone", "pin": "000000"}
+    for _ in range(MAX_PIN_ATTEMPTS):
+        await auth_pairing.handle_auth_request(bad, "client-1")
+
+    probe = {"device_name": "Phone"}
+    with pytest.raises(AuthError):
+        await auth_pairing.handle_auth_request(probe, "client-1")
 
 
 async def test_rate_limit_is_per_client(auth_pairing):
@@ -265,9 +265,6 @@ async def test_successful_auth_clears_failed_attempts(auth_pairing):
         {"device_name": "Phone", "pin": pin}, "client-1"
     )
     assert "client-1" not in auth_pairing._failed_attempts
-
-
-# ── AuthManager: trusted device reconnection ──────────────────────────────
 
 
 async def test_trusted_device_reconnects_without_pin(auth_pairing, db):
