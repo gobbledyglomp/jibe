@@ -39,7 +39,7 @@ sealed class WebSocketEvent {
  *
  * @param client The OkHttpClient instance (with custom TLS trust manager).
  */
-class JibeWebSocketClient(private val client: OkHttpClient) {
+class JibeWebSocketClient(private val client: OkHttpClient) : JibeWebSocketHandle {
 
     companion object {
         private const val TAG = "JibeWebSocket"
@@ -55,7 +55,7 @@ class JibeWebSocketClient(private val client: OkHttpClient) {
                     extraBufferCapacity = 64,
                     onBufferOverflow = BufferOverflow.DROP_OLDEST
             )
-    val events: SharedFlow<WebSocketEvent> = _events.asSharedFlow()
+    override val events: SharedFlow<WebSocketEvent> = _events.asSharedFlow()
 
     /**
      * Open a WebSocket connection to the daemon.
@@ -66,7 +66,7 @@ class JibeWebSocketClient(private val client: OkHttpClient) {
      * @param host The daemon's IP address (from mDNS discovery).
      * @param port The daemon's port (from mDNS discovery, default 8765).
      */
-    fun connect(host: String, port: Int) {
+    override fun connect(host: String, port: Int) {
         disconnect()
 
         val url = "wss://$host:$port$WS_PATH"
@@ -99,8 +99,9 @@ class JibeWebSocketClient(private val client: OkHttpClient) {
                                     reason: String
                             ) {
                                 Log.i(TAG, "WebSocket closing: $code $reason")
+                                // Acknowledge close; emit [WebSocketEvent.Disconnected] only from
+                                // onClosed so we do not double-invoke repository reconnect logic.
                                 webSocket.close(NORMAL_CLOSURE, null)
-                                _events.tryEmit(WebSocketEvent.Disconnected(code, reason))
                             }
 
                             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
@@ -126,7 +127,7 @@ class JibeWebSocketClient(private val client: OkHttpClient) {
      * @param json The serialized JSON message (use MessageParser.toJson()).
      * @return true if the message was enqueued, false if the socket is closed.
      */
-    fun send(json: String): Boolean {
+    override fun send(json: String): Boolean {
         val ws =
                 webSocket
                         ?: run {
@@ -137,7 +138,7 @@ class JibeWebSocketClient(private val client: OkHttpClient) {
     }
 
     /** Close the WebSocket connection cleanly. */
-    fun disconnect() {
+    override fun disconnect() {
         webSocket?.close(NORMAL_CLOSURE, "Client disconnecting")
         webSocket = null
     }

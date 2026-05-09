@@ -45,13 +45,17 @@ class MainActivity : ComponentActivity() {
 
     private var service: JibeService? by mutableStateOf(null)
 
+    private var serviceBound: Boolean = false
+
     private val serviceConnection =
             object : ServiceConnection {
                 override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
+                    serviceBound = true
                     service = (binder as JibeService.JibeBinder).service
                 }
 
                 override fun onServiceDisconnected(name: ComponentName?) {
+                    serviceBound = false
                     service = null
                 }
             }
@@ -110,8 +114,11 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        if (serviceBound) {
+            unbindService(serviceConnection)
+            serviceBound = false
+        }
         super.onDestroy()
-        unbindService(serviceConnection)
     }
 
     private fun requestNotificationPermissionIfNeeded() {

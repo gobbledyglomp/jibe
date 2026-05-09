@@ -8,16 +8,18 @@ import com.jibe.app.data.model.AuthResponse
 import com.jibe.app.data.model.ErrorMessage
 import com.jibe.app.data.model.MessageType
 import com.jibe.app.data.model.PingMessage
+import com.jibe.app.network.DaemonTlsSocketFactory
 import com.jibe.app.network.DiscoveryState
 import com.jibe.app.network.JibeDiscovery
 import com.jibe.app.network.JibeTrustManager
-import com.jibe.app.network.JibeWebSocketClient
+import com.jibe.app.network.JibeWebSocketHandle
 import com.jibe.app.network.MessageParser
-import com.jibe.app.network.OkHttpFactory
 import com.jibe.app.network.WebSocketEvent
 import kotlin.math.min
 import kotlin.math.pow
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -80,7 +82,10 @@ data class PingResult(val latencyMs: Long)
 class ConnectionRepository(
         private val dataStore: JibeDataStore,
         private val discovery: JibeDiscovery,
-        private val scope: CoroutineScope
+        private val scope: CoroutineScope,
+        private val deviceNameProvider: DeviceNameProvider,
+        private val socketFactory: DaemonTlsSocketFactory,
+        private val connectionDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
     companion object {
         private const val TAG = "ConnectionRepo"
@@ -89,6 +94,7 @@ class ConnectionRepository(
         private const val MAX_FAST_RECONNECTS = 5
         private const val RECONNECT_BASE_DELAY_MS = 1_500L
         private const val RECONNECT_MAX_DELAY_MS = 60_000L
+        private const val PING_TIMEOUT_MS = 5_000L
     }
 
     private val _state = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
@@ -97,11 +103,12 @@ class ConnectionRepository(
     private val _pingResults = MutableSharedFlow<PingResult>()
     val pingResults: SharedFlow<PingResult> = _pingResults.asSharedFlow()
 
-    private var wsClient: JibeWebSocketClient? = null
+    private var wsClient: JibeWebSocketHandle? = null
     private var trustManager: JibeTrustManager? = null
     private var eventCollectorJob: Job? = null
     private var reconnectJob: Job? = null
     private var discoveryJob: Job? = null
+    private var pingTimeoutJob: Job? = null
     private var pingSentAt: Long = 0
     private var fastReconnectAttempts = 0
     private var pairingRetryCount = 0
@@ -185,9 +192,20 @@ class ConnectionRepository(
      */
     fun sendPing() {
         val client = wsClient ?: return
+        pingTimeoutJob?.cancel()
         pingSentAt = System.currentTimeMillis()
         client.send(MessageParser.toJson(PingMessage()))
         Log.d(TAG, "Ping sent")
+
+        pingTimeoutJob =
+                scope.launch {
+                    delay(PING_TIMEOUT_MS)
+                    if (_state.value is ConnectionState.Connected && pingSentAt != 0L) {
+                        Log.w(TAG, "Ping timed out after ${PING_TIMEOUT_MS}ms; treating as loss")
+                        pingSentAt = 0
+                        handleDisconnection()
+                    }
+                }
     }
 
     /**
@@ -209,6 +227,8 @@ class ConnectionRepository(
         reconnectJob = null
         discoveryJob?.cancel()
         discoveryJob = null
+        pingTimeoutJob?.cancel()
+        pingTimeoutJob = null
         eventCollectorJob?.cancel()
         eventCollectorJob = null
         wsClient?.disconnect()
@@ -234,20 +254,24 @@ class ConnectionRepository(
         _state.value = ConnectionState.Connecting(host, port)
         currentHost = host
         currentPort = port
-
-        val (client, tm) = OkHttpFactory.create(certFingerprint)
-        trustManager = tm
-
-        val ws = JibeWebSocketClient(client)
-        wsClient = ws
+        pingTimeoutJob?.cancel()
+        pingTimeoutJob = null
 
         eventCollectorJob?.cancel()
+        eventCollectorJob = null
+
+        wsClient?.disconnect()
+        val (ws, tm) = socketFactory.create(certFingerprint)
+        trustManager = tm
+
+        wsClient = ws
+
         eventCollectorJob =
                 scope.launch {
                     ws.events.collect { event -> handleWebSocketEvent(event, certFingerprint) }
                 }
 
-        ws.connect(host, port)
+        scope.launch(connectionDispatcher) { ws.connect(host, port) }
     }
 
     /** Handle events from the WebSocket — the core state machine transitions. */
@@ -260,16 +284,17 @@ class ConnectionRepository(
                 pairingRetryCount = 0
 
                 val credentials = dataStore.credentials.first()
+                val deviceLabel = deviceNameProvider.deviceDisplayName()
                 if (credentials != null) {
                     val authRequest =
                             AuthRequest(
-                                    deviceName = android.os.Build.MODEL,
+                                    deviceName = deviceLabel,
                                     fingerprint = credentials.fingerprint
                             )
                     wsClient?.send(MessageParser.toJson(authRequest))
                     Log.d(TAG, "Sent auto-reconnect auth.request with fingerprint")
                 } else {
-                    val probe = AuthRequest(deviceName = android.os.Build.MODEL)
+                    val probe = AuthRequest(deviceName = deviceLabel)
                     wsClient?.send(MessageParser.toJson(probe))
                     Log.d(TAG, "Sent pairing probe to trigger daemon PIN generation")
                 }
@@ -297,6 +322,9 @@ class ConnectionRepository(
             }
             MessageType.PONG -> {
                 val latency = System.currentTimeMillis() - pingSentAt
+                pingTimeoutJob?.cancel()
+                pingTimeoutJob = null
+                pingSentAt = 0
                 Log.d(TAG, "Pong received, latency: ${latency}ms")
                 _pingResults.emit(PingResult(latency))
             }
