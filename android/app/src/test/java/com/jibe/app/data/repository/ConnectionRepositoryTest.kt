@@ -327,6 +327,82 @@ class ConnectionRepositoryTest {
                 }
 
         @Test
+        fun `fifth rejected auth response during pairing emits PairingFailed`() =
+                testScope.runTest {
+                        repository.startDiscovery()
+                        discoveryStateFlow.value =
+                                DiscoveryState.Found(DiscoveredDaemon("Jibe", "10.0.0.5", 8765))
+                        advanceUntilIdle()
+                        recordingSocket.emit(WebSocketEvent.Connected)
+                        advanceUntilIdle()
+
+                        assertEquals(
+                                ConnectionState.Authenticating("10.0.0.5"),
+                                repository.state.value
+                        )
+
+                        repeat(4) { attempt ->
+                                repository.pairWithPin(pin = "111111", deviceName = "TestPhone")
+                                val reason = "Invalid PIN (${attempt + 1})"
+                                val authMsg =
+                                        AuthResponse(
+                                                type = MessageType.AUTH_RESPONSE.value,
+                                                accepted = false,
+                                                reason = reason
+                                        )
+                                recordingSocket.emit(
+                                        WebSocketEvent.MessageReceived(
+                                                JibeMessage(
+                                                        type = MessageType.AUTH_RESPONSE,
+                                                        payload =
+                                                                MessageParser.gson.toJsonTree(authMsg)
+                                                                        .asJsonObject
+                                                )
+                                        )
+                                )
+                                advanceUntilIdle()
+                                assertEquals(
+                                        ConnectionState.Authenticating(
+                                                "10.0.0.5",
+                                                hint = reason
+                                        ),
+                                        repository.state.value
+                                )
+                        }
+
+                        repository.pairWithPin(pin = "222222", deviceName = "TestPhone")
+                        recordingSocket.emit(
+                                WebSocketEvent.MessageReceived(
+                                        JibeMessage(
+                                                type = MessageType.AUTH_RESPONSE,
+                                                payload =
+                                                        MessageParser.gson.toJsonTree(
+                                                                        AuthResponse(
+                                                                                type =
+                                                                                        MessageType
+                                                                                                .AUTH_RESPONSE
+                                                                                                .value,
+                                                                                accepted = false,
+                                                                                reason =
+                                                                                        "Invalid PIN (5)"
+                                                                        )
+                                                                )
+                                                                .asJsonObject
+                                        )
+                                )
+                        )
+                        advanceUntilIdle()
+                        assertEquals(
+                                ConnectionState.PairingFailed(
+                                        reason = "Invalid PIN (5)",
+                                        guidance =
+                                                "Restart the daemon to generate a fresh PIN, then tap Retry."
+                                ),
+                                repository.state.value
+                        )
+                }
+
+        @Test
         fun `receiving error message auth_rejected after pin entry emits PairingFailed state`() =
                 testScope.runTest {
                         repository.startDiscovery()

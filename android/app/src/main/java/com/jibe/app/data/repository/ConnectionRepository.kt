@@ -100,6 +100,8 @@ class ConnectionRepository(
         private const val PING_TIMEOUT_MS = 5_000L
         private const val PAIRING_FAILURE_GUIDANCE =
                 "Restart the daemon to generate a fresh PIN, then tap Retry."
+        private const val MAX_PAIRING_PIN_FAILURES = 5
+        private const val PAIRING_RETRY_SETTLE_MS = 120L
     }
 
     private val _state = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
@@ -118,6 +120,7 @@ class ConnectionRepository(
     private var fastReconnectAttempts = 0
     private var pairingRetryCount = 0
     private var pairingPinSubmitted = false
+    private var pairingWrongPinAttempts = 0
 
     private var currentHost: String? = null
     private var currentPort: Int? = null
@@ -151,6 +154,8 @@ class ConnectionRepository(
     /** Begin NSD discovery — used both for first-time pairing and phase-2 reconnection. */
     fun startDiscovery() {
         discoveryJob?.cancel()
+        discoveryJob = null
+        discovery.stopDiscovery()
         _state.value = ConnectionState.Discovering
         discovery.startDiscovery()
 
@@ -176,6 +181,37 @@ class ConnectionRepository(
                         }
                     }
                 }
+    }
+
+    /**
+     * Full pairing retry after lockout or user-initiated Retry: tear down socket and discovery
+     * jobs, reset PIN-attempt state, then scan again. Avoids overlapping [startDiscovery] with
+     * stale reconnect work (which caused Discovering ↔ PIN flicker).
+     */
+    fun retryPairing() {
+        scope.launch {
+            reconnectJob?.cancel()
+            reconnectJob = null
+            discoveryJob?.cancel()
+            discoveryJob = null
+            pingTimeoutJob?.cancel()
+            pingTimeoutJob = null
+            eventCollectorJob?.cancel()
+            eventCollectorJob = null
+
+            wsClient?.disconnect()
+            wsClient = null
+            trustManager = null
+
+            pairingPinSubmitted = false
+            pairingWrongPinAttempts = 0
+            pairingRetryCount = 0
+            fastReconnectAttempts = 0
+
+            discovery.stopDiscovery()
+            delay(PAIRING_RETRY_SETTLE_MS)
+            startDiscovery()
+        }
     }
 
     /**
@@ -239,6 +275,7 @@ class ConnectionRepository(
         eventCollectorJob?.cancel()
         eventCollectorJob = null
         pairingPinSubmitted = false
+        pairingWrongPinAttempts = 0
         wsClient?.disconnect()
         wsClient = null
         trustManager = null
@@ -265,6 +302,9 @@ class ConnectionRepository(
         pingTimeoutJob?.cancel()
         pingTimeoutJob = null
         pairingPinSubmitted = false
+        if (certFingerprint == null) {
+            pairingWrongPinAttempts = 0
+        }
 
         eventCollectorJob?.cancel()
         eventCollectorJob = null
@@ -344,6 +384,7 @@ class ConnectionRepository(
                     val credentials = dataStore.credentials.first()
                     if (credentials == null && pairingPinSubmitted) {
                         pairingPinSubmitted = false
+                        pairingWrongPinAttempts = 0
                         _state.value =
                                 ConnectionState.PairingFailed(
                                         reason = error.message,
@@ -387,6 +428,7 @@ class ConnectionRepository(
 
             fastReconnectAttempts = 0
             pairingPinSubmitted = false
+            pairingWrongPinAttempts = 0
             _state.value = ConnectionState.Connected(host, port, deviceId)
             Log.i(TAG, "Authenticated as device $deviceId")
         } else {
@@ -395,12 +437,22 @@ class ConnectionRepository(
                 val host = currentHost ?: "unknown"
                 if (pairingPinSubmitted) {
                     pairingPinSubmitted = false
-                    Log.w(TAG, "Pairing rejected after PIN entry: ${response.reason}")
-                    _state.value =
-                            ConnectionState.PairingFailed(
-                                    reason = response.reason,
-                                    guidance = PAIRING_FAILURE_GUIDANCE
-                            )
+                    pairingWrongPinAttempts++
+                    val attemptNo = pairingWrongPinAttempts
+                    Log.w(
+                            TAG,
+                            "Pairing rejected after PIN entry ($attemptNo/$MAX_PAIRING_PIN_FAILURES): ${response.reason}"
+                    )
+                    if (pairingWrongPinAttempts >= MAX_PAIRING_PIN_FAILURES) {
+                        pairingWrongPinAttempts = 0
+                        _state.value =
+                                ConnectionState.PairingFailed(
+                                        reason = response.reason,
+                                        guidance = PAIRING_FAILURE_GUIDANCE
+                                )
+                    } else {
+                        _state.value = ConnectionState.Authenticating(host, hint = response.reason)
+                    }
                 } else {
                     Log.d(
                             TAG,

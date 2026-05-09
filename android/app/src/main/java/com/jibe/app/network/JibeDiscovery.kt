@@ -52,6 +52,9 @@ class JibeDiscovery(context: Context) {
 
     private var isDiscovering = false
 
+    /** Bumped on every [stopDiscovery] so late [onServiceResolved] callbacks cannot emit stale Found. */
+    private var resolveEpoch = 0
+
     // ── NSD callbacks ───────────────────────────────────────────────
 
     private val discoveryListener =
@@ -118,7 +121,11 @@ class JibeDiscovery(context: Context) {
      * the NSD listener.
      */
     fun stopDiscovery() {
-        if (!isDiscovering) return
+        resolveEpoch++
+        if (!isDiscovering) {
+            _state.value = DiscoveryState.Idle
+            return
+        }
 
         try {
             nsdManager.stopServiceDiscovery(discoveryListener)
@@ -138,11 +145,13 @@ class JibeDiscovery(context: Context) {
      * DiscoveredDaemon containing the resolved host and port.
      */
     private fun resolveService(serviceInfo: NsdServiceInfo) {
+        val epochAtResolve = resolveEpoch
         nsdManager.resolveService(
                 serviceInfo,
                 object : NsdManager.ResolveListener {
 
                     override fun onResolveFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {
+                        if (epochAtResolve != resolveEpoch) return
                         Log.e(
                                 TAG,
                                 "Resolve failed for ${serviceInfo.serviceName}: error $errorCode"
@@ -150,6 +159,14 @@ class JibeDiscovery(context: Context) {
                     }
 
                     override fun onServiceResolved(serviceInfo: NsdServiceInfo) {
+                        if (epochAtResolve != resolveEpoch) {
+                            Log.d(
+                                    TAG,
+                                    "Ignoring stale resolve for ${serviceInfo.serviceName} " +
+                                            "(epoch $epochAtResolve vs $resolveEpoch)"
+                            )
+                            return
+                        }
                         val host = serviceInfo.host?.hostAddress ?: return
                         val port = serviceInfo.port
 

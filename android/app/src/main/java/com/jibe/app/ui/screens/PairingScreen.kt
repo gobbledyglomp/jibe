@@ -90,10 +90,25 @@ fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
         var pinValue by remember { mutableStateOf(TextFieldValue("")) }
         val focusRequester = remember { FocusRequester() }
         val keyboardController = LocalSoftwareKeyboardController.current
+        var previousConnectionState by remember { mutableStateOf<ConnectionState?>(null) }
 
         LaunchedEffect(state) {
-                if (state is ConnectionState.Authenticating) {
-                        pinValue = TextFieldValue("")
+                when (val current = state) {
+                        is ConnectionState.Authenticating -> {
+                                val prev = previousConnectionState
+                                val enteredPinScreen =
+                                        prev !is ConnectionState.Authenticating ||
+                                                prev.host != current.host
+                                if (enteredPinScreen) {
+                                        pinValue = TextFieldValue("")
+                                        focusRequester.requestFocus()
+                                        keyboardController?.show()
+                                }
+                                previousConnectionState = current
+                        }
+                        else -> {
+                                previousConnectionState = current
+                        }
                 }
         }
 
@@ -191,10 +206,6 @@ fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
                                                                 keyboardController =
                                                                         keyboardController
                                                         )
-                                                        LaunchedEffect(currentState) {
-                                                                focusRequester.requestFocus()
-                                                                keyboardController?.show()
-                                                        }
                                                 }
                                                 is ConnectionState.Connected -> {
                                                         Text(
@@ -211,7 +222,7 @@ fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
                                                                 onRetry = {
                                                                         pinValue =
                                                                                 TextFieldValue("")
-                                                                        repository.startDiscovery()
+                                                                        repository.retryPairing()
                                                                 }
                                                         )
                                                 }
@@ -222,7 +233,7 @@ fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
                                                                 onRetry = {
                                                                         pinValue =
                                                                                 TextFieldValue("")
-                                                                        repository.startDiscovery()
+                                                                        repository.retryPairing()
                                                                 }
                                                         )
                                                 }
