@@ -5,15 +5,20 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Binder
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.util.Log
 import com.jibe.app.MainActivity
 import com.jibe.app.R
 import com.jibe.app.data.local.JibeDataStore
+import com.jibe.app.data.repository.ClipboardWriter
 import com.jibe.app.data.repository.ConnectionRepository
 import com.jibe.app.data.repository.ConnectionState
 import com.jibe.app.data.repository.DEFAULT_DEVICE_DISPLAY_NAME
@@ -79,7 +84,16 @@ class JibeService : Service() {
                                             ?: DEFAULT_DEVICE_DISPLAY_NAME
                                 },
                         socketFactory = OkHttpDaemonTlsSocketFactory(),
+                        clipboardWriter =
+                                ClipboardWriter { text ->
+                                    Handler(Looper.getMainLooper()).post {
+                                        val cm =
+                                                getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+                                        cm.setPrimaryClip(ClipData.newPlainText("jibe", text))
+                                    }
+                                },
                 )
+        JibeRepositoryHolder.connectionRepository = repository
         serviceScope.launch { repository.state.collect { state -> updateNotification(state) } }
     }
 
@@ -115,6 +129,7 @@ class JibeService : Service() {
     override fun onDestroy() {
         Log.i(TAG, "Service destroyed")
         repository.disconnect()
+        JibeRepositoryHolder.connectionRepository = null
         serviceScope.cancel()
         super.onDestroy()
     }
