@@ -439,7 +439,7 @@ private fun FailedIndicator(reason: String, onRetry: () -> Unit) {
                 Text(
                         text = "Pairing failed",
                         style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.error
+                        color = JibeError
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
