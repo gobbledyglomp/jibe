@@ -44,6 +44,11 @@
     "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
     "checksum": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   },
+  "file.ack": {
+    "type": "file.ack",
+    "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+    "ok": true
+  },
   "error": {
     "type": "error",
     "code": "malformed_json",

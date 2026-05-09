@@ -13,6 +13,7 @@ enum class MessageType(val value: String) {
         @SerializedName("file.start")      FILE_START("file.start"),
         @SerializedName("file.chunk")      FILE_CHUNK("file.chunk"),
         @SerializedName("file.done")       FILE_DONE("file.done"),
+        @SerializedName("file.ack")        FILE_ACK("file.ack"),
         @SerializedName("error")           ERROR("error");
 
         companion object {
@@ -45,4 +46,45 @@ data class ErrorMessage(
         @SerializedName("type") val type: String,
         @SerializedName("code") val code: String,
         @SerializedName("message") val message: String
+)
+
+data class ClipboardSyncMessage(
+        @SerializedName("type") val type: String = MessageType.CLIPBOARD_SYNC.value,
+        @SerializedName("content") val content: String
+)
+
+data class NotificationMessage(
+        @SerializedName("type") val type: String = MessageType.NOTIFICATION.value,
+        @SerializedName("app") val app: String,
+        @SerializedName("title") val title: String,
+        @SerializedName("body") val body: String,
+        @SerializedName("timestamp") val timestamp: Long
+)
+
+data class FileStartMessage(
+        @SerializedName("type") val type: String = MessageType.FILE_START.value,
+        @SerializedName("id") val id: String,
+        @SerializedName("filename") val filename: String,
+        @SerializedName("size") val size: Long,
+        @SerializedName("total_chunks") val totalChunks: Int
+)
+
+data class FileChunkMessage(
+        @SerializedName("type") val type: String = MessageType.FILE_CHUNK.value,
+        @SerializedName("id") val id: String,
+        @SerializedName("index") val index: Int,
+        @SerializedName("data") val data: String
+)
+
+data class FileDoneMessage(
+        @SerializedName("type") val type: String = MessageType.FILE_DONE.value,
+        @SerializedName("id") val id: String,
+        @SerializedName("checksum") val checksum: String
+)
+
+data class FileAckMessage(
+        @SerializedName("type") val type: String,
+        @SerializedName("id") val id: String,
+        @SerializedName("ok") val ok: Boolean,
+        @SerializedName("reason") val reason: String? = null
 )

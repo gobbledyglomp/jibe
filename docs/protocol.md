@@ -1,6 +1,6 @@
 # Jibe WebSocket Protocol Specification
 
-> Version: 0.2.0-beta · Status: Draft
+> Version: 0.3.0-beta · Status: Draft
 
 ## Design Philosophy
 
@@ -289,6 +289,39 @@ No additional fields.
 | `type`     | `string` | Always `"file.done"`                                         |
 | `id`       | `string` | Transfer ID matching the `file.start` message                |
 | `checksum` | `string` | SHA-256 hash of the complete file for integrity verification |
+
+---
+
+### `file.ack`
+
+| Field         | Value                                                                      |
+| ------------- | -------------------------------------------------------------------------- |
+| **Direction** | Linux → Android                                                            |
+| **Purpose**   | Acknowledge a completed file transfer (success or failure after `file.done`) |
+
+```json
+{
+  "type": "file.ack",
+  "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "ok": true
+}
+```
+
+```json
+{
+  "type": "file.ack",
+  "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "ok": false,
+  "reason": "Checksum mismatch"
+}
+```
+
+| Field    | Type      | Description                                                        |
+| -------- | --------- | ------------------------------------------------------------------ |
+| `type`   | `string`  | Always `"file.ack"`                                                |
+| `id`     | `string`  | Transfer ID matching the `file.start` / `file.done` messages       |
+| `ok`     | `boolean` | `true` if the file was verified and saved under `~/Downloads`       |
+| `reason` | `string`  | Present when `ok` is `false` — human-readable failure explanation |
 
 ---
 
