@@ -34,6 +34,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -83,6 +84,7 @@ import com.jibe.app.ui.theme.RobotoMono
 @Composable
 fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
         val state by repository.state.collectAsState()
+        val pairSubmitInFlight by repository.pairSubmitInFlight.collectAsState()
         var pinValue by remember { mutableStateOf(TextFieldValue("")) }
         val focusRequester = remember { FocusRequester() }
         val keyboardController = LocalSoftwareKeyboardController.current
@@ -166,6 +168,7 @@ fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
                                                         PinInput(
                                                                 value = pinValue,
                                                                 hint = currentState.hint,
+                                                                submitInFlight = pairSubmitInFlight,
                                                                 onValueChange = { newValue ->
                                                                         if (newValue.text.length <=
                                                                                         6 &&
@@ -288,6 +291,7 @@ private fun ConnectingIndicator(host: String) {
 private fun PinInput(
         value: TextFieldValue,
         hint: String?,
+        submitInFlight: Boolean,
         onValueChange: (TextFieldValue) -> Unit,
         onSubmit: () -> Unit,
         focusRequester: FocusRequester,
@@ -423,7 +427,7 @@ private fun PinInput(
 
                 Button(
                         onClick = onSubmit,
-                        enabled = value.text.length == 6,
+                        enabled = value.text.length == 6 && !submitInFlight,
                         colors =
                                 ButtonDefaults.buttonColors(
                                         containerColor = JibePrimary,
@@ -435,11 +439,19 @@ private fun PinInput(
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
                 ) {
-                        Text(
-                                text = "Pair",
-                                style = MaterialTheme.typography.labelLarge,
-                                modifier = Modifier.padding(vertical = 4.dp)
-                        )
+                        if (submitInFlight) {
+                                CircularProgressIndicator(
+                                        modifier = Modifier.size(22.dp),
+                                        color = MaterialTheme.colorScheme.surface,
+                                        strokeWidth = 2.dp
+                                )
+                        } else {
+                                Text(
+                                        text = "Pair",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        modifier = Modifier.padding(vertical = 4.dp)
+                                )
+                        }
                 }
         }
 }

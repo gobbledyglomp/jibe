@@ -105,6 +105,10 @@ class ConnectionRepository(
     private val _pingResults = MutableSharedFlow<PingResult>()
     val pingResults: SharedFlow<PingResult> = _pingResults.asSharedFlow()
 
+    private val _pairSubmitInFlight = MutableStateFlow(false)
+    /** True after `pairWithPin` until auth outcome or disconnect — drives pairing UI progress. */
+    val pairSubmitInFlight: StateFlow<Boolean> = _pairSubmitInFlight.asStateFlow()
+
     private var wsClient: JibeWebSocketHandle? = null
     private var trustManager: JibeTrustManager? = null
     private var eventCollectorJob: Job? = null
@@ -194,6 +198,7 @@ class ConnectionRepository(
      */
     fun retryPairing(afterPairingLockout: Boolean = false) {
         scope.launch {
+            _pairSubmitInFlight.value = false
             if (afterPairingLockout) {
                 expectPairingFailureOnEarlyDisconnect = true
             }
@@ -230,6 +235,7 @@ class ConnectionRepository(
     fun pairWithPin(pin: String, deviceName: String) {
         val client = wsClient ?: return
         pairingPinSubmitted = true
+        _pairSubmitInFlight.value = true
         val authRequest = AuthRequest(deviceName = deviceName, pin = pin)
         client.send(MessageParser.toJson(authRequest))
         Log.d(TAG, "Sent auth.request with PIN")
@@ -285,6 +291,7 @@ class ConnectionRepository(
         pairingWrongPinAttempts = 0
         expectPairingFailureOnEarlyDisconnect = false
         skipNextDisconnectedHandling = false
+        _pairSubmitInFlight.value = false
         wsClient?.disconnect()
         wsClient = null
         trustManager = null
@@ -303,6 +310,7 @@ class ConnectionRepository(
      * pairing (TOFU mode).
      */
     private fun connectToDaemon(host: String, port: Int, certFingerprint: String?) {
+        _pairSubmitInFlight.value = false
         _state.value = ConnectionState.Connecting(host, port)
         currentHost = host
         currentPort = port
@@ -335,11 +343,18 @@ class ConnectionRepository(
         when (event) {
             is WebSocketEvent.Connected -> {
                 val host = currentHost ?: "unknown"
-                _state.value = ConnectionState.Authenticating(host)
+                _pairSubmitInFlight.value = false
 
                 pairingRetryCount = 0
 
                 val credentials = dataStore.credentials.first()
+                val silentHandshakeUi =
+                        credentials == null && expectPairingFailureOnEarlyDisconnect
+
+                if (!silentHandshakeUi) {
+                    _state.value = ConnectionState.Authenticating(host)
+                }
+
                 val deviceLabel = deviceNameProvider.deviceDisplayName()
                 if (credentials != null) {
                     val authRequest =
@@ -394,11 +409,15 @@ class ConnectionRepository(
                         pairingWrongPinAttempts = 0
                         transitionToPairingFailed(reason = error.message)
                     } else if (credentials == null) {
-                        _state.value =
-                                ConnectionState.Authenticating(
-                                        currentHost ?: "unknown",
-                                        hint = error.message
-                                )
+                        if (expectPairingFailureOnEarlyDisconnect) {
+                            transitionToPairingFailed(reason = error.message)
+                        } else {
+                            _state.value =
+                                    ConnectionState.Authenticating(
+                                            currentHost ?: "unknown",
+                                            hint = error.message
+                                    )
+                        }
                     } else {
                         _state.value = ConnectionState.Failed(error.message)
                     }
@@ -412,6 +431,8 @@ class ConnectionRepository(
 
     /** Process auth.response — the outcome of pairing or reconnection. */
     private suspend fun handleAuthResponse(response: AuthResponse) {
+        _pairSubmitInFlight.value = false
+
         if (response.accepted) {
             val host = currentHost ?: "unknown"
             val port = currentPort ?: 0
@@ -473,6 +494,7 @@ class ConnectionRepository(
             reason: String,
             guidance: String = PAIRING_FAILURE_GUIDANCE
     ) {
+        _pairSubmitInFlight.value = false
         lastPairingFailureReason = reason
         lastPairingFailureGuidance = guidance
         expectPairingFailureOnEarlyDisconnect = false
@@ -485,6 +507,8 @@ class ConnectionRepository(
             skipNextDisconnectedHandling = false
             return
         }
+
+        _pairSubmitInFlight.value = false
 
         val stateAtDisconnect = _state.value
 

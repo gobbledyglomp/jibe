@@ -702,7 +702,7 @@ class ConnectionRepositoryTest {
                         recordingSocket.emit(WebSocketEvent.Connected)
                         advanceUntilIdle()
                         assertEquals(
-                                ConnectionState.Authenticating("10.0.0.5"),
+                                ConnectionState.Connecting("10.0.0.5", 8765),
                                 repository.state.value
                         )
 
