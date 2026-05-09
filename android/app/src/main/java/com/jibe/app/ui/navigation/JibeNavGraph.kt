@@ -8,6 +8,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -19,6 +20,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.jibe.app.data.local.DeviceCredentials
 import com.jibe.app.data.repository.ConnectionRepository
+import com.jibe.app.data.repository.ConnectionState
 import com.jibe.app.ui.screens.HomeScreen
 import com.jibe.app.ui.screens.PairingScreen
 import kotlinx.coroutines.flow.Flow
@@ -54,9 +56,15 @@ fun JibeNavGraph(credentialsFlow: Flow<DeviceCredentials?>, repository: Connecti
     }
 
     val navController = rememberNavController()
+    val connectionState by repository.state.collectAsState()
 
-    val startRoute =
-            if (bootstrapCredentials != null) Route.Home.path else Route.Pairing.path
+    val startRoute = if (bootstrapCredentials != null) Route.Home.path else Route.Pairing.path
+
+    LaunchedEffect(startRoute, connectionState) {
+        if (startRoute == Route.Home.path && connectionState is ConnectionState.Disconnected) {
+            repository.start()
+        }
+    }
 
     NavHost(
             navController = navController,
