@@ -64,23 +64,12 @@ sealed class ConnectionState {
 data class PingResult(val latencyMs: Long)
 
 /**
- * The single source of truth for the daemon connection.
+ * Single source of truth for the daemon connection.
  *
- * Orchestrates: NSD discovery ↔ WebSocket ↔ DataStore persistence. Exposes state as a StateFlow
- * that the ViewModel observes.
+ * Orchestrates NSD discovery ↔ WebSocket ↔ credential persistence, and exposes state as a
+ * [StateFlow] for the UI/ViewModel.
  *
- * ## Reconnection strategy (two-phase)
- *
- * When the daemon drops, we don't give up. Instead:
- *
- * **Phase 1 — Fast reconnect** (up to [MAX_FAST_RECONNECTS] attempts): Retry directly to the saved
- * host/port with exponential backoff (3s → 6s → 12s → 24s → 48s). Handles transient glitches and
- * brief daemon restarts on the same IP.
- *
- * **Phase 2 — NSD re-discovery** (indefinite): After fast reconnects are exhausted, fall back to
- * mDNS discovery. When the daemon comes back up it re-registers `_jibe._tcp`, the phone finds it,
- * and reconnects automatically. This also handles the daemon restarting on a different IP (DHCP
- * reassignment).
+ * Reconnection is two-phase: fast direct reconnect (limited attempts), then NSD re-discovery.
  */
 class ConnectionRepository(
         private val dataStore: JibeDataStore,
@@ -92,8 +81,6 @@ class ConnectionRepository(
 ) {
     companion object {
         private const val TAG = "ConnectionRepo"
-
-        // Phase 1: fast direct reconnect
         private const val MAX_FAST_RECONNECTS = 5
         private const val RECONNECT_BASE_DELAY_MS = 1_500L
         private const val RECONNECT_MAX_DELAY_MS = 60_000L
@@ -126,8 +113,6 @@ class ConnectionRepository(
 
     private var currentHost: String? = null
     private var currentPort: Int? = null
-
-    // ── Public API ──────────────────────────────────────────────────
 
     /**
      * Start the connection flow.
@@ -176,8 +161,6 @@ class ConnectionRepository(
                             connectToDaemon(
                                     host = daemon.host,
                                     port = daemon.port,
-                                    // Use pinned cert if we have credentials (reconnect), else TOFU
-                                    // (pair)
                                     certFingerprint = credentials?.certFingerprint
                             )
                         }
@@ -286,8 +269,6 @@ class ConnectionRepository(
         pairingRetryCount = 0
         _state.value = ConnectionState.Disconnected
     }
-
-    // ── Internal connection logic ───────────────────────────────────
 
     /**
      * Open a WebSocket to the daemon.
@@ -465,7 +446,6 @@ class ConnectionRepository(
                     _state.value = ConnectionState.Authenticating(host, hint = response.reason)
                 }
             } else {
-                // A real auth attempt (with fingerprint) was rejected — show error.
                 Log.w(TAG, "Auth rejected: ${response.reason}")
                 _state.value = ConnectionState.Failed(response.reason)
             }
@@ -489,8 +469,6 @@ class ConnectionRepository(
                                 _state.value = stateAtDisconnect
                             }
                             is ConnectionState.Authenticating -> {
-                                // Reconnect directly to same host so the UI never cycles through
-                                // Discovering and the keyboard/PIN stays visible.
                                 val host = currentHost
                                 val port = currentPort
                                 pairingRetryCount++
@@ -545,7 +523,6 @@ class ConnectionRepository(
                         return@launch
                     }
 
-                    // ── Phase 1: fast reconnect with exponential backoff ────────────
                     if (fastReconnectAttempts < MAX_FAST_RECONNECTS) {
                         fastReconnectAttempts++
                         val delayMs =
@@ -574,7 +551,6 @@ class ConnectionRepository(
                         return@launch
                     }
 
-                    // ── Phase 2: NSD re-discovery ───────────────────────────────────
                     Log.i(TAG, "Fast reconnects exhausted — switching to NSD re-discovery")
                     fastReconnectAttempts = 0
                     startDiscovery()

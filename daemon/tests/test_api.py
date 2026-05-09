@@ -9,8 +9,6 @@ from jibe.core.api import (
 )
 
 
-# ── Valid Message Tests ──────────────────────────────────────────────────
-
 @pytest.mark.parametrize(
     "msg_type",
     [t.value for t in MessageType]
@@ -25,8 +23,6 @@ def test_parse_valid_messages(valid_messages, msg_type):
     assert msg.type == MessageType(msg_type)
     assert msg.payload == payload
 
-
-# ── Error Case Tests ─────────────────────────────────────────────────────
 
 def test_parse_empty_string():
     """Test that an empty string raises InvalidMessageError."""
@@ -99,8 +95,6 @@ def test_parse_wrong_payload_shape():
     assert msg.type == MessageType.PING
     assert msg.payload["extra_field"] == "should be ignored by parser"
 
-
-# ── Formatting Tests ─────────────────────────────────────────────────────
 
 def test_format_error():
     """Test the format_error helper."""

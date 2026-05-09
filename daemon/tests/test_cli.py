@@ -10,9 +10,6 @@ from unittest.mock import patch
 import pytest
 from main import _build_parser, _handle_regen_certs, main
 
-# ── Argument Parsing ─────────────────────────────────────────────────────
-
-
 class TestBuildParser:
     """Tests for _build_parser()."""
 
@@ -78,9 +75,6 @@ class TestBuildParser:
             _build_parser().parse_args(["--unknown"])
 
 
-# ── --regen-certs ────────────────────────────────────────────────────────
-
-
 class TestHandleRegenCerts:
     """Tests for _handle_regen_certs()."""
 
@@ -106,9 +100,6 @@ class TestHandleRegenCerts:
                 _handle_regen_certs()
 
         mock_gen.assert_called_once()
-
-
-# ── --verbose ────────────────────────────────────────────────────────────
 
 
 class TestVerboseFlag:
@@ -141,9 +132,6 @@ class TestVerboseFlag:
         assert mock_basic.call_args.kwargs["level"] == logging.INFO
 
 
-# ── --port ───────────────────────────────────────────────────────────────
-
-
 class TestPortFlag:
     """Tests for --port flag forwarding to run_daemon."""
 
@@ -159,9 +147,6 @@ class TestPortFlag:
                 main()
 
         assert captured_port["port"] == 4242
-
-
-# ── --no-tls ─────────────────────────────────────────────────────────────
 
 
 class TestNoTlsFlag:
@@ -192,9 +177,6 @@ class TestNoTlsFlag:
                 main()
 
         assert captured["use_tls"] is True
-
-
-# ── --pair ───────────────────────────────────────────────────────────────────
 
 
 class TestPairFlag:

@@ -94,7 +94,6 @@ fun HomeScreen(repository: ConnectionRepository, onDeviceForgotten: () -> Unit) 
                                         .padding(top = 48.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                        // ── Header ──────────────────────────────────────────
                         Text(
                                 text = "jibe",
                                 style =
@@ -108,12 +107,10 @@ fun HomeScreen(repository: ConnectionRepository, onDeviceForgotten: () -> Unit) 
 
                         Spacer(modifier = Modifier.height(32.dp))
 
-                        // ── Connection status card ──────────────────────────
                         ConnectionStatusCard(state = state)
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // ── Ping card ───────────────────────────────────────
                         PingCard(
                                 isConnected = state is ConnectionState.Connected,
                                 lastLatency = lastLatency,
@@ -122,7 +119,6 @@ fun HomeScreen(repository: ConnectionRepository, onDeviceForgotten: () -> Unit) 
 
                         Spacer(modifier = Modifier.weight(1f))
 
-                        // ── Forget device ───────────────────────────────────
                         if (showForgetConfirm) {
                                 ForgetConfirmation(
                                         onConfirm = {
@@ -146,12 +142,8 @@ fun HomeScreen(repository: ConnectionRepository, onDeviceForgotten: () -> Unit) 
         }
 }
 
-// ── Sub-components ──────────────────────────────────────────────────
-
 /**
- * Arc spinner that works even when "Animator Duration Scale" is set to 0x. Uses withFrameNanos to
- * derive angle from raw Choreographer timestamps, bypassing MotionDurationScale entirely. See
- * PairingScreen for full explanation.
+ * Arc spinner that stays smooth when animator duration scale is 0.
  */
 @Composable
 private fun JibeSpinner(

@@ -1,20 +1,7 @@
 """mDNS service discovery for the Jibe daemon.
 
-This module broadcasts the daemon's presence on the local network using
-mDNS (multicast DNS) via the zeroconf library. When the daemon starts,
-it registers a service of type `_jibe._tcp.local.` so that Android
-clients can discover it automatically without any manual IP configuration.
-
-This is the same mechanism used by Chromecast, AirPlay, and similar
-zero-configuration protocols. The Android app scans for `_jibe._tcp`
-services and connects to whichever daemon it finds.
-
-Why zeroconf (Python library)?
-  The `zeroconf` library is a pure-Python, cross-platform mDNS/DNS-SD
-  implementation. Unlike `python-avahi` (which requires the Avahi D-Bus
-  daemon and only works on Linux), `zeroconf` works anywhere Python runs
-  and has no system dependencies. This keeps the daemon portable and the
-  dependency tree simple.
+Registers a `_jibe._tcp.local.` service so Android clients can discover the
+daemon without manual IP configuration.
 """
 
 import logging

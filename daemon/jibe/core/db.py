@@ -1,26 +1,7 @@
-"""Async SQLite database access for persistent storage.
+"""Async SQLite persistence for the Jibe daemon.
 
-This module provides the persistence layer for the Jibe daemon. Everything
-the daemon needs to remember across restarts lives here: trusted devices,
-session history, and (in future milestones) transfer logs, clipboard
-history, and notification records.
-
-Why SQLite?
-  SQLite is the ideal database for a single-user, self-hosted daemon:
-  no server process, no configuration, the database is just a file.
-  It supports concurrent reads, handles WAL mode gracefully, and is
-  battle-tested in embedded systems far more demanding than ours.
-
-Why aiosqlite?
-  Python's built-in `sqlite3` module is synchronous — every query blocks
-  the thread. Since our daemon runs on a single asyncio event loop,
-  blocking it would freeze WebSocket handling, mDNS, and everything else.
-  `aiosqlite` wraps `sqlite3` in a background thread and exposes an
-  async interface, so database operations don't block the event loop.
-
-Storage location:
-  The database file lives at `~/.local/share/jibe/jibe.db`, following
-  the XDG Base Directory Specification.
+Stores trusted devices and session history. Uses `aiosqlite` so database
+operations don't block the asyncio event loop.
 """
 
 import logging
@@ -33,8 +14,6 @@ from jibe.core.config import DATABASE_DIR, DATABASE_NAME, SCHEMA_VERSION
 
 logger = logging.getLogger(__name__)
 
-
-# ── SQL Schema ───────────────────────────────────────────────────────────
 
 _CREATE_META_TABLE = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -136,8 +115,6 @@ class JibeDatabase:
             self._conn = None
             logger.debug("Database closed")
 
-    # ── Async context manager ────────────────────────────────────────
-
     async def __aenter__(self) -> "JibeDatabase":
         """Support `async with JibeDatabase() as db:` syntax."""
         await self.open()
@@ -146,8 +123,6 @@ class JibeDatabase:
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         """Ensure the database is closed when exiting the context."""
         await self.close()
-
-    # ── Schema management ────────────────────────────────────────────
 
     async def _create_tables(self) -> None:
         """Create all tables if they don't exist.
@@ -195,8 +170,6 @@ class JibeDatabase:
                 )
             else:
                 logger.debug("Schema version OK: v%d", stored_version)
-
-    # ── Device CRUD ──────────────────────────────────────────────────
 
     async def add_device(self, device_id: str, name: str, fingerprint: str) -> dict:
         """Add a newly paired device to the database.
@@ -357,8 +330,6 @@ class JibeDatabase:
         if removed:
             logger.debug("Device unpaired: %s", device_id)
         return removed
-
-    # ── Session tracking ─────────────────────────────────────────────
 
     async def start_session(self, session_id: str, device_id: str) -> dict:
         """Record the start of a device connection session.

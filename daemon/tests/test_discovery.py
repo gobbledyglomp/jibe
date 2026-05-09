@@ -15,9 +15,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from jibe.core.config import DEFAULT_PORT, SERVICE_NAME, SERVICE_TYPE
 from jibe.network.discovery import JibeDiscovery, _get_local_ip
 
-# ── _get_local_ip ────────────────────────────────────────────────────────
-
-
 def test_get_local_ip_returns_string():
     """The function should return a dotted-quad IPv4 string."""
     ip = _get_local_ip()
@@ -39,9 +36,6 @@ def test_get_local_ip_fallback_on_oserror():
             )
             ip = _get_local_ip()
             assert ip == "127.0.0.1"
-
-
-# ── JibeDiscovery lifecycle ──────────────────────────────────────────────
 
 
 async def test_discovery_starts_with_correct_service_info():

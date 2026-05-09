@@ -3,8 +3,6 @@ package com.jibe.app.data.model
 import com.google.gson.JsonObject
 import com.google.gson.annotations.SerializedName
 
-// ── Message types ───────────────────────────────────────────────────
-
 enum class MessageType(val value: String) {
         @SerializedName("auth.request")    AUTH_REQUEST("auth.request"),
         @SerializedName("auth.response")   AUTH_RESPONSE("auth.response"),
@@ -24,8 +22,6 @@ enum class MessageType(val value: String) {
 
 data class JibeMessage(val type: MessageType, val payload: JsonObject)
 
-// ── Auth messages ───────────────────────────────────────────────────
-
 data class AuthRequest(
         @SerializedName("type") val type: String = MessageType.AUTH_REQUEST.value,
         @SerializedName("device_name") val deviceName: String,
@@ -41,13 +37,9 @@ data class AuthResponse(
         @SerializedName("fingerprint") val fingerprint: String? = null
 )
 
-// ── Simple messages ─────────────────────────────────────────────────
-
 data class PingMessage(@SerializedName("type") val type: String = MessageType.PING.value)
 
 data class PongMessage(@SerializedName("type") val type: String = MessageType.PONG.value)
-
-// ── Error message ───────────────────────────────────────────────────
 
 data class ErrorMessage(
         @SerializedName("type") val type: String,

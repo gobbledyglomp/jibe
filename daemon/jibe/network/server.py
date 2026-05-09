@@ -1,21 +1,7 @@
-"""WebSocket and HTTP server for the Jibe daemon.
+"""Network server for the Jibe daemon.
 
-This module runs the main network-facing server using aiohttp. It serves
-two purposes:
-
-1. **WebSocket endpoint** (`/ws`) — The primary communication channel.
-   Android clients connect here and exchange JSON messages following the
-   protocol defined in `docs/protocol.md`.
-
-2. **HTTP health endpoint** (`/`) — A simple GET endpoint that returns
-   the daemon's status and version as JSON, useful for debugging and
-   monitoring.
-
-Why aiohttp?
-  aiohttp is a mature async HTTP framework that natively supports WebSockets.
-  Unlike FastAPI (which adds REST-specific abstractions we don't need) or
-  raw `websockets` (which lacks HTTP routing), aiohttp gives us both
-  WebSocket and HTTP handling in a single, lightweight server.
+Provides a WebSocket endpoint at `/ws` for JSON protocol messages and an HTTP
+health/status endpoint for local debugging.
 """
 
 import asyncio
@@ -183,7 +169,6 @@ class JibeServer:
             await conn.send(format_error(e.code, str(e)))
             return
 
-        # ── State: AWAITING_AUTH ─────────────────────────────────────
         if not conn.is_authenticated:
             if jibe_msg.type != MessageType.AUTH_REQUEST:
                 await conn.send(
@@ -216,7 +201,6 @@ class JibeServer:
             await conn.send(json.dumps(result))
             return
 
-        # ── State: AUTHENTICATED ─────────────────────────────────────
         logger.debug(
             "[%s] %s message from %s",
             conn.device_name,
@@ -225,8 +209,6 @@ class JibeServer:
         )
 
         await self._router.dispatch(conn, jibe_msg)
-
-    # ── REST API ─────────────────────────────────────────────────────
 
     @staticmethod
     def _is_localhost(request: web.Request) -> bool:

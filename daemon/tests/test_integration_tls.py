@@ -9,9 +9,6 @@ messages — proving the entire chain works end-to-end:
 
 from jibe import __version__
 
-# ── Helpers ──────────────────────────────────────────────────────────────
-
-
 async def _authenticate_tls(ws, jibe_server_tls):
     """Pair a device over the TLS WebSocket and return the auth response."""
     pin = jibe_server_tls.auth.start_pairing()
@@ -27,9 +24,6 @@ async def _authenticate_tls(ws, jibe_server_tls):
     return resp
 
 
-# ── TLS Health Endpoint ──────────────────────────────────────────────────
-
-
 async def test_health_over_tls(aiohttp_client, jibe_app_tls):
     """GET / over TLS should return status and version."""
     client = await aiohttp_client(jibe_app_tls)
@@ -39,9 +33,6 @@ async def test_health_over_tls(aiohttp_client, jibe_app_tls):
     data = await resp.json()
     assert data["status"] == "running"
     assert data["version"] == __version__
-
-
-# ── TLS WebSocket: Auth Gate ─────────────────────────────────────────────
 
 
 async def test_tls_unauthenticated_message_rejected(aiohttp_client, jibe_app_tls):
@@ -67,9 +58,6 @@ async def test_tls_successful_auth(aiohttp_client, jibe_app_tls, jibe_server_tls
     assert "fingerprint" in resp
 
     await ws.close()
-
-
-# ── TLS WebSocket: Post-Auth ─────────────────────────────────────────────
 
 
 async def test_tls_authenticated_message_flow(

@@ -26,19 +26,10 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 /**
- * Foreground Service that keeps the WebSocket connection alive.
+ * Foreground Service that keeps the daemon WebSocket connection alive.
  *
- * Android aggressively kills background processes. To maintain a persistent connection, we need a
- * Foreground Service with a visible notification. This tells the OS "this process is actively doing
- * something the user cares about."
- *
- * The service owns the ConnectionRepository — the connection's lifecycle is tied to the service,
- * not the Activity. When the user closes the app, the service keeps running. When they reopen it,
- * the Activity binds to this service and observes the existing state.
- *
- * Foreground service type is `dataSync`: the daemon link is ongoing network sync (WebSocket), not a
- * Bluetooth/USB/NFC “connected device”. Using `connectedDevice` would require extra companion
- * permissions (e.g. Bluetooth or CHANGE_NETWORK_STATE) under Android 14+ rules.
+ * Android requires a user-visible notification for long-lived background work. The Activity
+ * binds to the service to observe the shared [ConnectionRepository] state.
  */
 class JibeService : Service() {
 
@@ -66,8 +57,6 @@ class JibeService : Service() {
     lateinit var repository: ConnectionRepository
         private set
 
-    // ── Service lifecycle ────────────────────────────────────────────
-
     override fun onCreate() {
         super.onCreate()
         Log.i(TAG, "Service created")
@@ -88,8 +77,6 @@ class JibeService : Service() {
                                 },
                         socketFactory = OkHttpDaemonTlsSocketFactory(),
                 )
-
-        // Update the notification when connection state changes
         serviceScope.launch { repository.state.collect { state -> updateNotification(state) } }
     }
 
@@ -114,7 +101,6 @@ class JibeService : Service() {
             repository.start()
         }
 
-        // If the system kills the service, restart it.
         return START_STICKY
     }
 
@@ -130,14 +116,12 @@ class JibeService : Service() {
         super.onDestroy()
     }
 
-    // ── Notification management ─────────────────────────────────────
-
     private fun createNotificationChannel() {
         val channel =
                 NotificationChannel(
                                 CHANNEL_ID,
                                 "Jibe Connection",
-                                NotificationManager.IMPORTANCE_LOW // Low = no sound, shows in shade
+                                NotificationManager.IMPORTANCE_LOW
                         )
                         .apply {
                             description = "Shows Jibe connection status"
@@ -149,7 +133,6 @@ class JibeService : Service() {
     }
 
     private fun buildNotification(state: ConnectionState): Notification {
-        // Tapping the notification opens the app
         val pendingIntent =
                 PendingIntent.getActivity(
                         this,

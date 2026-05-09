@@ -94,9 +94,6 @@ def registry():
     return ConnectionRegistry()
 
 
-# ── TLS ──────────────────────────────────────────────────────────────────
-
-
 @pytest.fixture
 def certs_dir(tmp_path):
     """Temporary directory for test certificates."""

@@ -74,15 +74,10 @@ import com.jibe.app.ui.theme.JibeSurfaceContainerHigh
 import com.jibe.app.ui.theme.RobotoMono
 
 /**
- * Discovery & PIN pairing screen — the first screen new users see.
+ * First-time pairing screen.
  *
- * Flow:
- * 1. Automatic NSD discovery (spinner)
- * 2. Daemon found → WebSocket connection
- * 3. PIN input field appears — user types the PIN shown on the daemon terminal
- * 4. Auth success → onPaired callback → navigate to Home
- *
- * Start the daemon with: python main.py --pair The PIN will appear in the daemon terminal output.
+ * Uses [ConnectionRepository.state] to drive discovery, connect, and PIN entry (PIN is printed
+ * by the daemon when run in pairing mode).
  */
 @Composable
 fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
@@ -97,12 +92,9 @@ fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
                 when {
                         current is ConnectionState.Authenticating -> {
                                 if (current.host != lastPairingHost) {
-                                        // New daemon (or first connection) — start fresh
                                         lastPairingHost = current.host
                                         pinValue = TextFieldValue("")
                                 }
-                                // Always restore focus + keyboard: the Connecting state between
-                                // reconnects may have dismissed them
                                 focusRequester.requestFocus()
                                 keyboardController?.show()
                         }
@@ -122,7 +114,6 @@ fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                 ) {
-                        // ── Header ──────────────────────────────────────────────
                         Text(
                                 text = "jibe",
                                 style =
@@ -144,7 +135,6 @@ fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
 
                         Spacer(modifier = Modifier.height(48.dp))
 
-                        // ── State-driven content ────────────────────────────────
                         AnimatedContent(
                                 targetState = state,
                                 transitionSpec = { fadeIn() togetherWith fadeOut() },
@@ -236,8 +226,6 @@ fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
         }
 }
 
-// ── Sub-components ──────────────────────────────────────────────────
-
 /** Arc spinner */
 @Composable
 private fun JibeSpinner(
@@ -248,7 +236,7 @@ private fun JibeSpinner(
         var angle by remember { mutableFloatStateOf(0f) }
 
         LaunchedEffect(Unit) {
-                val periodNs = 900_000_000L // one full rotation every 900ms
+                val periodNs = 900_000_000L
                 val startNs = withFrameNanos { it }
                 while (true) {
                         withFrameNanos { frameNs ->
@@ -356,8 +344,6 @@ private fun PinInput(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // ── Visual PIN boxes ────────────────────────────────────────
-
                 Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier =
@@ -380,7 +366,6 @@ private fun PinInput(
                                                         .aspectRatio(
                                                                 1f
                                                         ) // keep boxes square regardless of weight
-                                                        // size
                                                         .clip(RoundedCornerShape(8.dp))
                                                         .background(
                                                                 if (isFilled)
@@ -436,9 +421,7 @@ private fun PinInput(
                         }
                 }
 
-                // Invisible text field that captures keyboard input.
-                // BasicTextField (no decorations) is more reliable than OutlinedTextField
-                // at 1dp size — it doesn't fight Compose's focus system.
+                // Capture keyboard input without visible decorations.
                 BasicTextField(
                         value = value,
                         onValueChange = onValueChange,

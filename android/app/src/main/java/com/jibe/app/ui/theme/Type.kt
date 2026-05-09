@@ -8,16 +8,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.jibe.app.R
 
-// ── Monospace font for technical values ─────────────────────────────
-
 val RobotoMono =
         FontFamily(
                 Font(R.font.roboto_mono_regular, FontWeight.Normal),
                 Font(R.font.roboto_mono_medium, FontWeight.Medium),
                 Font(R.font.roboto_mono_bold, FontWeight.Bold)
         )
-
-// ── Typography scale ────────────────────────────────────────────────
 
 val JibeTypography =
         Typography(

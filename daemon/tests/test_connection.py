@@ -2,9 +2,6 @@
 
 from jibe.network.connection import ConnectionState, JibeConnection
 
-# ── JibeConnection ────────────────────────────────────────────────────────
-
-
 def test_connection_initial_state(conn, mock_ws):
     """A new connection must start in AWAITING_AUTH."""
     assert conn.state == ConnectionState.AWAITING_AUTH
@@ -53,9 +50,6 @@ def test_connection_repr(conn):
 
     conn.device_name = "Pixel"
     assert "Pixel" in repr(conn)
-
-
-# ── ConnectionRegistry ────────────────────────────────────────────────────
 
 
 def test_registry_add_remove(registry, conn):

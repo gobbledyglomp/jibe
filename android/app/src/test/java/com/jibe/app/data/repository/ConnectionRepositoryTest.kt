@@ -316,7 +316,6 @@ class ConnectionRepositoryTest {
                                 recordingSocket.emit(WebSocketEvent.MessageReceived(jibeMessage))
                                 advanceUntilIdle()
 
-                                // After 1st failure: 4 remaining (MAX_PAIRING_PIN_FAILURES=5 - 1)
                                 assertEquals(
                                         ConnectionState.Authenticating(
                                                 "10.0.0.5",
@@ -570,7 +569,6 @@ class ConnectionRepositoryTest {
                         recordingSocket.emit(WebSocketEvent.Disconnected(1001, "daemon timeout"))
                         advanceUntilIdle()
 
-                        // Should jump straight to Connecting, not Discovering
                         advanceTimeBy(1_500)
                         advanceUntilIdle()
 

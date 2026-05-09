@@ -1,22 +1,7 @@
-"""Message parsing and protocol validation for the Jibe WebSocket protocol.
+"""Parse and validate incoming WebSocket JSON messages.
 
-This module is the single entry point for all incoming data from WebSocket
-clients. Every raw JSON string passes through `parse_message()` before
-the daemon acts on it. This "validate at the boundary" pattern ensures
-that the rest of the codebase can trust that messages are well-formed —
-similar to how a REST API validates request bodies in middleware before
-handlers see them.
-
-Key responsibilities:
-  - Parse raw JSON strings into typed `JibeMessage` objects
-  - Validate that the `type` field exists and maps to a known `MessageType`
-  - Raise descriptive errors (`InvalidMessageError`) for anything malformed
-  - Provide `format_error()` to build JSON error responses for the client
-
-Libraries used:
-  - json (stdlib) — JSON parsing
-  - enum (stdlib) — `MessageType` enum for exhaustive type matching
-  - dataclasses (stdlib) — `JibeMessage` as a lightweight typed container
+All raw payloads pass through :func:`parse_message` first, producing a typed
+`JibeMessage` that the rest of the daemon can trust for routing.
 """
 
 import json
@@ -58,8 +43,6 @@ class JibeMessage:
     payload: Dict[str, Any]
 
 
-# ── Exceptions ───────────────────────────────────────────────────────
-
 class JibeError(Exception):
     """Base exception for all Jibe-specific errors."""
     pass
@@ -87,8 +70,6 @@ class InvalidMessageError(ProtocolError):
         super().__init__(message)
         self.code = code
 
-
-# ── Parsing & Formatting ─────────────────────────────────────────────
 
 def parse_message(raw: str) -> JibeMessage:
     """Parse a raw JSON string into a validated JibeMessage.

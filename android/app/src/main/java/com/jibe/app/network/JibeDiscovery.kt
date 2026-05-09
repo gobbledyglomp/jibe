@@ -26,16 +26,10 @@ sealed class DiscoveryState {
 /**
  * Wraps Android's NsdManager to discover Jibe daemons on the LAN.
  *
- * The daemon registers itself as _jibe._tcp.local. via zeroconf. Android's NSD (Network Service
- * Discovery) API is the platform's built-in mDNS client — no extra libraries needed.
+ * The daemon registers itself as `_jibe._tcp.local.`; this class resolves discovery results into
+ * host/port for the WebSocket connection and publishes them via [state].
  *
- * NSD quirks to be aware of:
- * - Discovery and resolution are callback-based (not coroutine-friendly), so we bridge to StateFlow
- * for the Compose UI.
- * - NsdManager must be obtained from a Context (it's a system service).
- * - You must stop discovery before the Activity/Service is destroyed, or Android will leak the
- * listener and eventually crash.
- * - Resolution gives us the actual IP + port (discovery alone only gives us the service name).
+ * Call [stopDiscovery] when the hosting component is destroyed to avoid leaking the NSD listener.
  */
 class JibeDiscovery(context: Context) {
 
@@ -54,8 +48,6 @@ class JibeDiscovery(context: Context) {
 
     /** Bumped on every [stopDiscovery] so late [onServiceResolved] callbacks cannot emit stale Found. */
     private var resolveEpoch = 0
-
-    // ── NSD callbacks ───────────────────────────────────────────────
 
     private val discoveryListener =
             object : NsdManager.DiscoveryListener {
@@ -96,8 +88,6 @@ class JibeDiscovery(context: Context) {
                 }
             }
 
-    // ── Public API ──────────────────────────────────────────────────
-
     /**
      * Start scanning for Jibe daemons on the local network.
      *
@@ -135,8 +125,6 @@ class JibeDiscovery(context: Context) {
         isDiscovering = false
         _state.value = DiscoveryState.Idle
     }
-
-    // ── Internals ───────────────────────────────────────────────────
 
     /**
      * Resolve a discovered service to get its IP and port.
