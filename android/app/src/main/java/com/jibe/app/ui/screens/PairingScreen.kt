@@ -1,5 +1,7 @@
 package com.jibe.app.ui.screens
 
+import android.os.Build
+
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -58,10 +60,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jibe.app.data.repository.ConnectionRepository
 import com.jibe.app.data.repository.ConnectionState
+import com.jibe.app.data.repository.DEFAULT_DEVICE_DISPLAY_NAME
+import com.jibe.app.ui.components.JibeSpinner
 import com.jibe.app.ui.theme.JibeError
 import com.jibe.app.ui.theme.JibeOnSurface
 import com.jibe.app.ui.theme.JibeOnSurfaceVariant
-import com.jibe.app.ui.components.JibeSpinner
 import com.jibe.app.ui.theme.JibePrimary
 import com.jibe.app.ui.theme.JibeSurfaceContainerHigh
 import com.jibe.app.ui.theme.RobotoMono
@@ -166,15 +169,15 @@ fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
                                                                         if (pinValue.text.length ==
                                                                                         6
                                                                         ) {
-                                                                                repository
-                                                                                        .pairWithPin(
-                                                                                                pin =
-                                                                                                        pinValue.text,
-                                                                                                deviceName =
-                                                                                                        android.os
-                                                                                                                .Build
-                                                                                                                .MODEL
-                                                                                        )
+                                                                                repository.pairWithPin(
+                                                                                pin = pinValue.text,
+                                                                                deviceName =
+                                                                                        Build.MODEL
+                                                                                                ?.takeIf {
+                                                                                                        it.isNotBlank()
+                                                                                                }
+                                                                                                ?: DEFAULT_DEVICE_DISPLAY_NAME
+                                                                        )
                                                                         }
                                                                 },
                                                                 focusRequester = focusRequester,

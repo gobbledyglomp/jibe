@@ -16,6 +16,7 @@ import com.jibe.app.R
 import com.jibe.app.data.local.JibeDataStore
 import com.jibe.app.data.repository.ConnectionRepository
 import com.jibe.app.data.repository.ConnectionState
+import com.jibe.app.data.repository.DEFAULT_DEVICE_DISPLAY_NAME
 import com.jibe.app.data.repository.DeviceNameProvider
 import com.jibe.app.network.JibeDiscovery
 import com.jibe.app.network.OkHttpDaemonTlsSocketFactory
@@ -37,6 +38,7 @@ class JibeService : Service() {
         private const val TAG = "JibeService"
         private const val CHANNEL_ID = "jibe_connection"
         private const val NOTIFICATION_ID = 1
+        private const val FAILED_REASON_MAX_CHARS = 80
     }
 
     /** Binder for Activity to access the service's repository. */
@@ -73,7 +75,8 @@ class JibeService : Service() {
                         scope = serviceScope,
                         deviceNameProvider =
                                 DeviceNameProvider {
-                                    Build.MODEL?.takeIf { it.isNotBlank() } ?: "Android"
+                                    Build.MODEL?.takeIf { it.isNotBlank() }
+                                            ?: DEFAULT_DEVICE_DISPLAY_NAME
                                 },
                         socketFactory = OkHttpDaemonTlsSocketFactory(),
                 )
@@ -152,7 +155,22 @@ class JibeService : Service() {
                     is ConnectionState.Connected -> "Jibe — Connected" to state.host
                     is ConnectionState.PairingFailed ->
                             "Jibe" to "PIN rejected. Restart the daemon and retry."
-                    is ConnectionState.Failed -> "Jibe" to "Connection failed"
+                    is ConnectionState.Failed -> {
+                        val detail = state.reason.trim()
+                        val text =
+                                if (detail.isEmpty()) {
+                                    "Connection failed"
+                                } else {
+                                    val clipped =
+                                            if (detail.length <= FAILED_REASON_MAX_CHARS) {
+                                                detail
+                                            } else {
+                                                detail.take(FAILED_REASON_MAX_CHARS - 1) + "…"
+                                            }
+                                    "Connection failed — $clipped"
+                                }
+                        "Jibe" to text
+                    }
                 }
 
         return Notification.Builder(this, CHANNEL_ID)
