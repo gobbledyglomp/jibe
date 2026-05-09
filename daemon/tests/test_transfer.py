@@ -1,0 +1,152 @@
+"""Tests for chunked file transfer handlers."""
+
+import asyncio
+import base64
+import hashlib
+from pathlib import Path
+from unittest.mock import AsyncMock
+
+import pytest
+
+from jibe.core.api import JibeMessage, MessageType
+from jibe.handlers import transfer as transfer_mod
+from jibe.handlers.transfer import (
+    handle_file_chunk,
+    handle_file_done,
+    handle_file_start,
+)
+from jibe.network.connection import JibeConnection
+
+
+@pytest.fixture(autouse=True)
+def _clear_transfers():
+    transfer_mod._transfers.clear()
+    yield
+    transfer_mod._transfers.clear()
+
+
+def _msg(msg_type: MessageType, **payload) -> JibeMessage:
+    data = {"type": msg_type.value, **payload}
+    return JibeMessage(type=msg_type, payload=data)
+
+
+@pytest.mark.asyncio
+async def test_transfer_happy_path(mock_ws, monkeypatch, tmp_path):
+    """Assemble chunks, verify checksum, move to Downloads."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    conn = JibeConnection(mock_ws, "127.0.0.1")
+    tid = "550e8400-e29b-41d4-a716-446655440000"
+    raw = b"hello"
+    digest = hashlib.sha256(raw).hexdigest()
+
+    await handle_file_start(
+        conn,
+        _msg(
+            MessageType.FILE_START,
+            id=tid,
+            filename="note.txt",
+            size=len(raw),
+            total_chunks=1,
+        ),
+    )
+
+    await handle_file_chunk(
+        conn,
+        _msg(
+            MessageType.FILE_CHUNK,
+            id=tid,
+            index=0,
+            data=base64.b64encode(raw).decode("ascii"),
+        ),
+    )
+
+    await handle_file_done(
+        conn,
+        _msg(MessageType.FILE_DONE, id=tid, checksum=digest),
+    )
+
+    downloads = tmp_path / "Downloads"
+    saved = downloads / "note.txt"
+    assert saved.read_bytes() == raw
+
+    sends = [c[0][0] for c in conn.ws.send_str.await_args_list]
+    acks = [s for s in sends if '"type": "file.ack"' in s or '"file.ack"' in s]
+    assert acks, "expected a file.ack frame"
+    assert '"ok": true' in acks[-1]
+
+
+@pytest.mark.asyncio
+async def test_transfer_checksum_mismatch(mock_ws, monkeypatch, tmp_path):
+    """Bad checksum should nack and not leave a completed file in Downloads."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    conn = JibeConnection(mock_ws, "127.0.0.1")
+    tid = "550e8400-e29b-41d4-a716-446655440001"
+    raw = b"hello"
+
+    await handle_file_start(
+        conn,
+        _msg(
+            MessageType.FILE_START,
+            id=tid,
+            filename="bad.txt",
+            size=len(raw),
+            total_chunks=1,
+        ),
+    )
+
+    await handle_file_chunk(
+        conn,
+        _msg(
+            MessageType.FILE_CHUNK,
+            id=tid,
+            index=0,
+            data=base64.b64encode(raw).decode("ascii"),
+        ),
+    )
+
+    await handle_file_done(
+        conn,
+        _msg(MessageType.FILE_DONE, id=tid, checksum="0" * 64),
+    )
+
+    downloads = tmp_path / "Downloads"
+    assert not list(downloads.glob("bad*.txt"))
+
+    sends = [c[0][0] for c in conn.ws.send_str.await_args_list]
+    assert any('"ok": false' in s for s in sends)
+
+
+@pytest.mark.asyncio
+async def test_transfer_duplicate_start_rejected(mock_ws, monkeypatch, tmp_path):
+    """Second file.start with same id should error without clobbering state."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    conn = JibeConnection(mock_ws, "127.0.0.1")
+    tid = "550e8400-e29b-41d4-a716-446655440002"
+
+    await handle_file_start(
+        conn,
+        _msg(
+            MessageType.FILE_START,
+            id=tid,
+            filename="a.bin",
+            size=1,
+            total_chunks=1,
+        ),
+    )
+
+    await handle_file_start(
+        conn,
+        _msg(
+            MessageType.FILE_START,
+            id=tid,
+            filename="b.bin",
+            size=1,
+            total_chunks=1,
+        ),
+    )
+
+    sends = [c[0][0] for c in conn.ws.send_str.await_args_list]
+    assert any("transfer_conflict" in s for s in sends)
