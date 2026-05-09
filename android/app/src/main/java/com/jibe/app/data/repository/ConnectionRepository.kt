@@ -64,6 +64,12 @@ sealed class ConnectionState {
 data class PingResult(val latencyMs: Long)
 
 /**
+ * Prefix for [ConnectionState.Authenticating.hint] after a rejected PIN during pairing; the pairing
+ * screen clears digits when the hint starts with this string.
+ */
+const val WRONG_PAIRING_PIN_HINT_PREFIX = "Wrong PIN"
+
+/**
  * Single source of truth for the daemon connection.
  *
  * Orchestrates NSD discovery ↔ WebSocket ↔ credential persistence, and exposes state as a
@@ -446,7 +452,7 @@ class ConnectionRepository(
                     } else {
                         val remaining = MAX_PAIRING_PIN_FAILURES - pairingWrongPinAttempts
                         val hint =
-                                "Wrong PIN — $remaining ${if (remaining == 1) "attempt" else "attempts"} remaining"
+                                "$WRONG_PAIRING_PIN_HINT_PREFIX — $remaining ${if (remaining == 1) "attempt" else "attempts"} remaining"
                         _state.value = ConnectionState.Authenticating(host, hint = hint)
                     }
                 } else {

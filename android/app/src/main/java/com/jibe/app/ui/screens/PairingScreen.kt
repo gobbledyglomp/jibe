@@ -65,6 +65,7 @@ import com.jibe.app.R
 import com.jibe.app.data.repository.ConnectionRepository
 import com.jibe.app.data.repository.ConnectionState
 import com.jibe.app.data.repository.DEFAULT_DEVICE_DISPLAY_NAME
+import com.jibe.app.data.repository.WRONG_PAIRING_PIN_HINT_PREFIX
 import com.jibe.app.ui.components.JibeSpinner
 import com.jibe.app.ui.theme.JibeError
 import com.jibe.app.ui.theme.JibeOnSurface
@@ -91,8 +92,15 @@ fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
                 val current = state
                 when {
                         current is ConnectionState.Authenticating -> {
-                                if (current.host != lastPairingHost) {
+                                val hostChanged = current.host != lastPairingHost
+                                if (hostChanged) {
                                         lastPairingHost = current.host
+                                }
+                                if (hostChanged ||
+                                                current.hint?.startsWith(
+                                                        WRONG_PAIRING_PIN_HINT_PREFIX
+                                                ) == true
+                                ) {
                                         pinValue = TextFieldValue("")
                                 }
                                 focusRequester.requestFocus()
