@@ -228,6 +228,27 @@ async def test_rate_limit_triggered_after_max_attempts(auth_pairing):
         await auth_pairing.handle_auth_request(payload, "client-1")
 
 
+async def test_probe_without_pin_clears_lockout_when_pairing_active(auth_pairing):
+    """Fresh probe after lockout must reset attempts so pairing can complete."""
+    bad = {"device_name": "Phone", "pin": "000000"}
+    for _ in range(MAX_PIN_ATTEMPTS):
+        await auth_pairing.handle_auth_request(bad, "client-1")
+
+    with pytest.raises(AuthError):
+        await auth_pairing.handle_auth_request(bad, "client-1")
+
+    probe = {"device_name": "Phone"}
+    response = await auth_pairing.handle_auth_request(probe, "client-1")
+    assert response["accepted"] is False
+    assert "daemon" in response["reason"].lower()
+
+    pin = auth_pairing._pairing_session.pin
+    ok = await auth_pairing.handle_auth_request(
+        {"device_name": "Phone", "pin": pin}, "client-1"
+    )
+    assert ok["accepted"] is True
+
+
 async def test_rate_limit_is_per_client(auth_pairing):
     """Rate limiting must be tracked per client_id, not globally."""
     bad_payload = {"device_name": "Attacker", "pin": "000000"}

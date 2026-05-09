@@ -175,18 +175,6 @@ class AuthManager:
                 )
                 return self._accept_response(device["id"], device["fingerprint"])
 
-        attempts = self._failed_attempts.get(client_id, 0)
-        if attempts >= MAX_PIN_ATTEMPTS:
-            logger.warning(
-                "Rate limit exceeded for %s (%d attempts)",
-                client_id,
-                attempts,
-            )
-            raise AuthError(
-                f"Too many failed attempts ({MAX_PIN_ATTEMPTS}). "
-                "Connection will be closed."
-            )
-
         if not self.is_pairing_active:
             if not fingerprint:
                 self.start_pairing()
@@ -199,7 +187,21 @@ class AuthManager:
             )
 
         if not pin:
+            # Probe without PIN after reconnect — fresh pairing UX (e.g. Android Retry).
+            self._failed_attempts.pop(client_id, None)
             return self._reject_response("Enter the PIN shown on the daemon.")
+
+        attempts = self._failed_attempts.get(client_id, 0)
+        if attempts >= MAX_PIN_ATTEMPTS:
+            logger.warning(
+                "Rate limit exceeded for %s (%d attempts)",
+                client_id,
+                attempts,
+            )
+            raise AuthError(
+                f"Too many failed attempts ({MAX_PIN_ATTEMPTS}). "
+                "Connection will be closed."
+            )
 
         if pin != self._pairing_session.pin:
             self._record_failure(client_id)
