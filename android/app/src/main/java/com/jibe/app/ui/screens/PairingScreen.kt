@@ -32,6 +32,8 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -64,6 +66,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jibe.app.data.repository.ConnectionRepository
 import com.jibe.app.data.repository.ConnectionState
+import com.jibe.app.ui.theme.JibeError
 import com.jibe.app.ui.theme.JibeOnSurface
 import com.jibe.app.ui.theme.JibeOnSurfaceVariant
 import com.jibe.app.ui.theme.JibePrimary
@@ -205,6 +208,17 @@ fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
                                                 is ConnectionState.Failed -> {
                                                         FailedIndicator(
                                                                 reason = currentState.reason,
+                                                                onRetry = {
+                                                                        pinValue =
+                                                                                TextFieldValue("")
+                                                                        repository.startDiscovery()
+                                                                }
+                                                        )
+                                                }
+                                                is ConnectionState.PairingFailed -> {
+                                                        PairingFailedIndicator(
+                                                                reason = currentState.reason,
+                                                                guidance = currentState.guidance,
                                                                 onRetry = {
                                                                         pinValue =
                                                                                 TextFieldValue("")
@@ -485,5 +499,62 @@ private fun FailedIndicator(reason: String, onRetry: () -> Unit) {
                         colors = ButtonDefaults.buttonColors(containerColor = JibePrimary),
                         shape = RoundedCornerShape(8.dp)
                 ) { Text("Retry") }
+        }
+}
+
+@Composable
+private fun PairingFailedIndicator(reason: String, guidance: String, onRetry: () -> Unit) {
+        Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = JibeSurfaceContainerHigh),
+                shape = RoundedCornerShape(16.dp)
+        ) {
+                Column(
+                        modifier = Modifier.padding(20.dp).fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                        Text(
+                                text = "PIN rejected",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = JibeOnSurface,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Text(
+                                text = reason,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = JibeOnSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Text(
+                                text = guidance,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = JibeOnSurfaceVariant.copy(alpha = 0.8f),
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(modifier = Modifier.height(20.dp))
+
+                        Button(
+                                onClick = onRetry,
+                                colors =
+                                        ButtonDefaults.buttonColors(
+                                                containerColor = JibeError.copy(alpha = 0.14f),
+                                                contentColor = JibeError
+                                        ),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                        ) {
+                                Text("Retry")
+                        }
+                }
         }
 }

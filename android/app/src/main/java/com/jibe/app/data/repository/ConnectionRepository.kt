@@ -55,6 +55,9 @@ sealed class ConnectionState {
 
     /** Something went wrong — human-readable error for the UI. */
     data class Failed(val reason: String) : ConnectionState()
+
+    /** Pairing was rejected. Unlike [Failed], this should not auto-reconnect in a loop. */
+    data class PairingFailed(val reason: String, val guidance: String) : ConnectionState()
 }
 
 /** Ping result — emitted after a pong arrives. */
@@ -95,6 +98,8 @@ class ConnectionRepository(
         private const val RECONNECT_BASE_DELAY_MS = 1_500L
         private const val RECONNECT_MAX_DELAY_MS = 60_000L
         private const val PING_TIMEOUT_MS = 5_000L
+        private const val PAIRING_FAILURE_GUIDANCE =
+                "Restart the daemon to generate a fresh PIN, then tap Retry."
     }
 
     private val _state = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
@@ -112,6 +117,7 @@ class ConnectionRepository(
     private var pingSentAt: Long = 0
     private var fastReconnectAttempts = 0
     private var pairingRetryCount = 0
+    private var pairingPinSubmitted = false
 
     private var currentHost: String? = null
     private var currentPort: Int? = null
@@ -180,6 +186,7 @@ class ConnectionRepository(
      */
     fun pairWithPin(pin: String, deviceName: String) {
         val client = wsClient ?: return
+        pairingPinSubmitted = true
         val authRequest = AuthRequest(deviceName = deviceName, pin = pin)
         client.send(MessageParser.toJson(authRequest))
         Log.d(TAG, "Sent auth.request with PIN")
@@ -231,6 +238,7 @@ class ConnectionRepository(
         pingTimeoutJob = null
         eventCollectorJob?.cancel()
         eventCollectorJob = null
+        pairingPinSubmitted = false
         wsClient?.disconnect()
         wsClient = null
         trustManager = null
@@ -256,6 +264,7 @@ class ConnectionRepository(
         currentPort = port
         pingTimeoutJob?.cancel()
         pingTimeoutJob = null
+        pairingPinSubmitted = false
 
         eventCollectorJob?.cancel()
         eventCollectorJob = null
@@ -332,7 +341,23 @@ class ConnectionRepository(
                 val error = MessageParser.payloadAs<ErrorMessage>(message)
                 Log.w(TAG, "Server error: [${error.code}] ${error.message}")
                 if (error.code == "auth_rejected" || error.code == "auth_required") {
-                    _state.value = ConnectionState.Failed(error.message)
+                    val credentials = dataStore.credentials.first()
+                    if (credentials == null && pairingPinSubmitted) {
+                        pairingPinSubmitted = false
+                        _state.value =
+                                ConnectionState.PairingFailed(
+                                        reason = error.message,
+                                        guidance = PAIRING_FAILURE_GUIDANCE
+                                )
+                    } else if (credentials == null) {
+                        _state.value =
+                                ConnectionState.Authenticating(
+                                        currentHost ?: "unknown",
+                                        hint = error.message
+                                )
+                    } else {
+                        _state.value = ConnectionState.Failed(error.message)
+                    }
                 }
             }
             else -> {
@@ -361,20 +386,28 @@ class ConnectionRepository(
             )
 
             fastReconnectAttempts = 0
+            pairingPinSubmitted = false
             _state.value = ConnectionState.Connected(host, port, deviceId)
             Log.i(TAG, "Authenticated as device $deviceId")
         } else {
             val credentials = dataStore.credentials.first()
             if (credentials == null) {
-                // Pairing probe was rejected by the daemon (expected — daemon just
-                // started pairing and logged the PIN). Stay on the PIN entry screen
-                // and show the daemon's message as a hint.
                 val host = currentHost ?: "unknown"
-                Log.d(
-                        TAG,
-                        "Probe rejected (pairing not yet active or just started): ${response.reason}"
-                )
-                _state.value = ConnectionState.Authenticating(host, hint = response.reason)
+                if (pairingPinSubmitted) {
+                    pairingPinSubmitted = false
+                    Log.w(TAG, "Pairing rejected after PIN entry: ${response.reason}")
+                    _state.value =
+                            ConnectionState.PairingFailed(
+                                    reason = response.reason,
+                                    guidance = PAIRING_FAILURE_GUIDANCE
+                            )
+                } else {
+                    Log.d(
+                            TAG,
+                            "Probe rejected (pairing not yet active or just started): ${response.reason}"
+                    )
+                    _state.value = ConnectionState.Authenticating(host, hint = response.reason)
+                }
             } else {
                 // A real auth attempt (with fingerprint) was rejected — show error.
                 Log.w(TAG, "Auth rejected: ${response.reason}")
@@ -393,6 +426,11 @@ class ConnectionRepository(
                     val credentials = dataStore.credentials.first()
 
                     if (credentials == null) {
+                        if (stateAtDisconnect is ConnectionState.PairingFailed) {
+                            _state.value = stateAtDisconnect
+                            return@launch
+                        }
+
                         fastReconnectAttempts = 0
 
                         val shouldRecover =

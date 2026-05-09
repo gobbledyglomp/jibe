@@ -60,6 +60,7 @@ import com.jibe.app.ui.theme.JibeOnSurfaceVariant
 import com.jibe.app.ui.theme.JibePrimary
 import com.jibe.app.ui.theme.JibeSuccess
 import com.jibe.app.ui.theme.JibeSurfaceContainer
+import com.jibe.app.ui.theme.JibeSurfaceContainerHigh
 import com.jibe.app.ui.theme.JibeWarning
 import com.jibe.app.ui.theme.RobotoMono
 
@@ -204,6 +205,7 @@ private fun ConnectionStatusCard(state: ConnectionState) {
                                         is ConnectionState.Connecting,
                                         is ConnectionState.Authenticating,
                                         is ConnectionState.Discovering -> JibeWarning
+                                        is ConnectionState.PairingFailed -> JibeError
                                         is ConnectionState.Failed -> JibeError
                                         is ConnectionState.Disconnected ->
                                                 JibeOnSurfaceVariant.copy(alpha = 0.3f)
@@ -243,6 +245,8 @@ private fun ConnectionStatusCard(state: ConnectionState) {
                                                                         "Authenticating…"
                                                                 is ConnectionState.Discovering ->
                                                                         "Discovering…"
+                                                                is ConnectionState.PairingFailed ->
+                                                                        "Pairing failed"
                                                                 is ConnectionState.Failed ->
                                                                         "Failed"
                                                                 is ConnectionState.Disconnected ->
@@ -267,6 +271,7 @@ private fun ConnectionStatusCard(state: ConnectionState) {
                                         is ConnectionState.Connected -> state.host
                                         is ConnectionState.Connecting -> state.host
                                         is ConnectionState.Authenticating -> state.host
+                                        is ConnectionState.PairingFailed -> state.reason
                                         else -> null
                                 }
 
@@ -376,8 +381,8 @@ private fun PingCard(isConnected: Boolean, lastLatency: Long, onPing: () -> Unit
 private fun ForgetConfirmation(onConfirm: () -> Unit, onCancel: () -> Unit) {
         Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = JibeSurfaceContainer),
-                shape = RoundedCornerShape(12.dp)
+                colors = CardDefaults.cardColors(containerColor = JibeSurfaceContainerHigh),
+                shape = RoundedCornerShape(18.dp)
         ) {
                 Column(
                         modifier = Modifier.padding(20.dp).fillMaxWidth(),
@@ -385,7 +390,10 @@ private fun ForgetConfirmation(onConfirm: () -> Unit, onCancel: () -> Unit) {
                 ) {
                         Text(
                                 text = "Forget this device?",
-                                style = MaterialTheme.typography.titleMedium,
+                                style =
+                                        MaterialTheme.typography.titleMedium.copy(
+                                                fontWeight = FontWeight.SemiBold
+                                        ),
                                 color = JibeOnSurface,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.fillMaxWidth()
@@ -394,7 +402,8 @@ private fun ForgetConfirmation(onConfirm: () -> Unit, onCancel: () -> Unit) {
                         Spacer(modifier = Modifier.height(8.dp))
 
                         Text(
-                                text = "You'll need to re-enter the PIN to reconnect.",
+                                text =
+                                        "This removes the saved certificate and returns Jibe to pairing mode.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = JibeOnSurfaceVariant,
                                 textAlign = TextAlign.Center,
@@ -419,8 +428,8 @@ private fun ForgetConfirmation(onConfirm: () -> Unit, onCancel: () -> Unit) {
                                         onClick = onConfirm,
                                         colors =
                                                 ButtonDefaults.buttonColors(
-                                                        containerColor = JibeError,
-                                                        contentColor = Color.White
+                                                        containerColor = JibeError.copy(alpha = 0.14f),
+                                                        contentColor = JibeError
                                                 ),
                                         shape = RoundedCornerShape(8.dp)
                                 ) { Text("Forget") }
