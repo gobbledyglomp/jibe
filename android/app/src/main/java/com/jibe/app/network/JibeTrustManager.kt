@@ -1,5 +1,6 @@
 package com.jibe.app.network
 
+import android.annotation.SuppressLint
 import java.security.MessageDigest
 import java.security.cert.CertificateException
 import java.security.cert.X509Certificate
@@ -26,13 +27,17 @@ import javax.net.ssl.X509TrustManager
  * (colon-separated hex). Null during first-time pairing, meaning we accept any cert and let the
  * caller extract the fingerprint.
  */
+@SuppressLint(
+        "CustomX509TrustManager",
+        "TrustAllX509TrustManager",
+)
 class JibeTrustManager(private val trustedFingerprint: String? = null) : X509TrustManager {
 
     var lastSeenFingerprint: String? = null
         private set
 
     override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {
-        // Not applicable — we are the client, not the server.
+        throw CertificateException("Client authentication is not used by Jibe")
     }
 
     /**
