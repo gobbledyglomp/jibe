@@ -71,12 +71,18 @@ import com.jibe.app.ui.theme.RobotoMono
 fun HomeScreen(repository: ConnectionRepository, onDeviceForgotten: () -> Unit) {
         val state by repository.state.collectAsState()
         var lastLatency by remember { mutableLongStateOf(-1L) }
+        var pingInFlight by remember { mutableStateOf(false) }
         var showForgetConfirm by remember { mutableStateOf(false) }
 
         LaunchedEffect(Unit) {
                 repository.pingResults.collect { result: PingResult ->
+                        pingInFlight = false
                         lastLatency = result.latencyMs
                 }
+        }
+
+        LaunchedEffect(state) {
+                if (state !is ConnectionState.Connected) pingInFlight = false
         }
 
         Scaffold(containerColor = MaterialTheme.colorScheme.surface) { innerPadding ->
@@ -107,8 +113,14 @@ fun HomeScreen(repository: ConnectionRepository, onDeviceForgotten: () -> Unit) 
 
                         PingCard(
                                 isConnected = state is ConnectionState.Connected,
+                                pingInFlight = pingInFlight,
                                 lastLatency = lastLatency,
-                                onPing = { repository.sendPing() }
+                                onPing = {
+                                        if (!pingInFlight) {
+                                                pingInFlight = true
+                                                repository.sendPing()
+                                        }
+                                }
                         )
 
                         Spacer(modifier = Modifier.weight(1f))
@@ -286,7 +298,12 @@ private fun ConnectionStatusCard(state: ConnectionState) {
 }
 
 @Composable
-private fun PingCard(isConnected: Boolean, lastLatency: Long, onPing: () -> Unit) {
+private fun PingCard(
+        isConnected: Boolean,
+        pingInFlight: Boolean,
+        lastLatency: Long,
+        onPing: () -> Unit
+) {
         Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = JibeSurfaceContainer),
@@ -321,7 +338,7 @@ private fun PingCard(isConnected: Boolean, lastLatency: Long, onPing: () -> Unit
 
                         OutlinedButton(
                                 onClick = onPing,
-                                enabled = isConnected,
+                                enabled = isConnected && !pingInFlight,
                                 shape = RoundedCornerShape(8.dp),
                                 colors =
                                         ButtonDefaults.outlinedButtonColors(
