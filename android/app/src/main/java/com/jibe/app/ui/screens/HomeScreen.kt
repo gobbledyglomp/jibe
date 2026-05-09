@@ -258,16 +258,15 @@ private fun ConnectionStatusCard(state: ConnectionState) {
                                 }
                         }
 
-                        val host =
+                        val connectionHost =
                                 when (state) {
                                         is ConnectionState.Connected -> state.host
                                         is ConnectionState.Connecting -> state.host
                                         is ConnectionState.Authenticating -> state.host
-                                        is ConnectionState.PairingFailed -> state.reason
                                         else -> null
                                 }
 
-                        if (host != null) {
+                        if (connectionHost != null) {
                                 Spacer(modifier = Modifier.height(12.dp))
 
                                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -278,7 +277,7 @@ private fun ConnectionStatusCard(state: ConnectionState) {
                                         )
                                         Spacer(modifier = Modifier.width(12.dp))
                                         Text(
-                                                text = host,
+                                                text = connectionHost,
                                                 style =
                                                         MaterialTheme.typography.labelSmall.copy(
                                                                 fontFamily = RobotoMono
@@ -286,6 +285,21 @@ private fun ConnectionStatusCard(state: ConnectionState) {
                                                 color = JibeOnSurface
                                         )
                                 }
+                        }
+
+                        if (state is ConnectionState.PairingFailed) {
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                        text = state.reason,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = JibeError.copy(alpha = 0.85f)
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                        text = state.guidance,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = JibeOnSurfaceVariant
+                                )
                         }
 
                         if (state is ConnectionState.Connected) {
