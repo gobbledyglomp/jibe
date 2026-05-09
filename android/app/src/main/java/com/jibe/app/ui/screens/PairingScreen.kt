@@ -4,7 +4,6 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -41,21 +40,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -69,6 +61,7 @@ import com.jibe.app.data.repository.ConnectionState
 import com.jibe.app.ui.theme.JibeError
 import com.jibe.app.ui.theme.JibeOnSurface
 import com.jibe.app.ui.theme.JibeOnSurfaceVariant
+import com.jibe.app.ui.components.JibeSpinner
 import com.jibe.app.ui.theme.JibePrimary
 import com.jibe.app.ui.theme.JibeSurfaceContainerHigh
 import com.jibe.app.ui.theme.RobotoMono
@@ -226,53 +219,10 @@ fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
         }
 }
 
-/** Arc spinner */
-@Composable
-private fun JibeSpinner(
-        modifier: Modifier = Modifier,
-        color: Color = JibePrimary,
-        strokeWidth: Float = 4f
-) {
-        var angle by remember { mutableFloatStateOf(0f) }
-
-        LaunchedEffect(Unit) {
-                val periodNs = 900_000_000L
-                val startNs = withFrameNanos { it }
-                while (true) {
-                        withFrameNanos { frameNs ->
-                                angle = ((frameNs - startNs) % periodNs).toFloat() / periodNs * 360f
-                        }
-                }
-        }
-
-        Canvas(modifier = modifier) {
-                val stroke = Stroke(width = strokeWidth, cap = StrokeCap.Round)
-                val inset = strokeWidth / 2
-                drawArc(
-                        color = color.copy(alpha = 0.15f),
-                        startAngle = 0f,
-                        sweepAngle = 360f,
-                        useCenter = false,
-                        topLeft = Offset(inset, inset),
-                        size = Size(size.width - strokeWidth, size.height - strokeWidth),
-                        style = stroke
-                )
-                drawArc(
-                        color = color,
-                        startAngle = angle,
-                        sweepAngle = 260f,
-                        useCenter = false,
-                        topLeft = Offset(inset, inset),
-                        size = Size(size.width - strokeWidth, size.height - strokeWidth),
-                        style = stroke
-                )
-        }
-}
-
 @Composable
 private fun DiscoveringIndicator() {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                JibeSpinner(modifier = Modifier.size(32.dp))
+                JibeSpinner(modifier = Modifier.size(32.dp), strokeWidth = 4f)
 
                 Spacer(modifier = Modifier.height(20.dp))
 
@@ -296,7 +246,7 @@ private fun DiscoveringIndicator() {
 @Composable
 private fun ConnectingIndicator(host: String) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                JibeSpinner(modifier = Modifier.size(32.dp))
+                JibeSpinner(modifier = Modifier.size(32.dp), strokeWidth = 4f)
 
                 Spacer(modifier = Modifier.height(20.dp))
 
