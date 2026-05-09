@@ -47,7 +47,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -58,6 +61,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jibe.app.R
 import com.jibe.app.data.repository.ConnectionRepository
 import com.jibe.app.data.repository.ConnectionState
 import com.jibe.app.data.repository.DEFAULT_DEVICE_DISPLAY_NAME
@@ -312,6 +316,19 @@ private fun PinInput(
                         for (i in 0 until 6) {
                                 val char = value.text.getOrNull(i)
                                 val isFilled = char != null
+                                val slotDescription =
+                                        if (char != null) {
+                                                stringResource(
+                                                        R.string.accessibility_pin_slot_filled,
+                                                        i + 1,
+                                                        char.toString()
+                                                )
+                                        } else {
+                                                stringResource(
+                                                        R.string.accessibility_pin_slot_empty,
+                                                        i + 1
+                                                )
+                                        }
 
                                 Box(
                                         modifier =
@@ -319,6 +336,9 @@ private fun PinInput(
                                                         .aspectRatio(
                                                                 1f
                                                         ) // keep boxes square regardless of weight
+                                                        .semantics(mergeDescendants = true) {
+                                                                contentDescription = slotDescription
+                                                        }
                                                         .clip(RoundedCornerShape(8.dp))
                                                         .background(
                                                                 if (isFilled)

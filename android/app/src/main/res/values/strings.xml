@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Jibe</string>
+    <string name="accessibility_pin_slot_empty">PIN entry position %1$d of 6, blank</string>
+    <string name="accessibility_pin_slot_filled">PIN entry position %1$d of 6: %2$s</string>
 </resources>
