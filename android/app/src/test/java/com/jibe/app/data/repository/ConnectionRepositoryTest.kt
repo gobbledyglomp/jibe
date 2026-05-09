@@ -118,6 +118,7 @@ class ConnectionRepositoryTest {
                                 scope = repoScope,
                                 deviceNameProvider = DeviceNameProvider { "TestPhone" },
                                 socketFactory = socketFactory,
+                                clipboardWriter = ClipboardWriter {},
                                 connectionDispatcher = testDispatcher,
                         )
         }

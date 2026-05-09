@@ -1,12 +1,17 @@
 package com.jibe.app.data.repository
 
+import android.content.ContentResolver
+import android.net.Uri
 import android.util.Log
 import com.jibe.app.data.local.DeviceCredentials
 import com.jibe.app.data.local.JibeDataStore
 import com.jibe.app.data.model.AuthRequest
 import com.jibe.app.data.model.AuthResponse
+import com.jibe.app.data.model.ClipboardSyncMessage
 import com.jibe.app.data.model.ErrorMessage
+import com.jibe.app.data.model.FileAckMessage
 import com.jibe.app.data.model.MessageType
+import com.jibe.app.data.model.NotificationMessage
 import com.jibe.app.data.model.PingMessage
 import com.jibe.app.network.DaemonTlsSocketFactory
 import com.jibe.app.network.DiscoveryState
@@ -83,6 +88,7 @@ class ConnectionRepository(
         private val scope: CoroutineScope,
         private val deviceNameProvider: DeviceNameProvider,
         private val socketFactory: DaemonTlsSocketFactory,
+        private val clipboardWriter: ClipboardWriter,
         private val connectionDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
     companion object {
@@ -115,6 +121,14 @@ class ConnectionRepository(
      * daemon accepts pairing again or rejects (no PIN sheet blink).
      */
     val pairingLockoutProbeUi: StateFlow<Boolean> = _pairingLockoutProbeUi.asStateFlow()
+
+    private val fileTransfers =
+            FileTransferRepository(scope, connectionDispatcher) { json ->
+                wsClient?.send(json)
+            }
+
+    /** Outbound file upload progress (Android → Linux). */
+    val transferProgress: StateFlow<TransferProgress?> = fileTransfers.progress
 
     private var wsClient: JibeWebSocketHandle? = null
     private var trustManager: JibeTrustManager? = null
@@ -257,6 +271,26 @@ class ConnectionRepository(
      *
      * The result arrives asynchronously via [pingResults] flow when the pong response comes back.
      */
+    /** Push plain text to the daemon clipboard sync channel (requires [ConnectionState.Connected]). */
+    fun sendClipboardSync(content: String) {
+        val client = wsClient ?: return
+        if (_state.value !is ConnectionState.Connected) return
+        client.send(MessageParser.toJson(ClipboardSyncMessage(content = content)))
+    }
+
+    /** Forward a mirrored notification payload to the daemon. */
+    fun sendNotification(msg: NotificationMessage) {
+        val client = wsClient ?: return
+        if (_state.value !is ConnectionState.Connected) return
+        client.send(MessageParser.toJson(msg))
+    }
+
+    /** Upload a content URI to the daemon into ``~/Downloads`` (requires connected). */
+    fun sendFile(uri: Uri, contentResolver: ContentResolver) {
+        if (_state.value !is ConnectionState.Connected) return
+        fileTransfers.sendFile(uri, contentResolver)
+    }
+
     fun sendPing() {
         val client = wsClient ?: return
         pingTimeoutJob?.cancel()
@@ -310,6 +344,7 @@ class ConnectionRepository(
         discovery.stopDiscovery()
         fastReconnectAttempts = 0
         pairingRetryCount = 0
+        fileTransfers.reset()
         _state.value = ConnectionState.Disconnected
     }
 
@@ -410,6 +445,14 @@ class ConnectionRepository(
                 pingSentAt = 0
                 Log.d(TAG, "Pong received, latency: ${latency}ms")
                 _pingResults.emit(PingResult(latency))
+            }
+            MessageType.CLIPBOARD_SYNC -> {
+                val sync = MessageParser.payloadAs<ClipboardSyncMessage>(message)
+                clipboardWriter.setPlainText(sync.content)
+            }
+            MessageType.FILE_ACK -> {
+                val ack = MessageParser.payloadAs<FileAckMessage>(message)
+                fileTransfers.onFileAck(ack)
             }
             MessageType.ERROR -> {
                 val error = MessageParser.payloadAs<ErrorMessage>(message)
@@ -529,6 +572,7 @@ class ConnectionRepository(
         }
 
         _pairSubmitInFlight.value = false
+        fileTransfers.reset()
 
         val stateAtDisconnect = _state.value
 
