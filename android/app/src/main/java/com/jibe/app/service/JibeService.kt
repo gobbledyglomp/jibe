@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import com.jibe.app.MainActivity
+import com.jibe.app.R
 import com.jibe.app.data.local.JibeDataStore
 import com.jibe.app.data.repository.ConnectionRepository
 import com.jibe.app.data.repository.ConnectionState
@@ -158,7 +159,7 @@ class JibeService : Service() {
                 }
 
         return Notification.Builder(this, CHANNEL_ID)
-                .setSmallIcon(android.R.drawable.stat_notify_sync)
+                .setSmallIcon(R.drawable.ic_stat_jibe)
                 .setContentTitle(title)
                 .setContentText(text)
                 .setContentIntent(pendingIntent)

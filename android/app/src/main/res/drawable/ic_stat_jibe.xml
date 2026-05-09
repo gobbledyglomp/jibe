@@ -1,40 +1,40 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp"
-    android:height="108dp"
+    android:width="24dp"
+    android:height="24dp"
     android:viewportWidth="500"
     android:viewportHeight="500">
-    <!-- Paths align with branding/logos/jibe-mark-white.svg; scale matches jibe-icon-filled.svg intent (smaller on launcher). -->
+    <!-- Status bar / notification: enlarged mark (see branding mark SVGs); white glyph on transparent. -->
     <group
         android:pivotX="250"
         android:pivotY="250"
-        android:scaleX="0.65"
-        android:scaleY="0.65">
+        android:scaleX="1.14"
+        android:scaleY="1.14">
         <path
             android:fillColor="#00000000"
             android:pathData="M 350 100 L 100 250 L 201.5 310.9"
-            android:strokeWidth="36"
+            android:strokeWidth="44"
             android:strokeColor="#FFFFFF"
             android:strokeLineCap="round"
             android:strokeLineJoin="round" />
         <path
             android:fillColor="#00000000"
             android:pathData="M 298.5 369.1 L 350 400"
-            android:strokeWidth="36"
+            android:strokeWidth="44"
             android:strokeColor="#FFFFFF"
             android:strokeLineCap="round"
             android:strokeLineJoin="round" />
         <path
             android:fillColor="#00000000"
             android:pathData="M 150 400 L 400 250 L 298.5 189.1"
-            android:strokeWidth="36"
+            android:strokeWidth="44"
             android:strokeColor="#FFFFFF"
             android:strokeLineCap="round"
             android:strokeLineJoin="round" />
         <path
             android:fillColor="#00000000"
             android:pathData="M 201.5 130.9 L 150 100"
-            android:strokeWidth="36"
+            android:strokeWidth="44"
             android:strokeColor="#FFFFFF"
             android:strokeLineCap="round"
             android:strokeLineJoin="round" />
