@@ -15,6 +15,7 @@ from jibe import __version__
 from jibe.core.api import (
     AuthError,
     InvalidMessageError,
+    JibeMessage,
     MessageType,
     format_error,
     parse_message,
@@ -22,8 +23,15 @@ from jibe.core.api import (
 from jibe.core.auth import AuthManager
 from jibe.core.config import AUTH_TIMEOUT_SECONDS, DEFAULT_PORT, WS_HEARTBEAT_SECONDS
 from jibe.core.db import JibeDatabase
+from jibe.handlers.clipboard import ClipboardMonitor, handle_clipboard_sync
+from jibe.handlers.notifications import handle_notification
 from jibe.handlers.ping import handle_ping
 from jibe.handlers.router import MessageRouter
+from jibe.handlers.transfer import (
+    handle_file_chunk,
+    handle_file_done,
+    handle_file_start,
+)
 from jibe.network.connection import ConnectionRegistry, ConnectionState, JibeConnection
 
 logger = logging.getLogger(__name__)
@@ -59,12 +67,14 @@ class JibeServer:
         self._ssl_context = ssl_context
         self._auth = AuthManager(db)
         self._registry = ConnectionRegistry()
+        self._clipboard_monitor = ClipboardMonitor(self._registry)
         self._router = MessageRouter()
         self._register_handlers()
         self._app = web.Application()
         self._setup_routes()
         self._runner: web.AppRunner | None = None
         self._site: web.TCPSite | None = None
+        self._clipboard_monitor_task: asyncio.Task[None] | None = None
 
     @property
     def auth(self) -> AuthManager:
@@ -78,7 +88,17 @@ class JibeServer:
 
     def _register_handlers(self) -> None:
         """Register message handlers with the router."""
+        monitor = self._clipboard_monitor
+
+        async def handle_clipboard(conn: JibeConnection, msg: JibeMessage) -> None:
+            await handle_clipboard_sync(conn, msg, monitor)
+
         self._router.register(MessageType.PING, handle_ping)
+        self._router.register(MessageType.CLIPBOARD_SYNC, handle_clipboard)
+        self._router.register(MessageType.FILE_START, handle_file_start)
+        self._router.register(MessageType.FILE_CHUNK, handle_file_chunk)
+        self._router.register(MessageType.FILE_DONE, handle_file_done)
+        self._router.register(MessageType.NOTIFICATION, handle_notification)
 
     def _setup_routes(self) -> None:
         """Configure the HTTP, WebSocket, and REST API routes."""
@@ -267,6 +287,8 @@ class JibeServer:
         )
         await self._site.start()
 
+        self._clipboard_monitor_task = asyncio.create_task(self._clipboard_monitor.run())
+
         protocol = "wss" if self._ssl_context else "ws"
         logger.info(
             "%s server listening on %s://0.0.0.0:%d/ws",
@@ -278,6 +300,13 @@ class JibeServer:
     async def stop(self) -> None:
         """Stop listening and cleanly disconnect all clients."""
         logger.info("Stopping server...")
+        if self._clipboard_monitor_task is not None:
+            self._clipboard_monitor_task.cancel()
+            try:
+                await self._clipboard_monitor_task
+            except asyncio.CancelledError:
+                pass
+            self._clipboard_monitor_task = None
         await self._registry.close_all()
         if self._runner:
             await self._runner.cleanup()
