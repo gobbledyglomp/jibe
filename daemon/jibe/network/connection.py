@@ -129,6 +129,25 @@ class ConnectionRegistry:
         """Return all currently authenticated connections."""
         return [conn for conn in self._connections.values() if conn.is_authenticated]
 
+    async def broadcast_json_to_authenticated(
+        self,
+        message_json: str,
+        *,
+        exclude: JibeConnection | None = None,
+    ) -> None:
+        """Send the same JSON text frame to every authenticated connection.
+
+        Optionally skips ``exclude`` (e.g. to avoid echoing a clipboard push back to its sender).
+
+        Args:
+            message_json: Full JSON string for one protocol message.
+            exclude: If set, this connection does not receive the message.
+        """
+        for conn in self.get_authenticated():
+            if exclude is not None and conn.id == exclude.id:
+                continue
+            await conn.send(message_json)
+
     @property
     def count(self) -> int:
         """Total number of active connections (including unauthenticated)."""
