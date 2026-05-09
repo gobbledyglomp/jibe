@@ -98,14 +98,15 @@ class JibeService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.i(TAG, "Service started")
 
+        val currentNotification = buildNotification(repository.state.value)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(
                     NOTIFICATION_ID,
-                    buildNotification(ConnectionState.Disconnected),
+                    currentNotification,
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
             )
         } else {
-            startForeground(NOTIFICATION_ID, buildNotification(ConnectionState.Disconnected))
+            startForeground(NOTIFICATION_ID, currentNotification)
         }
 
         if (!started) {

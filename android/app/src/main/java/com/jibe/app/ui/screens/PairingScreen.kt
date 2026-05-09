@@ -90,31 +90,23 @@ fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
         var pinValue by remember { mutableStateOf(TextFieldValue("")) }
         val focusRequester = remember { FocusRequester() }
         val keyboardController = LocalSoftwareKeyboardController.current
-        var previousConnectionState by remember { mutableStateOf<ConnectionState?>(null) }
+        var lastPairingHost by remember { mutableStateOf<String?>(null) }
 
         LaunchedEffect(state) {
-                when (val current = state) {
-                        is ConnectionState.Authenticating -> {
-                                val prev = previousConnectionState
-                                val enteredPinScreen =
-                                        prev !is ConnectionState.Authenticating ||
-                                                prev.host != current.host
-                                if (enteredPinScreen) {
+                val current = state
+                when {
+                        current is ConnectionState.Authenticating -> {
+                                if (current.host != lastPairingHost) {
+                                        // New daemon (or first connection) — start fresh
+                                        lastPairingHost = current.host
                                         pinValue = TextFieldValue("")
-                                        focusRequester.requestFocus()
-                                        keyboardController?.show()
                                 }
-                                previousConnectionState = current
+                                // Always restore focus + keyboard: the Connecting state between
+                                // reconnects may have dismissed them
+                                focusRequester.requestFocus()
+                                keyboardController?.show()
                         }
-                        else -> {
-                                previousConnectionState = current
-                        }
-                }
-        }
-
-        LaunchedEffect(state) {
-                if (state is ConnectionState.Connected) {
-                        onPaired()
+                        current is ConnectionState.Connected -> onPaired()
                 }
         }
 

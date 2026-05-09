@@ -283,7 +283,7 @@ class ConnectionRepositoryTest {
                 }
 
         @Test
-        fun `auth response rejected during pairing stays Authenticating with hint`() =
+        fun `auth response rejected during pairing stays Authenticating with attempt hint`() =
                 testScope.runTest {
                         repository.startDiscovery()
                         discoveryStateFlow.value =
@@ -298,6 +298,7 @@ class ConnectionRepositoryTest {
                                         awaitItem()
                                 )
 
+                                repository.pairWithPin(pin = "111111", deviceName = "TestPhone")
                                 val authMsg =
                                         AuthResponse(
                                                 type = MessageType.AUTH_RESPONSE.value,
@@ -315,10 +316,11 @@ class ConnectionRepositoryTest {
                                 recordingSocket.emit(WebSocketEvent.MessageReceived(jibeMessage))
                                 advanceUntilIdle()
 
+                                // After 1st failure: 4 remaining (MAX_PAIRING_PIN_FAILURES=5 - 1)
                                 assertEquals(
                                         ConnectionState.Authenticating(
                                                 "10.0.0.5",
-                                                hint = "Invalid PIN"
+                                                hint = "Wrong PIN — 4 attempts remaining"
                                         ),
                                         awaitItem()
                                 )
@@ -343,12 +345,11 @@ class ConnectionRepositoryTest {
 
                         repeat(4) { attempt ->
                                 repository.pairWithPin(pin = "111111", deviceName = "TestPhone")
-                                val reason = "Invalid PIN (${attempt + 1})"
                                 val authMsg =
                                         AuthResponse(
                                                 type = MessageType.AUTH_RESPONSE.value,
                                                 accepted = false,
-                                                reason = reason
+                                                reason = "Invalid PIN"
                                         )
                                 recordingSocket.emit(
                                         WebSocketEvent.MessageReceived(
@@ -361,10 +362,12 @@ class ConnectionRepositoryTest {
                                         )
                                 )
                                 advanceUntilIdle()
+                                val remaining = 5 - (attempt + 1)
                                 assertEquals(
                                         ConnectionState.Authenticating(
                                                 "10.0.0.5",
-                                                hint = reason
+                                                hint =
+                                                        "Wrong PIN — $remaining ${if (remaining == 1) "attempt" else "attempts"} remaining"
                                         ),
                                         repository.state.value
                                 )
@@ -520,7 +523,7 @@ class ConnectionRepositoryTest {
                 }
 
         @Test
-        fun `disconnection during pairing without credentials restarts discovery after backoff`() =
+        fun `disconnection while Connecting during pairing restarts discovery after backoff`() =
                 testScope.runTest {
                         credentialsFlow.value = null
 
@@ -538,13 +541,43 @@ class ConnectionRepositoryTest {
                                 recordingSocket.emit(WebSocketEvent.Error(Exception("Timeout")))
                                 advanceUntilIdle()
 
-                                advanceTimeBy(1_000)
+                                advanceTimeBy(1_500)
                                 advanceUntilIdle()
 
                                 assertEquals(ConnectionState.Discovering, awaitItem())
 
                                 cancelAndIgnoreRemainingEvents()
                         }
+                }
+
+        @Test
+        fun `disconnection while Authenticating reconnects directly without going through Discovering`() =
+                testScope.runTest {
+                        credentialsFlow.value = null
+
+                        repository.startDiscovery()
+                        discoveryStateFlow.value =
+                                DiscoveryState.Found(DiscoveredDaemon("Jibe", "10.0.0.5", 8765))
+                        advanceUntilIdle()
+                        recordingSocket.emit(WebSocketEvent.Connected)
+                        advanceUntilIdle()
+
+                        assertEquals(
+                                ConnectionState.Authenticating("10.0.0.5"),
+                                repository.state.value
+                        )
+
+                        recordingSocket.emit(WebSocketEvent.Disconnected(1001, "daemon timeout"))
+                        advanceUntilIdle()
+
+                        // Should jump straight to Connecting, not Discovering
+                        advanceTimeBy(1_500)
+                        advanceUntilIdle()
+
+                        assertEquals(
+                                ConnectionState.Connecting("10.0.0.5", 8765),
+                                repository.state.value
+                        )
                 }
 
         @Test

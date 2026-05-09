@@ -102,6 +102,8 @@ class ConnectionRepository(
                 "Restart the daemon to generate a fresh PIN, then tap Retry."
         private const val MAX_PAIRING_PIN_FAILURES = 5
         private const val PAIRING_RETRY_SETTLE_MS = 120L
+        private const val PAIRING_DIRECT_RECONNECT_MAX = 3
+        private const val PAIRING_RECONNECT_BASE_MS = 1_500L
     }
 
     private val _state = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
@@ -438,10 +440,9 @@ class ConnectionRepository(
                 if (pairingPinSubmitted) {
                     pairingPinSubmitted = false
                     pairingWrongPinAttempts++
-                    val attemptNo = pairingWrongPinAttempts
                     Log.w(
                             TAG,
-                            "Pairing rejected after PIN entry ($attemptNo/$MAX_PAIRING_PIN_FAILURES): ${response.reason}"
+                            "Pairing rejected after PIN entry ($pairingWrongPinAttempts/$MAX_PAIRING_PIN_FAILURES): ${response.reason}"
                     )
                     if (pairingWrongPinAttempts >= MAX_PAIRING_PIN_FAILURES) {
                         pairingWrongPinAttempts = 0
@@ -451,7 +452,10 @@ class ConnectionRepository(
                                         guidance = PAIRING_FAILURE_GUIDANCE
                                 )
                     } else {
-                        _state.value = ConnectionState.Authenticating(host, hint = response.reason)
+                        val remaining = MAX_PAIRING_PIN_FAILURES - pairingWrongPinAttempts
+                        val hint =
+                                "Wrong PIN — $remaining ${if (remaining == 1) "attempt" else "attempts"} remaining"
+                        _state.value = ConnectionState.Authenticating(host, hint = hint)
                     }
                 } else {
                     Log.d(
@@ -478,38 +482,65 @@ class ConnectionRepository(
                     val credentials = dataStore.credentials.first()
 
                     if (credentials == null) {
-                        if (stateAtDisconnect is ConnectionState.PairingFailed) {
-                            _state.value = stateAtDisconnect
-                            return@launch
-                        }
-
                         fastReconnectAttempts = 0
 
-                        val shouldRecover =
-                                stateAtDisconnect is ConnectionState.Connecting ||
-                                        stateAtDisconnect is ConnectionState.Authenticating ||
-                                        stateAtDisconnect is ConnectionState.Failed
-
-                        if (shouldRecover) {
-                            if (stateAtDisconnect is ConnectionState.Connecting) {
+                        when (stateAtDisconnect) {
+                            is ConnectionState.PairingFailed -> {
+                                _state.value = stateAtDisconnect
+                            }
+                            is ConnectionState.Authenticating -> {
+                                // Reconnect directly to same host so the UI never cycles through
+                                // Discovering and the keyboard/PIN stays visible.
+                                val host = currentHost
+                                val port = currentPort
                                 pairingRetryCount++
                                 val backoffMs =
-                                        min(1_000L * pairingRetryCount, RECONNECT_MAX_DELAY_MS)
+                                        min(
+                                                PAIRING_RECONNECT_BASE_MS * pairingRetryCount,
+                                                RECONNECT_MAX_DELAY_MS
+                                        )
+                                Log.d(
+                                        TAG,
+                                        "Pairing reconnect #$pairingRetryCount — waiting ${backoffMs}ms"
+                                )
+                                if (host != null &&
+                                                port != null &&
+                                                pairingRetryCount <= PAIRING_DIRECT_RECONNECT_MAX
+                                ) {
+                                    _state.value = ConnectionState.Connecting(host, port)
+                                    delay(backoffMs)
+                                    connectToDaemon(host, port, certFingerprint = null)
+                                } else {
+                                    delay(backoffMs)
+                                    Log.i(
+                                            TAG,
+                                            "Direct reconnects exhausted — falling back to discovery"
+                                    )
+                                    startDiscovery()
+                                }
+                            }
+                            is ConnectionState.Connecting -> {
+                                pairingRetryCount++
+                                val backoffMs =
+                                        min(
+                                                PAIRING_RECONNECT_BASE_MS * pairingRetryCount,
+                                                RECONNECT_MAX_DELAY_MS
+                                        )
                                 Log.d(
                                         TAG,
                                         "Stale mDNS bounce #$pairingRetryCount — waiting ${backoffMs}ms"
                                 )
                                 delay(backoffMs)
-                            } else if (stateAtDisconnect is ConnectionState.Failed) {
+                                startDiscovery()
+                            }
+                            is ConnectionState.Failed -> {
                                 Log.i(TAG, "Rate-limited or failed — recovering in 3s")
                                 delay(3_000L)
-                            } else {
-                                pairingRetryCount = 0
+                                startDiscovery()
                             }
-                            Log.i(TAG, "Restarting discovery after disconnect during pairing")
-                            startDiscovery()
-                        } else {
-                            _state.value = ConnectionState.Disconnected
+                            else -> {
+                                _state.value = ConnectionState.Disconnected
+                            }
                         }
                         return@launch
                     }
