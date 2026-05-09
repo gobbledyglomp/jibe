@@ -398,7 +398,7 @@ class ConnectionRepositoryTest {
                                 ConnectionState.PairingFailed(
                                         reason = "Invalid PIN (5)",
                                         guidance =
-                                                "Restart the daemon to generate a fresh PIN, then tap Retry."
+                                                "Restart the daemon to reset pairing, then tap Retry."
                                 ),
                                 repository.state.value
                         )
@@ -443,7 +443,7 @@ class ConnectionRepositoryTest {
                                         ConnectionState.PairingFailed(
                                                 reason = "Too many failed attempts",
                                                 guidance =
-                                                        "Restart the daemon to generate a fresh PIN, then tap Retry."
+                                                        "Restart the daemon to reset pairing, then tap Retry."
                                         ),
                                         awaitItem()
                                 )
@@ -627,7 +627,7 @@ class ConnectionRepositoryTest {
                                         ConnectionState.PairingFailed(
                                                 reason = "Too many failed attempts",
                                                 guidance =
-                                                        "Restart the daemon to generate a fresh PIN, then tap Retry."
+                                                        "Restart the daemon to reset pairing, then tap Retry."
                                         ),
                                         awaitItem()
                                 )
@@ -680,7 +680,7 @@ class ConnectionRepositoryTest {
                                 ConnectionState.PairingFailed(
                                         reason = "Too many failed attempts",
                                         guidance =
-                                                "Restart the daemon to generate a fresh PIN, then tap Retry."
+                                                "Restart the daemon to reset pairing, then tap Retry."
                                 )
                         assertEquals(failure, repository.state.value)
 

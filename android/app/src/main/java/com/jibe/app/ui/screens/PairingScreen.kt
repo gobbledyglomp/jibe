@@ -75,6 +75,38 @@ import com.jibe.app.ui.theme.JibePrimary
 import com.jibe.app.ui.theme.JibeSurfaceContainerHigh
 import com.jibe.app.ui.theme.RobotoMono
 
+private sealed class PairingMotionTarget {
+    data object Searching : PairingMotionTarget()
+
+    data class Connecting(val host: String) : PairingMotionTarget()
+
+    data class PinEntry(val host: String, val hint: String?) : PairingMotionTarget()
+
+    data object ConnectedFlash : PairingMotionTarget()
+
+    data class FailedCard(val reason: String) : PairingMotionTarget()
+
+    data class PairingFailedCard(val reason: String, val guidance: String) : PairingMotionTarget()
+}
+
+private fun pairingMotionTarget(
+        state: ConnectionState,
+        lockoutProbeUi: Boolean
+): PairingMotionTarget =
+        when (state) {
+                ConnectionState.Disconnected,
+                ConnectionState.Discovering -> PairingMotionTarget.Searching
+                is ConnectionState.Connecting ->
+                        if (lockoutProbeUi) PairingMotionTarget.Searching
+                        else PairingMotionTarget.Connecting(state.host)
+                is ConnectionState.Authenticating ->
+                        PairingMotionTarget.PinEntry(state.host, state.hint)
+                is ConnectionState.Connected -> PairingMotionTarget.ConnectedFlash
+                is ConnectionState.Failed -> PairingMotionTarget.FailedCard(state.reason)
+                is ConnectionState.PairingFailed ->
+                        PairingMotionTarget.PairingFailedCard(state.reason, state.guidance)
+        }
+
 /**
  * First-time pairing screen.
  *
@@ -85,6 +117,7 @@ import com.jibe.app.ui.theme.RobotoMono
 fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
         val state by repository.state.collectAsState()
         val pairSubmitInFlight by repository.pairSubmitInFlight.collectAsState()
+        val pairingLockoutProbeUi by repository.pairingLockoutProbeUi.collectAsState()
         var pinValue by remember { mutableStateOf(TextFieldValue("")) }
         val focusRequester = remember { FocusRequester() }
         val keyboardController = LocalSoftwareKeyboardController.current
@@ -146,28 +179,26 @@ fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
                         Spacer(modifier = Modifier.height(48.dp))
 
                         AnimatedContent(
-                                targetState = state,
+                                targetState =
+                                        pairingMotionTarget(state, pairingLockoutProbeUi),
                                 transitionSpec = { fadeIn() togetherWith fadeOut() },
                                 label = "pairing_state"
-                        ) { currentState ->
+                        ) { motion ->
                                 Column(
                                         horizontalAlignment = Alignment.CenterHorizontally,
                                         modifier = Modifier.fillMaxWidth()
                                 ) {
-                                        when (currentState) {
-                                                is ConnectionState.Disconnected,
-                                                is ConnectionState.Discovering -> {
+                                        when (motion) {
+                                                PairingMotionTarget.Searching -> {
                                                         DiscoveringIndicator()
                                                 }
-                                                is ConnectionState.Connecting -> {
-                                                        ConnectingIndicator(
-                                                                host = currentState.host
-                                                        )
+                                                is PairingMotionTarget.Connecting -> {
+                                                        ConnectingIndicator(host = motion.host)
                                                 }
-                                                is ConnectionState.Authenticating -> {
+                                                is PairingMotionTarget.PinEntry -> {
                                                         PinInput(
                                                                 value = pinValue,
-                                                                hint = currentState.hint,
+                                                                hint = motion.hint,
                                                                 submitInFlight = pairSubmitInFlight,
                                                                 onValueChange = { newValue ->
                                                                         if (newValue.text.length <=
@@ -185,14 +216,15 @@ fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
                                                                                         6
                                                                         ) {
                                                                                 repository.pairWithPin(
-                                                                                pin = pinValue.text,
-                                                                                deviceName =
-                                                                                        Build.MODEL
-                                                                                                ?.takeIf {
-                                                                                                        it.isNotBlank()
-                                                                                                }
-                                                                                                ?: DEFAULT_DEVICE_DISPLAY_NAME
-                                                                        )
+                                                                                        pin =
+                                                                                                pinValue.text,
+                                                                                        deviceName =
+                                                                                                Build.MODEL
+                                                                                                        ?.takeIf {
+                                                                                                                it.isNotBlank()
+                                                                                                        }
+                                                                                                        ?: DEFAULT_DEVICE_DISPLAY_NAME
+                                                                                )
                                                                         }
                                                                 },
                                                                 focusRequester = focusRequester,
@@ -200,7 +232,7 @@ fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
                                                                         keyboardController
                                                         )
                                                 }
-                                                is ConnectionState.Connected -> {
+                                                PairingMotionTarget.ConnectedFlash -> {
                                                         Text(
                                                                 text = "Connected",
                                                                 style =
@@ -209,9 +241,9 @@ fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
                                                                 color = JibePrimary
                                                         )
                                                 }
-                                                is ConnectionState.Failed -> {
+                                                is PairingMotionTarget.FailedCard -> {
                                                         FailedIndicator(
-                                                                reason = currentState.reason,
+                                                                reason = motion.reason,
                                                                 onRetry = {
                                                                         pinValue =
                                                                                 TextFieldValue("")
@@ -219,10 +251,10 @@ fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
                                                                 }
                                                         )
                                                 }
-                                                is ConnectionState.PairingFailed -> {
+                                                is PairingMotionTarget.PairingFailedCard -> {
                                                         PairingFailedIndicator(
-                                                                reason = currentState.reason,
-                                                                guidance = currentState.guidance,
+                                                                reason = motion.reason,
+                                                                guidance = motion.guidance,
                                                                 onRetry = {
                                                                         pinValue =
                                                                                 TextFieldValue("")

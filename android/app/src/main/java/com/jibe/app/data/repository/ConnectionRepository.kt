@@ -92,7 +92,7 @@ class ConnectionRepository(
         private const val RECONNECT_MAX_DELAY_MS = 60_000L
         private const val PING_TIMEOUT_MS = 5_000L
         private const val PAIRING_FAILURE_GUIDANCE =
-                "Restart the daemon to generate a fresh PIN, then tap Retry."
+                "Restart the daemon to reset pairing, then tap Retry."
         private const val MAX_PAIRING_PIN_FAILURES = 5
         private const val PAIRING_RETRY_SETTLE_MS = 120L
         private const val PAIRING_DIRECT_RECONNECT_MAX = 3
@@ -108,6 +108,13 @@ class ConnectionRepository(
     private val _pairSubmitInFlight = MutableStateFlow(false)
     /** True after `pairWithPin` until auth outcome or disconnect — drives pairing UI progress. */
     val pairSubmitInFlight: StateFlow<Boolean> = _pairSubmitInFlight.asStateFlow()
+
+    private val _pairingLockoutProbeUi = MutableStateFlow(false)
+    /**
+     * True during PIN-lockout Retry: keep discovery-style loading through NSD + TLS until the
+     * daemon accepts pairing again or rejects (no PIN sheet blink).
+     */
+    val pairingLockoutProbeUi: StateFlow<Boolean> = _pairingLockoutProbeUi.asStateFlow()
 
     private var wsClient: JibeWebSocketHandle? = null
     private var trustManager: JibeTrustManager? = null
@@ -201,6 +208,10 @@ class ConnectionRepository(
             _pairSubmitInFlight.value = false
             if (afterPairingLockout) {
                 expectPairingFailureOnEarlyDisconnect = true
+                _pairingLockoutProbeUi.value = true
+            } else {
+                expectPairingFailureOnEarlyDisconnect = false
+                _pairingLockoutProbeUi.value = false
             }
             reconnectJob?.cancel()
             reconnectJob = null
@@ -292,6 +303,7 @@ class ConnectionRepository(
         expectPairingFailureOnEarlyDisconnect = false
         skipNextDisconnectedHandling = false
         _pairSubmitInFlight.value = false
+        _pairingLockoutProbeUi.value = false
         wsClient?.disconnect()
         wsClient = null
         trustManager = null
@@ -412,6 +424,8 @@ class ConnectionRepository(
                         if (expectPairingFailureOnEarlyDisconnect) {
                             transitionToPairingFailed(reason = error.message)
                         } else {
+                            expectPairingFailureOnEarlyDisconnect = false
+                            _pairingLockoutProbeUi.value = false
                             _state.value =
                                     ConnectionState.Authenticating(
                                             currentHost ?: "unknown",
@@ -454,6 +468,7 @@ class ConnectionRepository(
             pairingPinSubmitted = false
             pairingWrongPinAttempts = 0
             expectPairingFailureOnEarlyDisconnect = false
+            _pairingLockoutProbeUi.value = false
             _state.value = ConnectionState.Connected(host, port, deviceId)
             Log.i(TAG, "Authenticated as device $deviceId")
         } else {
@@ -471,6 +486,8 @@ class ConnectionRepository(
                         pairingWrongPinAttempts = 0
                         transitionToPairingFailed(reason = response.reason)
                     } else {
+                        expectPairingFailureOnEarlyDisconnect = false
+                        _pairingLockoutProbeUi.value = false
                         val remaining = MAX_PAIRING_PIN_FAILURES - pairingWrongPinAttempts
                         val hint =
                                 "$WRONG_PAIRING_PIN_HINT_PREFIX — $remaining ${if (remaining == 1) "attempt" else "attempts"} remaining"
@@ -481,6 +498,8 @@ class ConnectionRepository(
                             TAG,
                             "Probe rejected (pairing not yet active or just started): ${response.reason}"
                     )
+                    expectPairingFailureOnEarlyDisconnect = false
+                    _pairingLockoutProbeUi.value = false
                     _state.value = ConnectionState.Authenticating(host, hint = response.reason)
                 }
             } else {
@@ -495,6 +514,7 @@ class ConnectionRepository(
             guidance: String = PAIRING_FAILURE_GUIDANCE
     ) {
         _pairSubmitInFlight.value = false
+        _pairingLockoutProbeUi.value = false
         lastPairingFailureReason = reason
         lastPairingFailureGuidance = guidance
         expectPairingFailureOnEarlyDisconnect = false
