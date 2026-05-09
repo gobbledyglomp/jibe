@@ -1,5 +1,12 @@
 package com.jibe.app.ui.screens
 
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import android.provider.Settings
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.fadeIn
@@ -23,6 +30,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -39,6 +47,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -47,6 +56,7 @@ import androidx.compose.ui.unit.sp
 import com.jibe.app.data.repository.ConnectionRepository
 import com.jibe.app.data.repository.ConnectionState
 import com.jibe.app.data.repository.PingResult
+import com.jibe.app.data.repository.TransferProgress
 import com.jibe.app.ui.components.JibeSpinner
 import com.jibe.app.ui.theme.JibeError
 import com.jibe.app.ui.theme.JibeOnSurface
@@ -65,11 +75,24 @@ import com.jibe.app.ui.theme.RobotoMono
  * - Connection status (live dot + text)
  * - Daemon info (host, device ID)
  * - Ping button with round-trip latency display
+ * - Clipboard sync, chunked file send, notification-mirroring hint
  * - "Forget device" destructive action
  */
 @Composable
 fun HomeScreen(repository: ConnectionRepository, onDeviceForgotten: () -> Unit) {
         val state by repository.state.collectAsState()
+        val transferProgress by repository.transferProgress.collectAsState()
+        val context = LocalContext.current
+        val pickDocument =
+                rememberLauncherForActivityResult(
+                        contract = ActivityResultContracts.OpenDocument(),
+                        onResult = { uri ->
+                                if (uri != null) {
+                                        repository.sendFile(uri, context.contentResolver)
+                                }
+                        }
+                )
+
         var lastLatency by remember { mutableLongStateOf(-1L) }
         var pingInFlight by remember { mutableStateOf(false) }
         var showForgetConfirm by remember { mutableStateOf(false) }
@@ -122,6 +145,27 @@ fun HomeScreen(repository: ConnectionRepository, onDeviceForgotten: () -> Unit) 
                                         }
                                 }
                         )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        ClipboardCard(
+                                isConnected = state is ConnectionState.Connected,
+                                repository = repository
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        FileTransferCard(
+                                isConnected = state is ConnectionState.Connected,
+                                transferProgress = transferProgress,
+                                onPickClick = {
+                                        pickDocument.launch(arrayOf("*/*"))
+                                }
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        NotificationPermissionCard()
 
                         Spacer(modifier = Modifier.weight(1f))
 
@@ -347,6 +391,217 @@ private fun PingCard(
                         ) { Text(text = "Send", style = MaterialTheme.typography.labelLarge) }
                 }
         }
+}
+
+@Composable
+private fun ClipboardCard(isConnected: Boolean, repository: ConnectionRepository) {
+        val context = LocalContext.current
+        Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = JibeSurfaceContainer),
+                shape = RoundedCornerShape(12.dp)
+        ) {
+                Row(
+                        modifier = Modifier.padding(20.dp).fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                        text = "Clipboard",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = JibeOnSurface
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                        text = "Send current clipboard text to the daemon",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = JibeOnSurfaceVariant
+                                )
+                        }
+
+                        Button(
+                                onClick = {
+                                        val cm =
+                                                context.getSystemService(Context.CLIPBOARD_SERVICE) as
+                                                        ClipboardManager
+                                        val clip = cm.primaryClip
+                                        val text =
+                                                clip?.getItemAt(0)?.coerceToText(context)?.toString()
+                                        if (text.isNullOrBlank()) {
+                                                Toast.makeText(context, "Clipboard empty", Toast.LENGTH_SHORT)
+                                                        .show()
+                                        } else {
+                                                repository.sendClipboardSync(text)
+                                                Toast.makeText(context, "Sent", Toast.LENGTH_SHORT).show()
+                                        }
+                                },
+                                enabled = isConnected,
+                                shape = RoundedCornerShape(8.dp),
+                                colors =
+                                        ButtonDefaults.buttonColors(
+                                                containerColor = JibePrimary.copy(alpha = 0.12f),
+                                                contentColor = JibePrimary
+                                        )
+                        ) { Text(text = "Sync", style = MaterialTheme.typography.labelLarge) }
+                }
+        }
+}
+
+@Composable
+private fun FileTransferCard(
+        isConnected: Boolean,
+        transferProgress: TransferProgress?,
+        onPickClick: () -> Unit
+) {
+        val busy =
+                transferProgress?.let { !it.isComplete && it.error == null } == true
+
+        Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = JibeSurfaceContainer),
+                shape = RoundedCornerShape(12.dp)
+        ) {
+                Column(modifier = Modifier.padding(20.dp).fillMaxWidth()) {
+                        Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                                text = "Send file",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                color = JibeOnSurface
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                                text = "Chunked upload to ~/Downloads on the daemon",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = JibeOnSurfaceVariant
+                                        )
+                                }
+
+                                Button(
+                                        onClick = onPickClick,
+                                        enabled = isConnected && !busy,
+                                        shape = RoundedCornerShape(8.dp),
+                                        colors =
+                                                ButtonDefaults.buttonColors(
+                                                        containerColor = JibePrimary.copy(alpha = 0.12f),
+                                                        contentColor = JibePrimary
+                                                )
+                                ) { Text(text = "Pick", style = MaterialTheme.typography.labelLarge) }
+                        }
+
+                        if (transferProgress != null) {
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                val awaitingAck =
+                                        transferProgress.bytesSent >= transferProgress.totalBytes &&
+                                                !transferProgress.isComplete &&
+                                                transferProgress.error == null
+
+                                if (transferProgress.error != null) {
+                                        Text(
+                                                text = transferProgress.error,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = JibeError.copy(alpha = 0.9f)
+                                        )
+                                } else if (transferProgress.isComplete) {
+                                        Text(
+                                                text = "Saved on daemon",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = JibeSuccess.copy(alpha = 0.95f)
+                                        )
+                                } else if (awaitingAck) {
+                                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Text(
+                                                text = "Waiting for daemon…",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = JibeOnSurfaceVariant
+                                        )
+                                } else if (transferProgress.totalBytes > 0) {
+                                        val p =
+                                                transferProgress.bytesSent.toFloat() /
+                                                        transferProgress.totalBytes.toFloat()
+                                        LinearProgressIndicator(
+                                                progress = { p },
+                                                modifier = Modifier.fillMaxWidth(),
+                                        )
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Text(
+                                                text =
+                                                        "${formatKb(transferProgress.bytesSent)} / ${formatKb(transferProgress.totalBytes)} · ${transferProgress.filename}",
+                                                style =
+                                                        MaterialTheme.typography.labelSmall.copy(
+                                                                fontFamily = RobotoMono
+                                                        ),
+                                                color = JibeOnSurfaceVariant
+                                        )
+                                } else {
+                                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                                }
+                        }
+                }
+        }
+}
+
+@Composable
+private fun NotificationPermissionCard() {
+        val context = LocalContext.current
+        if (notificationAccessEnabled(context)) return
+
+        Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = JibeSurfaceContainerHigh),
+                shape = RoundedCornerShape(12.dp)
+        ) {
+                Column(modifier = Modifier.padding(20.dp).fillMaxWidth()) {
+                        Text(
+                                text = "Notification mirroring",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = JibeOnSurface
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                                text =
+                                        "Forward Android notifications to the Linux desktop. Grant notification access for Jibe.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = JibeOnSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        OutlinedButton(
+                                onClick = {
+                                        context.startActivity(
+                                                Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                                        )
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                colors =
+                                        ButtonDefaults.outlinedButtonColors(
+                                                contentColor = JibePrimary
+                                        )
+                        ) { Text(text = "Open notification settings") }
+                }
+        }
+}
+
+private fun notificationAccessEnabled(context: Context): Boolean {
+        val flat =
+                Settings.Secure.getString(
+                        context.contentResolver,
+                        "enabled_notification_listeners"
+                )
+                        ?: return false
+        return flat.contains(context.packageName)
+}
+
+private fun formatKb(bytes: Long): String {
+        if (bytes < 1024) return "$bytes B"
+        val kb = bytes / 1024.0
+        return if (kb < 1024) "%.1f KB".format(kb) else "%.1f MB".format(kb / 1024.0)
 }
 
 @Composable
