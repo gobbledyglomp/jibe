@@ -114,6 +114,19 @@ class ConnectionRepository(
     private var currentHost: String? = null
     private var currentPort: Int? = null
 
+    private var lastPairingFailureReason: String = ""
+    private var lastPairingFailureGuidance: String = PAIRING_FAILURE_GUIDANCE
+
+    /**
+     * After lockout, user may tap Retry before restarting the daemon; the next pairing attempt then
+     * fails immediately. When true, the first disconnect during Connecting/Authenticating (before a
+     * new PIN is sent) restores [ConnectionState.PairingFailed] instead of auto-reconnect loops.
+     */
+    private var expectPairingFailureOnEarlyDisconnect = false
+
+    /** Suppresses one [handleDisconnection] invocation from intentional teardown (see snap-back). */
+    private var skipNextDisconnectedHandling = false
+
     /**
      * Start the connection flow.
      *
@@ -173,8 +186,11 @@ class ConnectionRepository(
      * jobs, reset PIN-attempt state, then scan again. Avoids overlapping [startDiscovery] with
      * stale reconnect work (which caused Discovering ↔ PIN flicker).
      */
-    fun retryPairing() {
+    fun retryPairing(afterPairingLockout: Boolean = false) {
         scope.launch {
+            if (afterPairingLockout) {
+                expectPairingFailureOnEarlyDisconnect = true
+            }
             reconnectJob?.cancel()
             reconnectJob = null
             discoveryJob?.cancel()
@@ -261,6 +277,8 @@ class ConnectionRepository(
         eventCollectorJob = null
         pairingPinSubmitted = false
         pairingWrongPinAttempts = 0
+        expectPairingFailureOnEarlyDisconnect = false
+        skipNextDisconnectedHandling = false
         wsClient?.disconnect()
         wsClient = null
         trustManager = null
@@ -368,11 +386,7 @@ class ConnectionRepository(
                     if (credentials == null && pairingPinSubmitted) {
                         pairingPinSubmitted = false
                         pairingWrongPinAttempts = 0
-                        _state.value =
-                                ConnectionState.PairingFailed(
-                                        reason = error.message,
-                                        guidance = PAIRING_FAILURE_GUIDANCE
-                                )
+                        transitionToPairingFailed(reason = error.message)
                     } else if (credentials == null) {
                         _state.value =
                                 ConnectionState.Authenticating(
@@ -412,6 +426,7 @@ class ConnectionRepository(
             fastReconnectAttempts = 0
             pairingPinSubmitted = false
             pairingWrongPinAttempts = 0
+            expectPairingFailureOnEarlyDisconnect = false
             _state.value = ConnectionState.Connected(host, port, deviceId)
             Log.i(TAG, "Authenticated as device $deviceId")
         } else {
@@ -427,11 +442,7 @@ class ConnectionRepository(
                     )
                     if (pairingWrongPinAttempts >= MAX_PAIRING_PIN_FAILURES) {
                         pairingWrongPinAttempts = 0
-                        _state.value =
-                                ConnectionState.PairingFailed(
-                                        reason = response.reason,
-                                        guidance = PAIRING_FAILURE_GUIDANCE
-                                )
+                        transitionToPairingFailed(reason = response.reason)
                     } else {
                         val remaining = MAX_PAIRING_PIN_FAILURES - pairingWrongPinAttempts
                         val hint =
@@ -452,14 +463,58 @@ class ConnectionRepository(
         }
     }
 
+    private fun transitionToPairingFailed(
+            reason: String,
+            guidance: String = PAIRING_FAILURE_GUIDANCE
+    ) {
+        lastPairingFailureReason = reason
+        lastPairingFailureGuidance = guidance
+        expectPairingFailureOnEarlyDisconnect = false
+        _state.value = ConnectionState.PairingFailed(reason, guidance)
+    }
+
     /** Handle disconnection using a two-phase reconnection strategy. */
     private fun handleDisconnection() {
+        if (skipNextDisconnectedHandling) {
+            skipNextDisconnectedHandling = false
+            return
+        }
+
         val stateAtDisconnect = _state.value
 
         reconnectJob?.cancel()
         reconnectJob =
                 scope.launch {
                     val credentials = dataStore.credentials.first()
+
+                    if (credentials == null &&
+                                    expectPairingFailureOnEarlyDisconnect &&
+                                    !pairingPinSubmitted &&
+                                    (stateAtDisconnect is ConnectionState.Authenticating ||
+                                            stateAtDisconnect is ConnectionState.Connecting)
+                    ) {
+                        expectPairingFailureOnEarlyDisconnect = false
+                        pairingRetryCount = 0
+                        discoveryJob?.cancel()
+                        discoveryJob = null
+                        pingTimeoutJob?.cancel()
+                        pingTimeoutJob = null
+                        eventCollectorJob?.cancel()
+                        eventCollectorJob = null
+
+                        discovery.stopDiscovery()
+
+                        skipNextDisconnectedHandling = true
+                        wsClient?.disconnect()
+                        wsClient = null
+                        trustManager = null
+
+                        transitionToPairingFailed(
+                                reason = lastPairingFailureReason,
+                                guidance = lastPairingFailureGuidance
+                        )
+                        return@launch
+                    }
 
                     if (credentials == null) {
                         fastReconnectAttempts = 0

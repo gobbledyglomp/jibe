@@ -215,7 +215,10 @@ fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
                                                                 onRetry = {
                                                                         pinValue =
                                                                                 TextFieldValue("")
-                                                                        repository.retryPairing()
+                                                                        repository.retryPairing(
+                                                                                afterPairingLockout =
+                                                                                        true
+                                                                        )
                                                                 }
                                                         )
                                                 }

@@ -643,6 +643,76 @@ class ConnectionRepositoryTest {
                 }
 
         @Test
+        fun `retry after pairing lockout restores pairing failed on disconnect before new pin`() =
+                testScope.runTest {
+                        repository.startDiscovery()
+                        discoveryStateFlow.value =
+                                DiscoveryState.Found(DiscoveredDaemon("Jibe", "10.0.0.5", 8765))
+                        advanceUntilIdle()
+                        recordingSocket.emit(WebSocketEvent.Connected)
+                        advanceUntilIdle()
+
+                        repository.pairWithPin(pin = "123456", deviceName = "TestPhone")
+                        recordingSocket.emit(
+                                WebSocketEvent.MessageReceived(
+                                        JibeMessage(
+                                                type = MessageType.ERROR,
+                                                payload =
+                                                        MessageParser.gson.toJsonTree(
+                                                                        ErrorMessage(
+                                                                                type =
+                                                                                        MessageType
+                                                                                                .ERROR
+                                                                                                .value,
+                                                                                code =
+                                                                                        "auth_rejected",
+                                                                                message =
+                                                                                        "Too many failed attempts"
+                                                                        )
+                                                                )
+                                                                .asJsonObject
+                                        )
+                                )
+                        )
+                        advanceUntilIdle()
+
+                        val failure =
+                                ConnectionState.PairingFailed(
+                                        reason = "Too many failed attempts",
+                                        guidance =
+                                                "Restart the daemon to generate a fresh PIN, then tap Retry."
+                                )
+                        assertEquals(failure, repository.state.value)
+
+                        discoveryStateFlow.value = DiscoveryState.Idle
+                        repository.retryPairing(afterPairingLockout = true)
+                        advanceTimeBy(120)
+                        advanceUntilIdle()
+
+                        assertEquals(ConnectionState.Discovering, repository.state.value)
+
+                        discoveryStateFlow.value =
+                                DiscoveryState.Found(DiscoveredDaemon("Jibe", "10.0.0.5", 8765))
+                        advanceUntilIdle()
+
+                        assertEquals(
+                                ConnectionState.Connecting("10.0.0.5", 8765),
+                                repository.state.value
+                        )
+                        recordingSocket.emit(WebSocketEvent.Connected)
+                        advanceUntilIdle()
+                        assertEquals(
+                                ConnectionState.Authenticating("10.0.0.5"),
+                                repository.state.value
+                        )
+
+                        recordingSocket.emit(WebSocketEvent.Disconnected(1000, "daemon closed"))
+                        advanceUntilIdle()
+
+                        assertEquals(failure, repository.state.value)
+                }
+
+        @Test
         fun `ping timeout after daemon death reconnects instead of staying connected`() =
                 testScope.runTest {
                         val creds =
