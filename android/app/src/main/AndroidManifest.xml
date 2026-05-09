@@ -8,9 +8,9 @@
     <!-- CHANGE_NETWORK_STATE is the correct choice for WiFi LAN connections. Normal permission -->
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
 
-    <!-- Foreground service for persistent WebSocket connection -->
+    <!-- Foreground service for persistent WebSocket connection (data sync, not Bluetooth/USB). -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <!-- Android 13+ requires explicit permission to show notifications -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -40,7 +40,7 @@
         <service
             android:name=".service.JibeService"
             android:exported="false"
-            android:foregroundServiceType="connectedDevice" />
+            android:foregroundServiceType="dataSync" />
     </application>
 
 </manifest>

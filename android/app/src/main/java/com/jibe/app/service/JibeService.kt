@@ -16,7 +16,9 @@ import com.jibe.app.R
 import com.jibe.app.data.local.JibeDataStore
 import com.jibe.app.data.repository.ConnectionRepository
 import com.jibe.app.data.repository.ConnectionState
+import com.jibe.app.data.repository.DeviceNameProvider
 import com.jibe.app.network.JibeDiscovery
+import com.jibe.app.network.OkHttpDaemonTlsSocketFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -33,6 +35,10 @@ import kotlinx.coroutines.launch
  * The service owns the ConnectionRepository — the connection's lifecycle is tied to the service,
  * not the Activity. When the user closes the app, the service keeps running. When they reopen it,
  * the Activity binds to this service and observes the existing state.
+ *
+ * Foreground service type is `dataSync`: the daemon link is ongoing network sync (WebSocket), not
+ * a Bluetooth/USB/NFC “connected device”. Using `connectedDevice` would require extra companion
+ * permissions (e.g. Bluetooth or CHANGE_NETWORK_STATE) under Android 14+ rules.
  */
 class JibeService : Service() {
 
@@ -75,7 +81,12 @@ class JibeService : Service() {
                 ConnectionRepository(
                         dataStore = dataStore,
                         discovery = discovery,
-                        scope = serviceScope
+                        scope = serviceScope,
+                        deviceNameProvider =
+                                DeviceNameProvider {
+                                    Build.MODEL?.takeIf { it.isNotBlank() } ?: "Android"
+                                },
+                        socketFactory = OkHttpDaemonTlsSocketFactory(),
                 )
 
         // Update the notification when connection state changes
@@ -91,7 +102,7 @@ class JibeService : Service() {
             startForeground(
                     NOTIFICATION_ID,
                     buildNotification(ConnectionState.Disconnected),
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
             )
         } else {
             startForeground(NOTIFICATION_ID, buildNotification(ConnectionState.Disconnected))
