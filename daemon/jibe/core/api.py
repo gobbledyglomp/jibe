@@ -32,6 +32,9 @@ class MessageType(str, Enum):
     FILE_DONE = "file.done"
     FILE_ACK = "file.ack"
     ERROR = "error"
+    DEVICE_BATTERY = "device.battery"
+    DEVICE_RING = "device.ring"
+    REMOTE_KEY = "remote.key"
 
 
 @dataclass
