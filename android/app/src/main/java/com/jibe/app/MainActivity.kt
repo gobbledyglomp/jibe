@@ -86,16 +86,14 @@ class MainActivity : ComponentActivity() {
         // during the brief window before the service binds.
         setContent {
             val themeStr by dataStore.theme.collectAsStateWithLifecycle(initialValue = "dark")
-            val lang by dataStore.language.collectAsStateWithLifecycle(initialValue = "en")
-
-            LaunchedEffect(lang) {
-                val locales = LocaleListCompat.forLanguageTags(
-                        when (lang) {
-                            "es" -> "es"
-                            else -> "en-US"
-                        }
-                )
-                AppCompatDelegate.setApplicationLocales(locales)
+            LaunchedEffect(Unit) {
+                dataStore.language.collect { lang ->
+                    val tag = if (lang == "es") "es" else "en-US"
+                    val desired = LocaleListCompat.forLanguageTags(tag)
+                    if (AppCompatDelegate.getApplicationLocales() != desired) {
+                        AppCompatDelegate.setApplicationLocales(desired)
+                    }
+                }
             }
 
             JibeTheme(isDark = themeStr != "light") {
