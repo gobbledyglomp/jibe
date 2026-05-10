@@ -3,6 +3,7 @@ package com.jibe.app.data.local
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -27,6 +28,16 @@ class JibeDataStore(private val context: Context) {
         private val KEY_DAEMON_HOST = stringPreferencesKey("daemon_host")
         private val KEY_DAEMON_PORT = stringPreferencesKey("daemon_port")
         private val KEY_CERT_FINGERPRINT = stringPreferencesKey("cert_fingerprint")
+
+        private val KEY_THEME = stringPreferencesKey("theme")
+        private val KEY_LANGUAGE = stringPreferencesKey("language")
+
+        private val KEY_FEAT_CLIPBOARD = booleanPreferencesKey("feat_clipboard")
+        private val KEY_FEAT_NOTIFICATIONS = booleanPreferencesKey("feat_notifications")
+        private val KEY_FEAT_FILE_TRANSFER = booleanPreferencesKey("feat_file_transfer")
+        private val KEY_FEAT_PRESENTATION_REMOTE = booleanPreferencesKey("feat_presentation_remote")
+        private val KEY_FEAT_FIND_PHONE = booleanPreferencesKey("feat_find_phone")
+        private val KEY_FEAT_PING = booleanPreferencesKey("feat_ping")
     }
 
     val credentials: Flow<DeviceCredentials?> =
@@ -46,6 +57,30 @@ class JibeDataStore(private val context: Context) {
                 )
             }
 
+    val theme: Flow<String> =
+            context.dataStore.data.map { prefs -> prefs[KEY_THEME] ?: "dark" }
+
+    val language: Flow<String> =
+            context.dataStore.data.map { prefs -> prefs[KEY_LANGUAGE] ?: "auto" }
+
+    val featClipboard: Flow<Boolean> =
+            context.dataStore.data.map { prefs -> prefs[KEY_FEAT_CLIPBOARD] ?: true }
+
+    val featNotifications: Flow<Boolean> =
+            context.dataStore.data.map { prefs -> prefs[KEY_FEAT_NOTIFICATIONS] ?: true }
+
+    val featFileTransfer: Flow<Boolean> =
+            context.dataStore.data.map { prefs -> prefs[KEY_FEAT_FILE_TRANSFER] ?: true }
+
+    val featPresentationRemote: Flow<Boolean> =
+            context.dataStore.data.map { prefs -> prefs[KEY_FEAT_PRESENTATION_REMOTE] ?: true }
+
+    val featFindPhone: Flow<Boolean> =
+            context.dataStore.data.map { prefs -> prefs[KEY_FEAT_FIND_PHONE] ?: true }
+
+    val featPing: Flow<Boolean> =
+            context.dataStore.data.map { prefs -> prefs[KEY_FEAT_PING] ?: false }
+
     suspend fun saveCredentials(credentials: DeviceCredentials) {
         context.dataStore.edit { prefs ->
             prefs[KEY_DEVICE_ID] = credentials.deviceId
@@ -58,5 +93,37 @@ class JibeDataStore(private val context: Context) {
 
     suspend fun clearCredentials() {
         context.dataStore.edit { it.clear() }
+    }
+
+    suspend fun setTheme(theme: String) {
+        context.dataStore.edit { prefs -> prefs[KEY_THEME] = theme }
+    }
+
+    suspend fun setLanguage(language: String) {
+        context.dataStore.edit { prefs -> prefs[KEY_LANGUAGE] = language }
+    }
+
+    suspend fun setFeatClipboard(on: Boolean) {
+        context.dataStore.edit { prefs -> prefs[KEY_FEAT_CLIPBOARD] = on }
+    }
+
+    suspend fun setFeatNotifications(on: Boolean) {
+        context.dataStore.edit { prefs -> prefs[KEY_FEAT_NOTIFICATIONS] = on }
+    }
+
+    suspend fun setFeatFileTransfer(on: Boolean) {
+        context.dataStore.edit { prefs -> prefs[KEY_FEAT_FILE_TRANSFER] = on }
+    }
+
+    suspend fun setFeatPresentationRemote(on: Boolean) {
+        context.dataStore.edit { prefs -> prefs[KEY_FEAT_PRESENTATION_REMOTE] = on }
+    }
+
+    suspend fun setFeatFindPhone(on: Boolean) {
+        context.dataStore.edit { prefs -> prefs[KEY_FEAT_FIND_PHONE] = on }
+    }
+
+    suspend fun setFeatPing(on: Boolean) {
+        context.dataStore.edit { prefs -> prefs[KEY_FEAT_PING] = on }
     }
 }
