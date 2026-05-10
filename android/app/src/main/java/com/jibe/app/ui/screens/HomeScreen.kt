@@ -41,6 +41,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -86,9 +87,19 @@ import com.jibe.app.ui.theme.RobotoMono
  * - "Forget device" destructive action
  */
 @Composable
-fun HomeScreen(repository: ConnectionRepository, onDeviceForgotten: () -> Unit) {
+fun HomeScreen(
+        repository: ConnectionRepository,
+        onDeviceForgotten: () -> Unit,
+        onOpenSettings: () -> Unit = {},
+        onOpenPresentation: () -> Unit = {}
+) {
         val state by repository.state.collectAsState()
         val transferProgress by repository.transferProgress.collectAsState()
+        val featPing by repository.featPingEnabled.collectAsStateWithLifecycle(initialValue = false)
+        val featClipboard by repository.featClipboardSync.collectAsStateWithLifecycle(initialValue = true)
+        val featFile by repository.featFileTransferEnabled.collectAsStateWithLifecycle(initialValue = true)
+        val featPresentation by
+                repository.featPresentationRemote.collectAsStateWithLifecycle(initialValue = true)
         val context = LocalContext.current
         val pickDocument =
                 rememberLauncherForActivityResult(
@@ -130,6 +141,29 @@ fun HomeScreen(repository: ConnectionRepository, onDeviceForgotten: () -> Unit) 
                                         .padding(bottom = 32.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                        Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End,
+                                verticalAlignment = Alignment.CenterVertically
+                        ) {
+                                if (state is ConnectionState.Connected && featPresentation) {
+                                        TextButton(onClick = onOpenPresentation) {
+                                                Text(
+                                                        text = "Present",
+                                                        style = MaterialTheme.typography.labelLarge,
+                                                        color = JibePrimary
+                                                )
+                                        }
+                                }
+                                TextButton(onClick = onOpenSettings) {
+                                        Text(
+                                                text = "Settings",
+                                                style = MaterialTheme.typography.labelLarge,
+                                                color = JibeOnSurfaceVariant
+                                        )
+                                }
+                        }
+
                         Text(
                                 text = "jibe",
                                 style =
@@ -147,35 +181,38 @@ fun HomeScreen(repository: ConnectionRepository, onDeviceForgotten: () -> Unit) 
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        PingCard(
-                                isConnected = state is ConnectionState.Connected,
-                                pingInFlight = pingInFlight,
-                                lastLatency = lastLatency,
-                                onPing = {
-                                        if (!pingInFlight) {
-                                                pingInFlight = true
-                                                repository.sendPing()
+                        if (featPing) {
+                                PingCard(
+                                        isConnected = state is ConnectionState.Connected,
+                                        pingInFlight = pingInFlight,
+                                        lastLatency = lastLatency,
+                                        onPing = {
+                                                if (!pingInFlight) {
+                                                        pingInFlight = true
+                                                        repository.sendPing()
+                                                }
                                         }
-                                }
-                        )
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                        }
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        if (featClipboard) {
+                                ClipboardCard(
+                                        isConnected = state is ConnectionState.Connected,
+                                        repository = repository
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                        }
 
-                        ClipboardCard(
-                                isConnected = state is ConnectionState.Connected,
-                                repository = repository
-                        )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        FileTransferCard(
-                                isConnected = state is ConnectionState.Connected,
-                                transferProgress = transferProgress,
-                                onPickClick = { pickDocument.launch(arrayOf("*/*")) },
-                                onCancelClick = { repository.cancelFileTransfer() }
-                        )
-
-                        Spacer(modifier = Modifier.height(12.dp))
+                        if (featFile) {
+                                FileTransferCard(
+                                        isConnected = state is ConnectionState.Connected,
+                                        transferProgress = transferProgress,
+                                        onPickClick = { pickDocument.launch(arrayOf("*/*")) },
+                                        onCancelClick = { repository.cancelFileTransfer() }
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                        }
 
                         NotificationPermissionCard()
 
