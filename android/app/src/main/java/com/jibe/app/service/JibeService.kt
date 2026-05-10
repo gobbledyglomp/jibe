@@ -9,6 +9,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.graphics.drawable.Icon
 import android.os.Binder
 import android.os.Build
 import android.os.Handler
@@ -46,6 +47,8 @@ class JibeService : Service() {
         private const val NOTIFICATION_ID = 1
         private const val FAILED_REASON_MAX_CHARS = 80
         private const val TRANSFER_FILENAME_MAX_CHARS = 30
+        private const val REQUEST_CODE_OPEN = 0
+        private const val REQUEST_CODE_CLIP_SYNC = 1
     }
 
     /** Binder for Activity to access the service's repository. */
@@ -161,7 +164,7 @@ class JibeService : Service() {
         val pendingIntent =
                 PendingIntent.getActivity(
                         this,
-                        0,
+                        REQUEST_CODE_OPEN,
                         Intent(this, MainActivity::class.java).apply {
                             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
                         },
@@ -212,6 +215,31 @@ class JibeService : Service() {
             val pct =
                     if (p.totalBytes > 0L) (p.bytesSent * 100L / p.totalBytes).toInt() else 0
             builder.setProgress(100, pct, p.totalBytes == 0L)
+        }
+
+        // "Sync clipboard" action — visible only in the expanded notification view.
+        // Uses a transparent trampoline Activity so the clipboard read is made from
+        // the foreground (Android 10+ restriction).
+        if (state is ConnectionState.Connected) {
+            val clipSyncIntent =
+                    PendingIntent.getActivity(
+                            this,
+                            REQUEST_CODE_CLIP_SYNC,
+                            Intent(this, ClipboardSyncActivity::class.java).apply {
+                                flags =
+                                        Intent.FLAG_ACTIVITY_NEW_TASK or
+                                                Intent.FLAG_ACTIVITY_NO_ANIMATION
+                            },
+                            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                    )
+            builder.addAction(
+                    Notification.Action.Builder(
+                                    Icon.createWithResource(this, R.drawable.ic_stat_jibe),
+                                    "Sync clipboard",
+                                    clipSyncIntent
+                            )
+                            .build()
+            )
         }
 
         return builder.build()

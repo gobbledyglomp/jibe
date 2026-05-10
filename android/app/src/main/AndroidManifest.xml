@@ -38,6 +38,18 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <!--
+          Transparent trampoline activity for the "Sync clipboard" notification action.
+          Entering the foreground is required by Android 10+ to read the clipboard.
+        -->
+        <activity
+            android:name=".service.ClipboardSyncActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Jibe.Transparent"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity="" />
+
         <service
             android:name=".service.JibeNotificationService"
             android:exported="true"
