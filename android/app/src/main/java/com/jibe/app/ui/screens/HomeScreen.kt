@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -502,46 +503,76 @@ private fun FileTransferCard(
                                                 !transferProgress.isComplete &&
                                                 transferProgress.error == null
 
-                                if (transferProgress.error != null) {
-                                        Text(
-                                                text = transferProgress.error,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = JibeError.copy(alpha = 0.9f)
-                                        )
-                                } else if (transferProgress.isComplete) {
-                                        Text(
-                                                text = "Saved on daemon",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = JibeSuccess.copy(alpha = 0.95f)
-                                        )
-                                } else if (awaitingAck) {
-                                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                                        Spacer(modifier = Modifier.height(6.dp))
-                                        Text(
-                                                text = "Waiting for daemon…",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = JibeOnSurfaceVariant
-                                        )
-                                } else if (transferProgress.totalBytes > 0) {
-                                        val p =
-                                                transferProgress.bytesSent.toFloat() /
-                                                        transferProgress.totalBytes.toFloat()
-                                        LinearProgressIndicator(
-                                                progress = { p },
-                                                modifier = Modifier.fillMaxWidth(),
-                                        )
-                                        Spacer(modifier = Modifier.height(6.dp))
-                                        Text(
-                                                text =
-                                                        "${formatKb(transferProgress.bytesSent)} / ${formatKb(transferProgress.totalBytes)} · ${transferProgress.filename}",
-                                                style =
-                                                        MaterialTheme.typography.labelSmall.copy(
-                                                                fontFamily = RobotoMono
-                                                        ),
-                                                color = JibeOnSurfaceVariant
-                                        )
-                                } else {
-                                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                                when {
+                                        transferProgress.error != null -> {
+                                                Text(
+                                                        text = transferProgress.error,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = JibeError.copy(alpha = 0.9f)
+                                                )
+                                        }
+                                        transferProgress.isComplete -> {
+                                                Text(
+                                                        text = "Saved on daemon ✓",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = JibeSuccess.copy(alpha = 0.9f)
+                                                )
+                                        }
+                                        awaitingAck -> {
+                                                LinearProgressIndicator(
+                                                        modifier = Modifier.fillMaxWidth()
+                                                )
+                                                Spacer(modifier = Modifier.height(6.dp))
+                                                Text(
+                                                        text = "Verifying…",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = JibeOnSurfaceVariant
+                                                )
+                                        }
+                                        transferProgress.totalBytes > 0 -> {
+                                                val p =
+                                                        transferProgress.bytesSent.toFloat() /
+                                                                transferProgress.totalBytes
+                                                                        .toFloat()
+                                                LinearProgressIndicator(
+                                                        progress = { p },
+                                                        modifier = Modifier.fillMaxWidth()
+                                                )
+                                                Spacer(modifier = Modifier.height(6.dp))
+                                                // Line 1: filename (truncated)
+                                                Text(
+                                                        text = transferProgress.filename,
+                                                        style =
+                                                                MaterialTheme.typography.labelSmall
+                                                                        .copy(
+                                                                                fontFamily =
+                                                                                        RobotoMono
+                                                                        ),
+                                                        color = JibeOnSurface,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                )
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                // Line 2: bytes · speed · ETA
+                                                Text(
+                                                        text =
+                                                                buildTransferMeta(
+                                                                        transferProgress
+                                                                ),
+                                                        style =
+                                                                MaterialTheme.typography.labelSmall
+                                                                        .copy(
+                                                                                fontFamily =
+                                                                                        RobotoMono
+                                                                        ),
+                                                        color = JibeOnSurfaceVariant
+                                                )
+                                        }
+                                        else -> {
+                                                LinearProgressIndicator(
+                                                        modifier = Modifier.fillMaxWidth()
+                                                )
+                                        }
                                 }
                         }
                 }
@@ -602,6 +633,19 @@ private fun formatKb(bytes: Long): String {
         if (bytes < 1024) return "$bytes B"
         val kb = bytes / 1024.0
         return if (kb < 1024) "%.1f KB".format(kb) else "%.1f MB".format(kb / 1024.0)
+}
+
+private fun buildTransferMeta(p: TransferProgress): String = buildString {
+        append("${formatKb(p.bytesSent)} / ${formatKb(p.totalBytes)}")
+        if (p.speedBps > 0L) append("  ${formatKb(p.speedBps)}/s")
+        if (p.etaSeconds != null && p.etaSeconds > 0L) {
+                val eta =
+                        when {
+                                p.etaSeconds < 60 -> "${p.etaSeconds}s"
+                                else -> "${p.etaSeconds / 60}m ${p.etaSeconds % 60}s"
+                        }
+                append("  $eta left")
+        }
 }
 
 @Composable
