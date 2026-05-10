@@ -15,8 +15,8 @@ android {
         applicationId = "com.jibe.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 5
-        versionName = "0.5.1-beta"
+        versionCode = 6
+        versionName = "0.6.0-beta"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -40,6 +40,7 @@ android {
 }
 
 dependencies {
+    implementation(libs.androidx.appcompat)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)

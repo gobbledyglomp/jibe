@@ -2,9 +2,10 @@ package com.jibe.app.ui.theme
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 
-private val JibeColorScheme =
+private val JibeDarkColorScheme =
         darkColorScheme(
                 primary = JibePrimary,
                 onPrimary = JibeOnPrimary,
@@ -18,8 +19,29 @@ private val JibeColorScheme =
                 tertiary = JibeAccent
         )
 
-/** Jibe's Material 3 theme — always dark, no dynamic color. */
+private val JibeLightColorScheme =
+        lightColorScheme(
+                primary = JibeLightPrimary,
+                onPrimary = JibeLightOnPrimary,
+                surface = JibeLightSurface,
+                surfaceContainer = JibeLightSurfaceContainer,
+                surfaceContainerHigh = JibeLightSurfaceContainerHigh,
+                surfaceContainerHighest = JibeLightSurfaceContainerHighest,
+                onSurface = JibeLightOnSurface,
+                onSurfaceVariant = JibeLightOnSurfaceVariant,
+                error = JibeError,
+                tertiary = JibeLightPrimary
+        )
+
+/**
+ * Jibe Material 3 theme — dark default for the main shell; [isDark] toggles a restrained light
+ * palette from Settings.
+ */
 @Composable
-fun JibeTheme(content: @Composable () -> Unit) {
-        MaterialTheme(colorScheme = JibeColorScheme, typography = JibeTypography, content = content)
+fun JibeTheme(isDark: Boolean = true, content: @Composable () -> Unit) {
+    MaterialTheme(
+            colorScheme = if (isDark) JibeDarkColorScheme else JibeLightColorScheme,
+            typography = JibeTypography,
+            content = content
+    )
 }
