@@ -132,5 +132,15 @@ async def handle_remote_key(
         )
         return
 
+    tool = _detect_tool()
+    if tool is None:
+        await conn.send(
+            format_error(
+                "remote_unavailable",
+                "No key dispatcher found. Install xdotool (X11) or ydotool (Wayland).",
+            )
+        )
+        return
+
     logger.debug("remote.key '%s' from %s", key, conn.id)
     await _dispatch_key(key)
