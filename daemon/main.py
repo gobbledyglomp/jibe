@@ -7,15 +7,19 @@ Run this file to start the Jibe daemon:
     python main.py -p 9000         # custom port
     python main.py --regen-certs   # force regenerate TLS certificate
     python main.py -v              # debug logging
+    python main.py --no-tray       # headless (no system tray)
 
 This wires together all daemon components:
   - JibeDatabase: persistent storage (SQLite)
-  - JibeServer: WebSocket connections + HTTP API
+  - JibeServer: WebSocket connections + HTTP API + dashboard static files
   - JibeDiscovery: mDNS broadcast on the local network
   - TLS: self-signed certificate for encrypted connections
+  - Optional pystray tray icon (Linux desktop)
 
 All services run concurrently in a single asyncio event loop.
 """
+
+from __future__ import annotations
 
 import argparse
 import asyncio
@@ -30,10 +34,15 @@ from jibe.core.db import JibeDatabase
 from jibe.core.tls import create_ssl_context, generate_self_signed_cert
 from jibe.network.discovery import JibeDiscovery
 from jibe.network.server import JibeServer
+from jibe.ui.tray import JibeTray
 
 _QUIET_LOGGERS = ("aiosqlite", "asyncio", "zeroconf")
 
 logger = logging.getLogger("jibe.main")
+
+
+def _have_desktop() -> bool:
+    return bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
 
 
 async def run_daemon(
@@ -41,23 +50,17 @@ async def run_daemon(
     use_tls: bool = True,
     port: int = DEFAULT_PORT,
     start_pairing: bool = False,
+    enable_tray: bool = True,
 ) -> None:
-    """Run the main daemon loop.
-
-    Starts the database, server, and discovery services, then waits
-    forever until cancelled.
-
-    Args:
-        use_tls: If True, generate/load a certificate and serve wss://.
-        port: The TCP port to listen on.
-        start_pairing: If True, immediately start pairing mode on startup.
-    """
+    """Run the main daemon loop."""
     logger.info("Jibe daemon starting... (PID %d)", os.getpid())
     logger.info("  To pair a new device at any time: kill -USR1 %d", os.getpid())
 
     db = JibeDatabase()
     await db.open()
+    await db.ensure_default_admin_if_empty()
 
+    cert_path = None
     ssl_context = None
     if use_tls:
         cert_path, key_path = generate_self_signed_cert()
@@ -65,16 +68,25 @@ async def run_daemon(
     else:
         logger.warning("TLS disabled — connections are unencrypted")
 
-    server = JibeServer(db=db, port=port, ssl_context=ssl_context)
+    server = JibeServer(db=db, port=port, ssl_context=ssl_context, cert_path=cert_path)
     discovery = JibeDiscovery(port=port)
 
-    # Install SIGUSR1 handler so pairing mode can be triggered at runtime
-    # without restarting the daemon: kill -USR1 <pid>
     loop = asyncio.get_running_loop()
+    shutdown_event = asyncio.Event()
+
     loop.add_signal_handler(
         signal.SIGUSR1,
-        lambda: server.auth.start_pairing()
+        lambda: server.auth.start_pairing(),
     )
+
+    tray: JibeTray | None = None
+    if enable_tray and _have_desktop():
+        tray = JibeTray(
+            port=port,
+            loop=loop,
+            shutdown_event=shutdown_event,
+            auth_manager=server.auth,
+        )
 
     try:
         await asyncio.gather(
@@ -85,13 +97,18 @@ async def run_daemon(
         if start_pairing:
             server.auth.start_pairing()
 
+        if tray is not None:
+            tray.start()
+
         logger.info("Ready. Press Ctrl+C to stop.")
-        await asyncio.Event().wait()
+        await shutdown_event.wait()
 
     except asyncio.CancelledError:
         logger.info("Shutting down...")
 
     finally:
+        if tray is not None:
+            tray.stop()
         await asyncio.gather(
             discovery.stop(),
             server.stop(),
@@ -126,6 +143,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Delete existing TLS certificates and regenerate",
     )
     parser.add_argument(
+        "--no-tray",
+        action="store_true",
+        help="Do not show the system tray icon (for headless / Docker)",
+    )
+    parser.add_argument(
         "-v",
         "--verbose",
         action="store_true",
@@ -144,13 +166,7 @@ def _handle_regen_certs() -> None:
 
 
 def _configure_logging(*, verbose: bool) -> None:
-    """Configure logging level, format, and terminal colors.
-
-    Uses logging.addLevelName() to inject ANSI codes into the global level name
-    table — %(levelname)s in LOG_FORMAT then picks up the colors automatically,
-    with no Formatter subclass needed. Colors are suppressed when stderr is not
-    a TTY so piped or redirected output stays clean.
-    """
+    """Configure logging level, format, and terminal colors."""
     logging.basicConfig(
         level=logging.DEBUG if verbose else logging.INFO,
         format=LOG_FORMAT,
@@ -160,11 +176,11 @@ def _configure_logging(*, verbose: bool) -> None:
     if sys.stderr.isatty():
         _RESET = "\033[0m"
         _COLORS = {
-            logging.DEBUG: "\033[36m",  # cyan
-            logging.INFO: "\033[32m",  # green
-            logging.WARNING: "\033[33m",  # yellow
-            logging.ERROR: "\033[31m",  # red
-            logging.CRITICAL: "\033[35m",  # magenta
+            logging.DEBUG: "\033[36m",
+            logging.INFO: "\033[32m",
+            logging.WARNING: "\033[33m",
+            logging.ERROR: "\033[31m",
+            logging.CRITICAL: "\033[35m",
         }
         for level, color in _COLORS.items():
             name = logging.getLevelName(level)
@@ -183,12 +199,15 @@ def main() -> None:
     if args.regen_certs:
         _handle_regen_certs()
 
+    enable_tray = not args.no_tray
+
     try:
         asyncio.run(
             run_daemon(
                 use_tls=not args.no_tls,
                 port=args.port,
                 start_pairing=args.pair,
+                enable_tray=enable_tray,
             )
         )
     except KeyboardInterrupt:
