@@ -130,7 +130,7 @@ async def test_wrong_pin_rejected(aiohttp_client, jibe_app, jibe_server):
 
 
 async def test_auth_without_pairing_mode(aiohttp_client, jibe_app):
-    """Probe (no PIN) from an unknown device when pairing is inactive auto-starts pairing."""
+    """Probe (no PIN) when pairing is inactive is rejected until pairing is started on the daemon."""
     client = await aiohttp_client(jibe_app)
     ws = await client.ws_connect("/ws")
 
@@ -143,7 +143,7 @@ async def test_auth_without_pairing_mode(aiohttp_client, jibe_app):
     resp = await ws.receive_json()
 
     assert resp["accepted"] is False
-    assert "Pairing started" in resp["reason"]
+    assert "not active" in resp["reason"].lower()
 
     await ws.close()
 

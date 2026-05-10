@@ -55,6 +55,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -87,6 +88,8 @@ private sealed class PairingMotionTarget {
     data class FailedCard(val reason: String) : PairingMotionTarget()
 
     data class PairingFailedCard(val reason: String, val guidance: String) : PairingMotionTarget()
+
+    data class PairingUnavailableCard(val reason: String) : PairingMotionTarget()
 }
 
 private fun pairingMotionTarget(
@@ -100,11 +103,14 @@ private fun pairingMotionTarget(
                         if (lockoutProbeUi) PairingMotionTarget.Searching
                         else PairingMotionTarget.Connecting(state.host)
                 is ConnectionState.Authenticating ->
-                        PairingMotionTarget.PinEntry(state.host, state.hint)
+                        if (state.hint == null) PairingMotionTarget.Connecting(state.host)
+                        else PairingMotionTarget.PinEntry(state.host, state.hint)
                 is ConnectionState.Connected -> PairingMotionTarget.ConnectedFlash
                 is ConnectionState.Failed -> PairingMotionTarget.FailedCard(state.reason)
                 is ConnectionState.PairingFailed ->
                         PairingMotionTarget.PairingFailedCard(state.reason, state.guidance)
+                is ConnectionState.PairingUnavailable ->
+                        PairingMotionTarget.PairingUnavailableCard(state.reason)
         }
 
 /**
@@ -127,21 +133,36 @@ fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
                 val current = state
                 when {
                         current is ConnectionState.Authenticating -> {
-                                val hostChanged = current.host != lastPairingHost
-                                if (hostChanged) {
-                                        lastPairingHost = current.host
-                                }
-                                if (hostChanged ||
-                                                current.hint?.startsWith(
-                                                        WRONG_PAIRING_PIN_HINT_PREFIX
-                                                ) == true
-                                ) {
+                                if (current.hint != null) {
+                                        val hostChanged = current.host != lastPairingHost
+                                        if (hostChanged) {
+                                                lastPairingHost = current.host
+                                        }
+                                        if (hostChanged ||
+                                                        current.hint.startsWith(
+                                                                WRONG_PAIRING_PIN_HINT_PREFIX
+                                                        )
+                                        ) {
+                                                pinValue = TextFieldValue("")
+                                        }
+                                        focusRequester.requestFocus()
+                                        keyboardController?.show()
+                                } else {
                                         pinValue = TextFieldValue("")
+                                        keyboardController?.hide()
                                 }
-                                focusRequester.requestFocus()
-                                keyboardController?.show()
                         }
-                        current is ConnectionState.Connected -> onPaired()
+                        current is ConnectionState.PairingUnavailable -> {
+                                pinValue = TextFieldValue("")
+                                keyboardController?.hide()
+                        }
+                        current is ConnectionState.Connected -> {
+                                keyboardController?.hide()
+                                onPaired()
+                        }
+                        else -> {
+                                keyboardController?.hide()
+                        }
                 }
         }
 
@@ -262,6 +283,16 @@ fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
                                                                                 afterPairingLockout =
                                                                                         true
                                                                         )
+                                                                }
+                                                        )
+                                                }
+                                                is PairingMotionTarget.PairingUnavailableCard -> {
+                                                        PairingUnavailableIndicator(
+                                                                reason = motion.reason,
+                                                                onRetry = {
+                                                                        pinValue =
+                                                                                TextFieldValue("")
+                                                                        repository.retryPairing()
                                                                 }
                                                         )
                                                 }
@@ -568,6 +599,80 @@ private fun PairingFailedIndicator(reason: String, guidance: String, onRetry: ()
                                 modifier = Modifier.fillMaxWidth()
                         ) {
                                 Text("Retry")
+                        }
+                }
+        }
+}
+
+@Composable
+private fun PairingUnavailableIndicator(reason: String, onRetry: () -> Unit) {
+        Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = JibeSurfaceContainerHigh),
+                shape = RoundedCornerShape(16.dp)
+        ) {
+                Column(
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp).fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                        Text(
+                                text = stringResource(R.string.pairing_unavailable_title),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = JibeOnSurface,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Text(
+                                text = stringResource(R.string.pairing_unavailable_body),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = JibeOnSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                        )
+
+                        if (reason.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(14.dp))
+
+                                Text(
+                                        text = stringResource(R.string.pairing_unavailable_message_label),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = JibeOnSurfaceVariant.copy(alpha = 0.6f),
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.fillMaxWidth()
+                                )
+
+                                Spacer(modifier = Modifier.height(4.dp))
+
+                                Text(
+                                        text = reason,
+                                        style =
+                                                MaterialTheme.typography.labelSmall.copy(
+                                                        fontFamily = RobotoMono
+                                                ),
+                                        color = JibeOnSurfaceVariant.copy(alpha = 0.82f),
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 3,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.fillMaxWidth()
+                                )
+                        }
+
+                        Spacer(modifier = Modifier.height(18.dp))
+
+                        Button(
+                                onClick = onRetry,
+                                colors =
+                                        ButtonDefaults.buttonColors(
+                                                containerColor = JibePrimary.copy(alpha = 0.14f),
+                                                contentColor = JibePrimary
+                                        ),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                        ) {
+                                Text(stringResource(R.string.pairing_unavailable_retry))
                         }
                 }
         }

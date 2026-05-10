@@ -25,6 +25,12 @@ MAX_PIN_ATTEMPTS = 5
 WS_HEARTBEAT_SECONDS = 30.0
 AUTH_TIMEOUT_SECONDS = PIN_EXPIRY_SECONDS
 
+# Largest inbound WebSocket text frame (JSON file.chunk payloads are Base64-expanded).
+WS_MAX_MESSAGE_BYTES = 16 * 1024 * 1024
+
+# Raw bytes per file chunk on the wire (must match Android CHUNK_SIZE_BYTES).
+FILE_TRANSFER_CHUNK_RAW_BYTES = 4 * 1024 * 1024
+
 CERTS_DIR = _xdg_data_home / "jibe" / "certs"
 CERT_FILE = "jibe.crt"
 KEY_FILE = "jibe.key"

@@ -13,5 +13,8 @@ interface JibeWebSocketHandle {
 
     fun send(json: String): Boolean
 
+    /** Send a binary WebSocket frame (file chunks use compact framing, not JSON). */
+    fun sendBinary(payload: ByteArray): Boolean
+
     fun disconnect()
 }

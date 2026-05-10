@@ -22,9 +22,11 @@
   "notification": {
     "type": "notification",
     "app": "com.whatsapp",
+    "app_name": "WhatsApp",
     "title": "Alice",
     "body": "Hey, are you coming tonight?",
-    "timestamp": 1710892800
+    "timestamp": 1710892800,
+    "icon": "ZmFrZQ=="
   },
   "file.start": {
     "type": "file.start",
@@ -39,10 +41,26 @@
     "index": 0,
     "data": "iVBORw0KGgoAAAANSUhEUgAA..."
   },
+  "file.chunk.ack": {
+    "type": "file.chunk.ack",
+    "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+    "index": 0,
+    "ok": true,
+    "bytes_received": 65536
+  },
+  "file.cancel": {
+    "type": "file.cancel",
+    "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+  },
   "file.done": {
     "type": "file.done",
     "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
     "checksum": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "file.ack": {
+    "type": "file.ack",
+    "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+    "ok": true
   },
   "error": {
     "type": "error",

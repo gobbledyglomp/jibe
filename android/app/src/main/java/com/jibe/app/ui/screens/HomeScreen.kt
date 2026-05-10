@@ -1,5 +1,12 @@
 package com.jibe.app.ui.screens
 
+import android.content.Context
+import android.content.Intent
+import android.content.res.Configuration
+import android.provider.Settings
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.fadeIn
@@ -17,12 +24,17 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -39,14 +51,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jibe.app.R
 import com.jibe.app.data.repository.ConnectionRepository
 import com.jibe.app.data.repository.ConnectionState
+import com.jibe.app.data.repository.ClipboardTextReader
 import com.jibe.app.data.repository.PingResult
+import com.jibe.app.data.repository.TransferProgress
 import com.jibe.app.ui.components.JibeSpinner
 import com.jibe.app.ui.theme.JibeError
 import com.jibe.app.ui.theme.JibeOnSurface
@@ -65,11 +82,24 @@ import com.jibe.app.ui.theme.RobotoMono
  * - Connection status (live dot + text)
  * - Daemon info (host, device ID)
  * - Ping button with round-trip latency display
+ * - Clipboard sync, chunked file send, notification-mirroring hint
  * - "Forget device" destructive action
  */
 @Composable
 fun HomeScreen(repository: ConnectionRepository, onDeviceForgotten: () -> Unit) {
         val state by repository.state.collectAsState()
+        val transferProgress by repository.transferProgress.collectAsState()
+        val context = LocalContext.current
+        val pickDocument =
+                rememberLauncherForActivityResult(
+                        contract = ActivityResultContracts.OpenDocument(),
+                        onResult = { uri ->
+                                if (uri != null) {
+                                        repository.sendFile(uri, context.contentResolver)
+                                }
+                        }
+                )
+
         var lastLatency by remember { mutableLongStateOf(-1L) }
         var pingInFlight by remember { mutableStateOf(false) }
         var showForgetConfirm by remember { mutableStateOf(false) }
@@ -85,13 +115,19 @@ fun HomeScreen(repository: ConnectionRepository, onDeviceForgotten: () -> Unit) 
                 if (state !is ConnectionState.Connected) pingInFlight = false
         }
 
+        val scrollState = rememberScrollState()
+        val configuration = LocalConfiguration.current
+        val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
         Scaffold(containerColor = MaterialTheme.colorScheme.surface) { innerPadding ->
                 Column(
                         modifier =
                                 Modifier.fillMaxSize()
+                                        .verticalScroll(scrollState)
                                         .padding(innerPadding)
-                                        .padding(horizontal = 24.dp)
-                                        .padding(top = 48.dp),
+                                        .padding(horizontal = if (isLandscape) 40.dp else 24.dp)
+                                        .padding(top = if (isLandscape) 20.dp else 48.dp)
+                                        .padding(bottom = 32.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                         Text(
@@ -105,11 +141,11 @@ fun HomeScreen(repository: ConnectionRepository, onDeviceForgotten: () -> Unit) 
                                 color = JibePrimary
                         )
 
-                        Spacer(modifier = Modifier.height(32.dp))
+                        Spacer(modifier = Modifier.height(if (isLandscape) 16.dp else 32.dp))
 
                         ConnectionStatusCard(state = state)
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
 
                         PingCard(
                                 isConnected = state is ConnectionState.Connected,
@@ -123,7 +159,27 @@ fun HomeScreen(repository: ConnectionRepository, onDeviceForgotten: () -> Unit) 
                                 }
                         )
 
-                        Spacer(modifier = Modifier.weight(1f))
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        ClipboardCard(
+                                isConnected = state is ConnectionState.Connected,
+                                repository = repository
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        FileTransferCard(
+                                isConnected = state is ConnectionState.Connected,
+                                transferProgress = transferProgress,
+                                onPickClick = { pickDocument.launch(arrayOf("*/*")) },
+                                onCancelClick = { repository.cancelFileTransfer() }
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        NotificationPermissionCard()
+
+                        Spacer(modifier = Modifier.height(24.dp))
 
                         if (showForgetConfirm) {
                                 ForgetConfirmation(
@@ -142,8 +198,6 @@ fun HomeScreen(repository: ConnectionRepository, onDeviceForgotten: () -> Unit) 
                                         )
                                 }
                         }
-
-                        Spacer(modifier = Modifier.height(32.dp))
                 }
         }
 }
@@ -159,6 +213,7 @@ private fun ConnectionStatusCard(state: ConnectionState) {
                                         is ConnectionState.Authenticating,
                                         is ConnectionState.Discovering -> JibeWarning
                                         is ConnectionState.PairingFailed -> JibeError
+                                        is ConnectionState.PairingUnavailable -> JibeWarning
                                         is ConnectionState.Failed -> JibeError
                                         is ConnectionState.Disconnected ->
                                                 JibeOnSurfaceVariant.copy(alpha = 0.3f)
@@ -200,6 +255,8 @@ private fun ConnectionStatusCard(state: ConnectionState) {
                                                                         "Discovering…"
                                                                 is ConnectionState.PairingFailed ->
                                                                         "Pairing failed"
+                                                                is ConnectionState.PairingUnavailable ->
+                                                                        "Pairing unavailable"
                                                                 is ConnectionState.Failed ->
                                                                         "Failed"
                                                                 is ConnectionState.Disconnected ->
@@ -248,16 +305,37 @@ private fun ConnectionStatusCard(state: ConnectionState) {
                                 }
                         }
 
-                        if (state is ConnectionState.PairingFailed) {
+                        if (state is ConnectionState.PairingFailed ||
+                                        state is ConnectionState.PairingUnavailable
+                        ) {
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Text(
-                                        text = state.reason,
+                                        text =
+                                                when (state) {
+                                                        is ConnectionState.PairingFailed ->
+                                                                state.reason
+                                                        is ConnectionState.PairingUnavailable ->
+                                                                state.reason
+                                                        else -> ""
+                                                },
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = JibeError.copy(alpha = 0.85f)
+                                        color =
+                                                if (state is ConnectionState.PairingFailed) {
+                                                    JibeError.copy(alpha = 0.85f)
+                                                } else {
+                                                    JibeWarning.copy(alpha = 0.85f)
+                                                }
                                 )
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Text(
-                                        text = state.guidance,
+                                        text =
+                                                when (state) {
+                                                        is ConnectionState.PairingFailed ->
+                                                                state.guidance
+                                                        is ConnectionState.PairingUnavailable ->
+                                                                state.guidance
+                                                        else -> ""
+                                                },
                                         style = MaterialTheme.typography.bodySmall,
                                         color = JibeOnSurfaceVariant
                                 )
@@ -346,6 +424,348 @@ private fun PingCard(
                                         )
                         ) { Text(text = "Send", style = MaterialTheme.typography.labelLarge) }
                 }
+        }
+}
+
+@Composable
+private fun ClipboardCard(isConnected: Boolean, repository: ConnectionRepository) {
+        val context = LocalContext.current
+        Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = JibeSurfaceContainer),
+                shape = RoundedCornerShape(12.dp)
+        ) {
+                Row(
+                        modifier = Modifier.padding(20.dp).fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                        text = "Clipboard",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = JibeOnSurface
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                        text = "Send current clipboard text to the daemon",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = JibeOnSurfaceVariant
+                                )
+                        }
+
+                        Button(
+                                onClick = {
+                                        val text = ClipboardTextReader.readPlainText(context)
+                                        if (text.isNullOrBlank()) {
+                                                Toast.makeText(
+                                                                context,
+                                                                context.getString(
+                                                                        R.string.clipboard_sync_empty
+                                                                ),
+                                                                Toast.LENGTH_SHORT
+                                                        )
+                                                        .show()
+                                        } else {
+                                                if (repository.sendClipboardSync(text)) {
+                                                        Toast.makeText(
+                                                                        context,
+                                                                        context.getString(
+                                                                                R.string.clipboard_sync_sent
+                                                                        ),
+                                                                        Toast.LENGTH_SHORT
+                                                                )
+                                                                .show()
+                                                } else {
+                                                        Toast.makeText(
+                                                                        context,
+                                                                        context.getString(
+                                                                                R.string.clipboard_sync_not_connected
+                                                                        ),
+                                                                        Toast.LENGTH_SHORT
+                                                                )
+                                                                .show()
+                                                }
+                                        }
+                                },
+                                enabled = isConnected,
+                                shape = RoundedCornerShape(8.dp),
+                                colors =
+                                        ButtonDefaults.buttonColors(
+                                                containerColor = JibePrimary.copy(alpha = 0.12f),
+                                                contentColor = JibePrimary
+                                        )
+                        ) { Text(text = "Sync", style = MaterialTheme.typography.labelLarge) }
+                }
+        }
+}
+
+private val TransferProgressBarShape = RoundedCornerShape(4.dp)
+private val TransferProgressBarHeight = 5.dp
+private const val TransferProgressTrackAlpha = 0.10f
+
+@Composable
+private fun TransferProgressBar(
+        modifier: Modifier = Modifier,
+        progress: (() -> Float)?,
+) {
+        val barModifier =
+                modifier.fillMaxWidth().height(TransferProgressBarHeight).clip(TransferProgressBarShape)
+        val trackColor = JibeOnSurface.copy(alpha = TransferProgressTrackAlpha)
+        val indicatorColor = JibePrimary
+        if (progress != null) {
+                LinearProgressIndicator(
+                        progress = progress,
+                        modifier = barModifier,
+                        color = indicatorColor,
+                        trackColor = trackColor,
+                        strokeCap = StrokeCap.Round,
+                        drawStopIndicator = {},
+                )
+        } else {
+                LinearProgressIndicator(
+                        modifier = barModifier,
+                        color = indicatorColor,
+                        trackColor = trackColor,
+                        strokeCap = StrokeCap.Round,
+                )
+        }
+}
+
+@Composable
+private fun FileTransferCard(
+        isConnected: Boolean,
+        transferProgress: TransferProgress?,
+        onPickClick: () -> Unit,
+        onCancelClick: () -> Unit
+) {
+        val busy =
+                transferProgress?.let {
+                    !it.isComplete && !it.isCancelled && it.error == null
+                } == true
+
+        Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = JibeSurfaceContainer),
+                shape = RoundedCornerShape(12.dp)
+        ) {
+                Column(modifier = Modifier.padding(20.dp).fillMaxWidth()) {
+                        Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                                Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
+                                        Text(
+                                                text = "Send file",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                color = JibeOnSurface
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                                text = "Chunked upload to ~/Downloads on the daemon",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = JibeOnSurfaceVariant
+                                        )
+                                }
+
+                                when {
+                                        transferProgress?.isCancelled == true -> {
+                                                Spacer(modifier = Modifier.width(1.dp))
+                                        }
+                                        busy -> {
+                                        Button(
+                                                onClick = onCancelClick,
+                                                enabled = isConnected,
+                                                shape = RoundedCornerShape(8.dp),
+                                                colors =
+                                                        ButtonDefaults.buttonColors(
+                                                                containerColor =
+                                                                        JibeError.copy(
+                                                                                alpha = 0.14f
+                                                                        ),
+                                                                contentColor = JibeError
+                                                        )
+                                        ) {
+                                                Text(
+                                                        text = "Cancel",
+                                                        style = MaterialTheme.typography.labelLarge
+                                                )
+                                        }
+                                        }
+                                        else -> {
+                                        Button(
+                                                onClick = onPickClick,
+                                                enabled = isConnected,
+                                                shape = RoundedCornerShape(8.dp),
+                                                colors =
+                                                        ButtonDefaults.buttonColors(
+                                                                containerColor =
+                                                                        JibePrimary.copy(
+                                                                                alpha = 0.12f
+                                                                        ),
+                                                                contentColor = JibePrimary
+                                                        )
+                                        ) {
+                                                Text(
+                                                        text = "Pick",
+                                                        style = MaterialTheme.typography.labelLarge
+                                                )
+                                        }
+                                        }
+                                }
+                        }
+
+                        if (transferProgress != null) {
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                val awaitingAck =
+                                        transferProgress.bytesSent >= transferProgress.totalBytes &&
+                                                !transferProgress.isComplete &&
+                                                transferProgress.error == null
+
+                                when {
+                                        transferProgress.error != null -> {
+                                                Text(
+                                                        text = transferProgress.error,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = JibeError.copy(alpha = 0.9f)
+                                                )
+                                        }
+                                        transferProgress.isCancelled -> {
+                                                Text(
+                                                        text = "Cancelled",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = JibeOnSurfaceVariant.copy(alpha = 0.9f)
+                                                )
+                                        }
+                                        transferProgress.isComplete -> {
+                                                Text(
+                                                        text = "Saved on daemon ✓",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = JibeSuccess.copy(alpha = 0.9f)
+                                                )
+                                        }
+                                        awaitingAck -> {
+                                                TransferProgressBar(progress = null)
+                                                Spacer(modifier = Modifier.height(6.dp))
+                                                Text(
+                                                        text = "Verifying…",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = JibeOnSurfaceVariant
+                                                )
+                                        }
+                                        transferProgress.totalBytes > 0 -> {
+                                                val p =
+                                                        transferProgress.bytesSent.toFloat() /
+                                                                transferProgress.totalBytes
+                                                                        .toFloat()
+                                                TransferProgressBar(progress = { p })
+                                                Spacer(modifier = Modifier.height(6.dp))
+                                                // Line 1: filename (truncated)
+                                                Text(
+                                                        text = transferProgress.filename,
+                                                        style =
+                                                                MaterialTheme.typography.labelSmall
+                                                                        .copy(
+                                                                                fontFamily =
+                                                                                        RobotoMono
+                                                                        ),
+                                                        color = JibeOnSurface,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                )
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                // Line 2: bytes · speed · ETA
+                                                Text(
+                                                        text =
+                                                                buildTransferMeta(
+                                                                        transferProgress
+                                                                ),
+                                                        style =
+                                                                MaterialTheme.typography.labelSmall
+                                                                        .copy(
+                                                                                fontFamily =
+                                                                                        RobotoMono
+                                                                        ),
+                                                        color = JibeOnSurfaceVariant
+                                                )
+                                        }
+                                        else -> {
+                                                TransferProgressBar(progress = null)
+                                        }
+                                }
+                        }
+                }
+        }
+}
+
+@Composable
+private fun NotificationPermissionCard() {
+        val context = LocalContext.current
+        if (notificationAccessEnabled(context)) return
+
+        Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = JibeSurfaceContainerHigh),
+                shape = RoundedCornerShape(12.dp)
+        ) {
+                Column(modifier = Modifier.padding(20.dp).fillMaxWidth()) {
+                        Text(
+                                text = "Notification mirroring",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = JibeOnSurface
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                                text =
+                                        "Forward Android notifications to the Linux desktop. Grant notification access for Jibe.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = JibeOnSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        OutlinedButton(
+                                onClick = {
+                                        context.startActivity(
+                                                Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                                        )
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                colors =
+                                        ButtonDefaults.outlinedButtonColors(
+                                                contentColor = JibePrimary
+                                        )
+                        ) { Text(text = "Open notification settings") }
+                }
+        }
+}
+
+private fun notificationAccessEnabled(context: Context): Boolean {
+        val flat =
+                Settings.Secure.getString(
+                        context.contentResolver,
+                        "enabled_notification_listeners"
+                )
+                        ?: return false
+        return flat.contains(context.packageName)
+}
+
+private fun formatKb(bytes: Long): String {
+        if (bytes < 1024) return "$bytes B"
+        val kb = bytes / 1024.0
+        return if (kb < 1024) "%.1f KB".format(kb) else "%.1f MB".format(kb / 1024.0)
+}
+
+private fun buildTransferMeta(p: TransferProgress): String = buildString {
+        append("${formatKb(p.bytesSent)} / ${formatKb(p.totalBytes)}")
+        if (p.speedBps > 0L) append("  ${formatKb(p.speedBps)}/s")
+        if (p.etaSeconds != null && p.etaSeconds > 0L) {
+                val eta =
+                        when {
+                                p.etaSeconds < 60 -> "${p.etaSeconds}s"
+                                else -> "${p.etaSeconds / 60}m ${p.etaSeconds % 60}s"
+                        }
+                append("  $eta left")
         }
 }
 

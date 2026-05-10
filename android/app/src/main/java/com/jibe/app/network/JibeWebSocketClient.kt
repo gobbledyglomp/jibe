@@ -2,15 +2,19 @@ package com.jibe.app.network
 
 import android.util.Log
 import com.jibe.app.data.model.JibeMessage
+import java.util.concurrent.atomic.AtomicLong
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import okio.ByteString.Companion.toByteString
 
 /** Events emitted by the WebSocket connection to the upper layers. */
 sealed class WebSocketEvent {
@@ -38,8 +42,13 @@ sealed class WebSocketEvent {
  * 5. Call disconnect() to close cleanly
  *
  * @param client The OkHttpClient instance (with custom TLS trust manager).
+ * @param callbackScope Coroutine scope used to emit socket events; suspending [emit] avoids dropped
+ * `Connected` / `Disconnected` signals from [MutableSharedFlow.tryEmit].
  */
-class JibeWebSocketClient(private val client: OkHttpClient) : JibeWebSocketHandle {
+class JibeWebSocketClient(
+        private val client: OkHttpClient,
+        private val callbackScope: CoroutineScope,
+) : JibeWebSocketHandle {
 
     companion object {
         private const val TAG = "JibeWebSocket"
@@ -49,6 +58,9 @@ class JibeWebSocketClient(private val client: OkHttpClient) : JibeWebSocketHandl
 
     private var webSocket: WebSocket? = null
 
+    /** Bumped on every [disconnect]/[connect] so late listener callbacks cannot confuse a new socket. */
+    private val connectionGeneration = AtomicLong(0L)
+
     private val _events =
             MutableSharedFlow<WebSocketEvent>(
                     replay = 0,
@@ -56,6 +68,13 @@ class JibeWebSocketClient(private val client: OkHttpClient) : JibeWebSocketHandl
                     onBufferOverflow = BufferOverflow.DROP_OLDEST
             )
     override val events: SharedFlow<WebSocketEvent> = _events.asSharedFlow()
+
+    private fun dispatch(generation: Long, event: WebSocketEvent) {
+        callbackScope.launch {
+            if (generation != connectionGeneration.get()) return@launch
+            _events.emit(event)
+        }
+    }
 
     /**
      * Open a WebSocket connection to the daemon.
@@ -74,6 +93,8 @@ class JibeWebSocketClient(private val client: OkHttpClient) : JibeWebSocketHandl
 
         val request = Request.Builder().url(url).build()
 
+        val generation = connectionGeneration.get()
+
         webSocket =
                 client.newWebSocket(
                         request,
@@ -81,16 +102,20 @@ class JibeWebSocketClient(private val client: OkHttpClient) : JibeWebSocketHandl
 
                             override fun onOpen(webSocket: WebSocket, response: Response) {
                                 Log.i(TAG, "WebSocket connected to $url")
-                                _events.tryEmit(WebSocketEvent.Connected)
+                                dispatch(generation, WebSocketEvent.Connected)
                             }
 
                             override fun onMessage(webSocket: WebSocket, text: String) {
                                 try {
                                     val message = MessageParser.parse(text)
-                                    _events.tryEmit(WebSocketEvent.MessageReceived(message))
+                                    dispatch(generation, WebSocketEvent.MessageReceived(message))
                                 } catch (e: MessageParseException) {
                                     Log.w(TAG, "Failed to parse message: ${e.message}")
                                 }
+                            }
+
+                            override fun onMessage(webSocket: WebSocket, bytes: okio.ByteString) {
+                                Log.w(TAG, "Ignoring unexpected binary frame (${bytes.size} bytes)")
                             }
 
                             override fun onClosing(
@@ -106,7 +131,7 @@ class JibeWebSocketClient(private val client: OkHttpClient) : JibeWebSocketHandl
 
                             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                                 Log.i(TAG, "WebSocket closed: $code $reason")
-                                _events.tryEmit(WebSocketEvent.Disconnected(code, reason))
+                                dispatch(generation, WebSocketEvent.Disconnected(code, reason))
                             }
 
                             override fun onFailure(
@@ -115,7 +140,7 @@ class JibeWebSocketClient(private val client: OkHttpClient) : JibeWebSocketHandl
                                     response: Response?
                             ) {
                                 Log.e(TAG, "WebSocket failure: ${t.message}", t)
-                                _events.tryEmit(WebSocketEvent.Error(t))
+                                dispatch(generation, WebSocketEvent.Error(t))
                             }
                         }
                 )
@@ -137,8 +162,19 @@ class JibeWebSocketClient(private val client: OkHttpClient) : JibeWebSocketHandl
         return ws.send(json)
     }
 
+    override fun sendBinary(payload: ByteArray): Boolean {
+        val ws =
+                webSocket
+                        ?: run {
+                            Log.w(TAG, "Attempted to send binary on a closed WebSocket")
+                            return false
+                        }
+        return ws.send(payload.toByteString())
+    }
+
     /** Close the WebSocket connection cleanly. */
     override fun disconnect() {
+        connectionGeneration.incrementAndGet()
         webSocket?.close(NORMAL_CLOSURE, "Client disconnecting")
         webSocket = null
     }

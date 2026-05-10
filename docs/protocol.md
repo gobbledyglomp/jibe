@@ -1,13 +1,13 @@
 # Jibe WebSocket Protocol Specification
 
-> Version: 0.2.0-beta · Status: Draft
+> Version: 0.5.0-beta · Status: Draft
 
 ## Design Philosophy
 
-Jibe communicates over a single **WebSocket** connection between the Android app and the Linux daemon. Every message is a **JSON object** sent as a WebSocket text frame. The protocol is:
+Jibe communicates over a single **WebSocket** connection between the Android app and the Linux daemon. Control messages are **JSON objects** sent as WebSocket **text** frames. **File payloads** are sent as WebSocket **binary** frames with a small fixed header (see [`file.chunk` (binary)](#filechunk-binary)). The protocol is:
 
-- **Human-readable** - JSON makes debugging easy (inspect with browser devtools, `websocat`, or `jq`)
-- **Simple** - no binary framing, no compression negotiation, no sub-protocols
+- **Human-readable control plane** - JSON makes debugging easy (inspect with browser devtools, `websocat`, or `jq`)
+- **Efficient bulk transfer** - raw bytes over binary frames avoid Base64 and oversized JSON on large files
 - **Easy to extend** - adding a new message type never breaks existing ones; unknown types are rejected with a clean error, not silently ignored
 - **Stateless per-message** - each message is self-contained; the server does not track request/response pairs (the connection itself is stateful, but individual messages are not)
 
@@ -27,7 +27,7 @@ sequenceDiagram
     Note over Android,Daemon: 5. Session established
     Android->>Daemon: ping
     Daemon-->>Android: pong
-    Android->>Daemon: clipboard.sync / notification / file.start…
+    Android->>Daemon: clipboard.sync / notification / file.start / file.cancel…
     Daemon-->>Android: clipboard.sync
 
     Android->>Daemon: 6. close frame
@@ -39,9 +39,9 @@ sequenceDiagram
 
 2. **WebSocket handshake** - The app opens a WebSocket connection to `ws://<host>:<port>/ws`. This is a standard HTTP upgrade - no custom headers required.
 
-3. **Authentication** - The app sends an `auth.request` message containing a PIN displayed on the daemon. On first connection, the user must manually approve the device. On subsequent connections, the daemon recognises trusted devices.
+3. **Authentication** - The app sends an `auth.request`. **Pairing mode must already be active on the daemon** (`--pair` flag, `SIGUSR1`, or your launcher UI) so a PIN is shown before the client connects. The request includes that PIN and the device name for first-time pairing. Trusted devices reconnect with their stored fingerprint only (no PIN). If pairing is not active, the daemon rejects the probe until the user starts pairing.
 
-4. **Auth response** - The daemon responds with `auth.response`. If `accepted` is `true`, the session is live. If `false`, the daemon closes the connection after sending the response.
+4. **Auth response** - The daemon responds with `auth.response`. If `accepted` is `true`, the session is live. If `false`, the WebSocket usually stays open so the client can adjust (unless the daemon closes it for rate limiting).
 
 5. **Active session** - Both sides exchange messages freely. Keepalive is maintained via `ping`/`pong`. Any side can send `clipboard.sync` or `notification` messages at any time.
 
@@ -58,7 +58,7 @@ sequenceDiagram
 
 ## Message Format
 
-Every message is a JSON object with at minimum a `type` field:
+Except for [binary file chunks](#filechunk-binary), every message is a JSON object with at minimum a `type` field:
 
 ```json
 {
@@ -201,9 +201,11 @@ No additional fields.
 {
   "type": "notification",
   "app": "com.whatsapp",
+  "app_name": "WhatsApp",
   "title": "Alice",
   "body": "Hey, are you coming tonight?",
-  "timestamp": 1710892800
+  "timestamp": 1710892800,
+  "icon": "<optional base64 PNG>"
 }
 ```
 
@@ -211,9 +213,11 @@ No additional fields.
 | ----------- | --------- | --------------------------------------------------------------------- |
 | `type`      | `string`  | Always `"notification"`                                               |
 | `app`       | `string`  | Android package name of the source app                                |
+| `app_name`  | `string`  | Human-readable app label (shown as the desktop notification application name) |
 | `title`     | `string`  | Notification title                                                    |
 | `body`      | `string`  | Notification body text                                                |
 | `timestamp` | `integer` | Unix timestamp (seconds) when the notification was created on Android |
+| `icon`      | `string`  | Optional PNG as Base64 — small app icon (`notify-send --icon`)        |
 
 ---
 
@@ -240,32 +244,107 @@ No additional fields.
 | `id`           | `string`  | UUID identifying this transfer — all subsequent chunks reference this ID |
 | `filename`     | `string`  | Original filename including extension                                    |
 | `size`         | `integer` | Total file size in bytes                                                 |
-| `total_chunks` | `integer` | Number of `file.chunk` messages that will follow                         |
+| `total_chunks` | `integer` | Number of binary [`file.chunk`](#filechunk-binary) frames that will follow |
 
 ---
 
-### `file.chunk`
+### `file.chunk` (binary)
 
-| Field         | Value                                         |
-| ------------- | --------------------------------------------- |
-| **Direction** | Android → Linux                               |
-| **Purpose**   | Deliver one chunk of a file being transferred |
+| Field         | Value                                                    |
+| ------------- | -------------------------------------------------------- |
+| **Direction** | Android → Linux                                          |
+| **Purpose**   | Deliver one raw chunk of a file being transferred        |
+| **Transport** | WebSocket **binary** frame (not JSON; no `type` field)    |
+
+After `file.start`, the sender sends exactly `total_chunks` binary frames in order.
+Each frame body is:
+
+| Offset | Size | Type / endianness | Description |
+| ------ | ---- | ----------------- | ----------- |
+| `0`    | `4`  | ASCII             | Magic bytes `"JBFC"` (`0x4A 0x42 0x46 0x43`) |
+| `4`    | `1`  | unsigned byte     | Header format version (currently `1`) |
+| `5`    | `1`  | unsigned byte     | Flags (reserved; send `0`) |
+| `6`    | `2`  | big-endian `u16`  | Reserved (send `0`) |
+| `8`    | `4`  | big-endian `u32`  | Chunk index (zero-based, matches `file.chunk.ack`) |
+| `12`   | `4`  | big-endian `u32`  | Payload length in bytes (`N`) |
+| `16`   | `16` | raw bytes         | Transfer UUID (same as `file.start` `id`, RFC 4122 byte layout) |
+| `32`   | `N`  | raw bytes         | Chunk payload (plaintext file bytes) |
+
+Total frame size is **`32 + N`** bytes. The final chunk may be smaller than the
+implementation’s preferred chunk size so that the sum of all payloads equals `size`
+from `file.start`.
+
+Flow control matches JSON-era behaviour: the sender must wait for the corresponding
+`file.chunk.ack` before sending the next binary chunk. This keeps WebSocket send
+queues bounded.
+
+On LAN, implementations should use a large raw chunk size (for example **4 MiB**) so
+round-trip latency per ack does not dominate throughput.
+
+Legacy JSON `file.chunk` messages with Base64 `data` are **not** accepted by current
+daemons; clients must use binary frames.
+
+---
+
+### `file.chunk.ack`
+
+| Field         | Value                                                                  |
+| ------------- | ---------------------------------------------------------------------- |
+| **Direction** | Linux → Android                                                        |
+| **Purpose**   | Acknowledge that one file chunk has been validated and written to disk |
 
 ```json
 {
-  "type": "file.chunk",
+  "type": "file.chunk.ack",
   "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
   "index": 0,
-  "data": "iVBORw0KGgoAAAANSUhEUgAA..."
+  "ok": true,
+  "bytes_received": 2097152
 }
 ```
 
-| Field   | Type      | Description                                   |
-| ------- | --------- | --------------------------------------------- |
-| `type`  | `string`  | Always `"file.chunk"`                         |
-| `id`    | `string`  | Transfer ID matching the `file.start` message |
-| `index` | `integer` | Zero-based chunk index                        |
-| `data`  | `string`  | Base64-encoded chunk data                     |
+```json
+{
+  "type": "file.chunk.ack",
+  "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "index": 0,
+  "ok": false,
+  "bytes_received": 0,
+  "reason": "Invalid chunk header"
+}
+```
+
+| Field            | Type      | Description                                                        |
+| ---------------- | --------- | ------------------------------------------------------------------ |
+| `type`           | `string`  | Always `"file.chunk.ack"`                                          |
+| `id`             | `string`  | Transfer ID matching the binary chunk’s UUID in the header           |
+| `index`          | `integer` | Zero-based chunk index being acknowledged                          |
+| `ok`             | `boolean` | `true` if the chunk was written and the next chunk may be sent      |
+| `bytes_received` | `integer` | Total raw bytes written for this transfer after the acknowledged chunk |
+| `reason`         | `string`  | Present when `ok` is `false` — human-readable failure explanation |
+
+---
+
+### `file.cancel`
+
+| Field         | Value                                                                  |
+| ------------- | ---------------------------------------------------------------------- |
+| **Direction** | Android → Linux                                                        |
+| **Purpose**   | Abort the current in-flight upload for a transfer id without closing the session |
+
+```json
+{
+  "type": "file.cancel",
+  "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+}
+```
+
+| Field  | Type     | Description                                                 |
+| ------ | -------- | ----------------------------------------------------------- |
+| `type` | `string` | Always `"file.cancel"`                                      |
+| `id`   | `string` | Transfer ID from the corresponding `file.start` message     |
+
+The daemon removes partial data for that transfer and responds with [`file.ack`](#fileack) where `ok` is `false` and `reason` is `"Cancelled"`. Other connections cannot cancel a transfer they did not start.
 
 ---
 
@@ -289,6 +368,48 @@ No additional fields.
 | `type`     | `string` | Always `"file.done"`                                         |
 | `id`       | `string` | Transfer ID matching the `file.start` message                |
 | `checksum` | `string` | SHA-256 hash of the complete file for integrity verification |
+
+---
+
+### `file.ack`
+
+| Field         | Value                                                                      |
+| ------------- | -------------------------------------------------------------------------- |
+| **Direction** | Linux → Android                                                            |
+| **Purpose**   | Final outcome for a transfer: success after `file.done`, failure after `file.done`, or cancellation after `file.cancel` |
+
+```json
+{
+  "type": "file.ack",
+  "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "ok": true
+}
+```
+
+```json
+{
+  "type": "file.ack",
+  "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "ok": false,
+  "reason": "Checksum mismatch"
+}
+```
+
+```json
+{
+  "type": "file.ack",
+  "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "ok": false,
+  "reason": "Cancelled"
+}
+```
+
+| Field    | Type      | Description                                                        |
+| -------- | --------- | ------------------------------------------------------------------ |
+| `type`   | `string`  | Always `"file.ack"`                                                |
+| `id`     | `string`  | Transfer ID matching the `file.start` / `file.done` / `file.cancel` messages |
+| `ok`     | `boolean` | `true` if the file was verified and saved under `~/Downloads`       |
+| `reason` | `string`  | Present when `ok` is `false` — human-readable failure explanation |
 
 ---
 

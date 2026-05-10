@@ -68,12 +68,19 @@ class ConnectionRepositoryTest {
 
                 val sentPayloads = mutableListOf<String>()
 
+                val sentBinaries = mutableListOf<ByteArray>()
+
                 override fun connect(host: String, port: Int) {
                         connectCalls.add(host to port)
                 }
 
                 override fun send(json: String): Boolean {
                         sentPayloads.add(json)
+                        return true
+                }
+
+                override fun sendBinary(payload: ByteArray): Boolean {
+                        sentBinaries.add(payload.copyOf())
                         return true
                 }
 
@@ -118,6 +125,7 @@ class ConnectionRepositoryTest {
                                 scope = repoScope,
                                 deviceNameProvider = DeviceNameProvider { "TestPhone" },
                                 socketFactory = socketFactory,
+                                clipboardWriter = ClipboardWriter {},
                                 connectionDispatcher = testDispatcher,
                         )
         }
@@ -225,6 +233,47 @@ class ConnectionRepositoryTest {
                                 )
                                 cancelAndIgnoreRemainingEvents()
                         }
+                }
+
+        @Test
+        fun `auth response without pairing mode emits PairingUnavailable`() =
+                testScope.runTest {
+                        repository.startDiscovery()
+                        discoveryStateFlow.value =
+                                DiscoveryState.Found(DiscoveredDaemon("Jibe", "10.0.0.5", 8765))
+                        advanceUntilIdle()
+                        recordingSocket.emit(WebSocketEvent.Connected)
+                        advanceUntilIdle()
+
+                        val authMsg =
+                                AuthResponse(
+                                        type = MessageType.AUTH_RESPONSE.value,
+                                        accepted = false,
+                                        reason =
+                                                "Pairing mode is not active. Start pairing on the daemon (--pair or SIGUSR1), then enter the PIN shown in the daemon logs."
+                                )
+
+                        recordingSocket.emit(
+                                WebSocketEvent.MessageReceived(
+                                        JibeMessage(
+                                                type = MessageType.AUTH_RESPONSE,
+                                                payload =
+                                                        MessageParser.gson.toJsonTree(authMsg)
+                                                                .asJsonObject
+                                        )
+                                )
+                        )
+                        advanceUntilIdle()
+
+                        assertEquals(
+                                ConnectionState.PairingUnavailable(
+                                        reason =
+                                                "Pairing mode is not active. Start pairing on the daemon (--pair or SIGUSR1), then enter the PIN shown in the daemon logs.",
+                                        guidance =
+                                                "Start pairing mode on the daemon (--pair or SIGUSR1), then tap Retry."
+                                ),
+                                repository.state.value
+                        )
                 }
 
         @Test
@@ -643,7 +692,57 @@ class ConnectionRepositoryTest {
                 }
 
         @Test
-        fun `retry after pairing lockout restores pairing failed on disconnect before new pin`() =
+        fun `disconnection while PairingUnavailable restarts discovery`() =
+                testScope.runTest {
+                        repository.startDiscovery()
+                        discoveryStateFlow.value =
+                                DiscoveryState.Found(DiscoveredDaemon("Jibe", "10.0.0.5", 8765))
+                        advanceUntilIdle()
+
+                        recordingSocket.emit(WebSocketEvent.Connected)
+                        advanceUntilIdle()
+
+                        val authMsg =
+                                AuthResponse(
+                                        type = MessageType.AUTH_RESPONSE.value,
+                                        accepted = false,
+                                        reason =
+                                                "Pairing mode is not active. Start pairing on the daemon (--pair or SIGUSR1), then enter the PIN shown in the daemon logs."
+                                )
+
+                        recordingSocket.emit(
+                                WebSocketEvent.MessageReceived(
+                                        JibeMessage(
+                                                type = MessageType.AUTH_RESPONSE,
+                                                payload =
+                                                        MessageParser.gson.toJsonTree(authMsg)
+                                                                .asJsonObject
+                                        )
+                                )
+                        )
+                        advanceUntilIdle()
+
+                        assertEquals(
+                                ConnectionState.PairingUnavailable(
+                                        reason =
+                                                "Pairing mode is not active. Start pairing on the daemon (--pair or SIGUSR1), then enter the PIN shown in the daemon logs.",
+                                        guidance =
+                                                "Start pairing mode on the daemon (--pair or SIGUSR1), then tap Retry."
+                                ),
+                                repository.state.value
+                        )
+
+                        // Daemon gone — stale Found would make discovery collector reconnect instantly.
+                        discoveryStateFlow.value = DiscoveryState.Searching
+
+                        recordingSocket.emit(WebSocketEvent.Disconnected(1000, "daemon stopped"))
+                        advanceUntilIdle()
+
+                        assertEquals(ConnectionState.Discovering, repository.state.value)
+                }
+
+        @Test
+        fun `retry after pairing lockout direct reconnects on disconnect instead of snap back to pairing failed`() =
                 testScope.runTest {
                         repository.startDiscovery()
                         discoveryStateFlow.value =
@@ -709,7 +808,14 @@ class ConnectionRepositoryTest {
                         recordingSocket.emit(WebSocketEvent.Disconnected(1000, "daemon closed"))
                         advanceUntilIdle()
 
-                        assertEquals(failure, repository.state.value)
+                        advanceTimeBy(1_500)
+                        advanceUntilIdle()
+
+                        assertTrue(repository.state.value !is ConnectionState.PairingFailed)
+                        assertEquals(
+                                ConnectionState.Connecting("10.0.0.5", 8765),
+                                repository.state.value
+                        )
                 }
 
         @Test

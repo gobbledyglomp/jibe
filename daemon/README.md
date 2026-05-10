@@ -29,6 +29,14 @@ source .venv/bin/activate
 python main.py
 ```
 
+To **pair a new phone**, start the daemon with pairing mode so a PIN is printed:
+
+```bash
+python main.py --pair
+```
+
+Without `--pair`, unknown devices receive `auth.response` `accepted: false` until you trigger pairing (`SIGUSR1` on the running daemon or `--pair` on next launch). Existing paired devices still reconnect via fingerprint.
+
 ## Run tests
 
 ```bash

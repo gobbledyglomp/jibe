@@ -1,12 +1,18 @@
 package com.jibe.app.data.repository
 
+import android.content.ContentResolver
+import android.net.Uri
 import android.util.Log
 import com.jibe.app.data.local.DeviceCredentials
 import com.jibe.app.data.local.JibeDataStore
 import com.jibe.app.data.model.AuthRequest
 import com.jibe.app.data.model.AuthResponse
+import com.jibe.app.data.model.ClipboardSyncMessage
 import com.jibe.app.data.model.ErrorMessage
+import com.jibe.app.data.model.FileAckMessage
+import com.jibe.app.data.model.FileChunkAckMessage
 import com.jibe.app.data.model.MessageType
+import com.jibe.app.data.model.NotificationMessage
 import com.jibe.app.data.model.PingMessage
 import com.jibe.app.network.DaemonTlsSocketFactory
 import com.jibe.app.network.DiscoveryState
@@ -58,6 +64,9 @@ sealed class ConnectionState {
 
     /** Pairing was rejected. Unlike [Failed], this should not auto-reconnect in a loop. */
     data class PairingFailed(val reason: String, val guidance: String) : ConnectionState()
+
+    /** Daemon rejected pairing because pairing mode is not active yet. */
+    data class PairingUnavailable(val reason: String, val guidance: String) : ConnectionState()
 }
 
 /** Ping result — emitted after a pong arrives. */
@@ -83,20 +92,24 @@ class ConnectionRepository(
         private val scope: CoroutineScope,
         private val deviceNameProvider: DeviceNameProvider,
         private val socketFactory: DaemonTlsSocketFactory,
+        private val clipboardWriter: ClipboardWriter,
         private val connectionDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
     companion object {
         private const val TAG = "ConnectionRepo"
-        private const val MAX_FAST_RECONNECTS = 5
-        private const val RECONNECT_BASE_DELAY_MS = 1_500L
-        private const val RECONNECT_MAX_DELAY_MS = 60_000L
+        private const val MAX_FAST_RECONNECTS = 4
+        private const val RECONNECT_BASE_DELAY_MS = 1_000L
+        private const val RECONNECT_MAX_DELAY_MS = 8_000L
         private const val PING_TIMEOUT_MS = 5_000L
         private const val PAIRING_FAILURE_GUIDANCE =
                 "Restart the daemon to reset pairing, then tap Retry."
+        private const val PAIRING_INACTIVE_GUIDANCE =
+                "Start pairing mode on the daemon (--pair or SIGUSR1), then tap Retry."
         private const val MAX_PAIRING_PIN_FAILURES = 5
         private const val PAIRING_RETRY_SETTLE_MS = 120L
         private const val PAIRING_DIRECT_RECONNECT_MAX = 3
-        private const val PAIRING_RECONNECT_BASE_MS = 1_500L
+        private const val PAIRING_RECONNECT_BASE_MS = 1_000L
+        private const val PAIRING_RECONNECT_MAX_MS = 5_000L
     }
 
     private val _state = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
@@ -115,6 +128,17 @@ class ConnectionRepository(
      * daemon accepts pairing again or rejects (no PIN sheet blink).
      */
     val pairingLockoutProbeUi: StateFlow<Boolean> = _pairingLockoutProbeUi.asStateFlow()
+
+    private val fileTransfers =
+            FileTransferRepository(
+                    scope,
+                    connectionDispatcher,
+                    sendJson = { json -> wsClient?.send(json) == true },
+                    sendBinary = { bytes -> wsClient?.sendBinary(bytes) == true },
+            )
+
+    /** Outbound file upload progress (Android → Linux). */
+    val transferProgress: StateFlow<TransferProgress?> = fileTransfers.progress
 
     private var wsClient: JibeWebSocketHandle? = null
     private var trustManager: JibeTrustManager? = null
@@ -257,6 +281,33 @@ class ConnectionRepository(
      *
      * The result arrives asynchronously via [pingResults] flow when the pong response comes back.
      */
+    /**
+     * Push plain text to the daemon clipboard sync channel (requires [ConnectionState.Connected]).
+     *
+     * @return ``true`` if the message was queued on the socket.
+     */
+    fun sendClipboardSync(content: String): Boolean {
+        val client = wsClient ?: return false
+        if (_state.value !is ConnectionState.Connected) return false
+        return client.send(MessageParser.toJson(ClipboardSyncMessage(content = content)))
+    }
+
+    /** Forward a mirrored notification payload to the daemon. */
+    fun sendNotification(msg: NotificationMessage) {
+        val client = wsClient ?: return
+        if (_state.value !is ConnectionState.Connected) return
+        client.send(MessageParser.toJson(msg))
+    }
+
+    /** Upload a content URI to the daemon into ``~/Downloads`` (requires connected). */
+    fun sendFile(uri: Uri, contentResolver: ContentResolver) {
+        if (_state.value !is ConnectionState.Connected) return
+        fileTransfers.sendFile(uri, contentResolver)
+    }
+
+    /** Cancel the active file transfer without disconnecting the daemon session. */
+    fun cancelFileTransfer(): Boolean = fileTransfers.cancelActiveTransfer()
+
     fun sendPing() {
         val client = wsClient ?: return
         pingTimeoutJob?.cancel()
@@ -310,6 +361,7 @@ class ConnectionRepository(
         discovery.stopDiscovery()
         fastReconnectAttempts = 0
         pairingRetryCount = 0
+        fileTransfers.reset()
         _state.value = ConnectionState.Disconnected
     }
 
@@ -411,6 +463,18 @@ class ConnectionRepository(
                 Log.d(TAG, "Pong received, latency: ${latency}ms")
                 _pingResults.emit(PingResult(latency))
             }
+            MessageType.CLIPBOARD_SYNC -> {
+                val sync = MessageParser.payloadAs<ClipboardSyncMessage>(message)
+                clipboardWriter.setPlainText(sync.content)
+            }
+            MessageType.FILE_ACK -> {
+                val ack = MessageParser.payloadAs<FileAckMessage>(message)
+                fileTransfers.onFileAck(ack)
+            }
+            MessageType.FILE_CHUNK_ACK -> {
+                val ack = MessageParser.payloadAs<FileChunkAckMessage>(message)
+                fileTransfers.onFileChunkAck(ack)
+            }
             MessageType.ERROR -> {
                 val error = MessageParser.payloadAs<ErrorMessage>(message)
                 Log.w(TAG, "Server error: [${error.code}] ${error.message}")
@@ -423,6 +487,8 @@ class ConnectionRepository(
                     } else if (credentials == null) {
                         if (expectPairingFailureOnEarlyDisconnect) {
                             transitionToPairingFailed(reason = error.message)
+                        } else if (isPairingModeInactiveReason(error.message)) {
+                            transitionToPairingUnavailable(reason = error.message)
                         } else {
                             expectPairingFailureOnEarlyDisconnect = false
                             _pairingLockoutProbeUi.value = false
@@ -500,7 +566,12 @@ class ConnectionRepository(
                     )
                     expectPairingFailureOnEarlyDisconnect = false
                     _pairingLockoutProbeUi.value = false
-                    _state.value = ConnectionState.Authenticating(host, hint = response.reason)
+                    if (isPairingModeInactiveReason(response.reason)) {
+                        transitionToPairingUnavailable(reason = response.reason)
+                    } else {
+                        _state.value =
+                                ConnectionState.Authenticating(host, hint = response.reason)
+                    }
                 }
             } else {
                 Log.w(TAG, "Auth rejected: ${response.reason}")
@@ -521,6 +592,21 @@ class ConnectionRepository(
         _state.value = ConnectionState.PairingFailed(reason, guidance)
     }
 
+    private fun transitionToPairingUnavailable(
+            reason: String,
+            guidance: String = PAIRING_INACTIVE_GUIDANCE
+    ) {
+        _pairSubmitInFlight.value = false
+        _pairingLockoutProbeUi.value = false
+        pairingPinSubmitted = false
+        pairingWrongPinAttempts = 0
+        expectPairingFailureOnEarlyDisconnect = false
+        _state.value = ConnectionState.PairingUnavailable(reason, guidance)
+    }
+
+    private fun isPairingModeInactiveReason(reason: String): Boolean =
+            reason.contains("not active", ignoreCase = true)
+
     /** Handle disconnection using a two-phase reconnection strategy. */
     private fun handleDisconnection() {
         if (skipNextDisconnectedHandling) {
@@ -529,6 +615,7 @@ class ConnectionRepository(
         }
 
         _pairSubmitInFlight.value = false
+        fileTransfers.reset()
 
         val stateAtDisconnect = _state.value
 
@@ -537,39 +624,18 @@ class ConnectionRepository(
                 scope.launch {
                     val credentials = dataStore.credentials.first()
 
-                    if (credentials == null &&
-                                    expectPairingFailureOnEarlyDisconnect &&
-                                    !pairingPinSubmitted &&
-                                    (stateAtDisconnect is ConnectionState.Authenticating ||
-                                            stateAtDisconnect is ConnectionState.Connecting)
-                    ) {
-                        expectPairingFailureOnEarlyDisconnect = false
-                        pairingRetryCount = 0
-                        discoveryJob?.cancel()
-                        discoveryJob = null
-                        pingTimeoutJob?.cancel()
-                        pingTimeoutJob = null
-                        eventCollectorJob?.cancel()
-                        eventCollectorJob = null
-
-                        discovery.stopDiscovery()
-
-                        skipNextDisconnectedHandling = true
-                        wsClient?.disconnect()
-                        wsClient = null
-                        trustManager = null
-
-                        transitionToPairingFailed(
-                                reason = lastPairingFailureReason,
-                                guidance = lastPairingFailureGuidance
-                        )
-                        return@launch
-                    }
-
                     if (credentials == null) {
                         fastReconnectAttempts = 0
 
                         when (stateAtDisconnect) {
+                            is ConnectionState.PairingUnavailable -> {
+                                Log.i(
+                                        TAG,
+                                        "Daemon disappeared while pairing inactive — restarting NSD discovery"
+                                )
+                                startDiscovery()
+                                return@launch
+                            }
                             is ConnectionState.PairingFailed -> {
                                 _state.value = stateAtDisconnect
                             }
@@ -580,7 +646,7 @@ class ConnectionRepository(
                                 val backoffMs =
                                         min(
                                                 PAIRING_RECONNECT_BASE_MS * pairingRetryCount,
-                                                RECONNECT_MAX_DELAY_MS
+                                                PAIRING_RECONNECT_MAX_MS
                                         )
                                 Log.d(
                                         TAG,
