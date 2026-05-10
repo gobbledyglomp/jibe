@@ -40,7 +40,7 @@
 
     <!-- Clipboard -->
     <string name="clipboard_title">Clipboard</string>
-    <string name="clipboard_subtitle">Send current clipboard text to the daemon</string>
+    <string name="clipboard_subtitle">Sync text with the daemon</string>
     <string name="clipboard_sync_action">Sync</string>
     <string name="clipboard_sync_sent">Sent</string>
     <string name="clipboard_sync_empty">Clipboard empty</string>
@@ -49,7 +49,7 @@
 
     <!-- File transfer -->
     <string name="file_title">Send file</string>
-    <string name="file_subtitle">Chunked upload to ~/Downloads on the daemon</string>
+    <string name="file_subtitle">Upload to ~/Downloads on daemon</string>
     <string name="file_pick">Pick</string>
     <string name="transfer_cancelled">Cancelled</string>
     <string name="transfer_saved">Saved on daemon ✓</string>

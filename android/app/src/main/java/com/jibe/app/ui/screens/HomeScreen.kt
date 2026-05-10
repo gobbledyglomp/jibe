@@ -414,19 +414,18 @@ private fun PresentCard(onClick: () -> Unit) {
                 shape = RoundedCornerShape(12.dp)
         ) {
                 Row(
-                        modifier = Modifier.padding(20.dp).fillMaxWidth(),
+                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                         CardIcon(Icons.Default.Slideshow)
-                        Spacer(modifier = Modifier.width(14.dp))
-                        Column(modifier = Modifier.weight(1f)) {
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
                                 Text(
                                         text = stringResource(R.string.present_title),
                                         style = MaterialTheme.typography.titleMedium,
                                         color = MaterialTheme.colorScheme.onSurface
                                 )
-                                Spacer(modifier = Modifier.height(4.dp))
+                                Spacer(modifier = Modifier.height(2.dp))
                                 Text(
                                         text = stringResource(R.string.present_subtitle),
                                         style = MaterialTheme.typography.bodySmall,
@@ -460,25 +459,24 @@ private fun PingCard(
                 shape = RoundedCornerShape(12.dp)
         ) {
                 Row(
-                        modifier = Modifier.padding(20.dp).fillMaxWidth(),
+                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                         CardIcon(Icons.Default.Speed)
-                        Spacer(modifier = Modifier.width(14.dp))
-                        Column {
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
                                 Text(
                                         text = stringResource(R.string.ping_title),
                                         style = MaterialTheme.typography.titleMedium,
                                         color = MaterialTheme.colorScheme.onSurface
                                 )
 
-                                Spacer(modifier = Modifier.height(4.dp))
+                                Spacer(modifier = Modifier.height(2.dp))
 
                                 Text(
                                         text = if (lastLatency >= 0) "${lastLatency}ms" else "—",
                                         style =
-                                                MaterialTheme.typography.headlineSmall.copy(
+                                                MaterialTheme.typography.titleLarge.copy(
                                                         fontFamily = RobotoMono,
                                                         fontWeight = FontWeight.Medium
                                                 ),
@@ -511,19 +509,18 @@ private fun ClipboardCard(isConnected: Boolean, repository: ConnectionRepository
                 shape = RoundedCornerShape(12.dp)
         ) {
                 Row(
-                        modifier = Modifier.padding(20.dp).fillMaxWidth(),
+                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                         CardIcon(Icons.Default.ContentCopy)
-                        Spacer(modifier = Modifier.width(14.dp))
-                        Column(modifier = Modifier.weight(1f)) {
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
                                 Text(
                                         text = stringResource(R.string.clipboard_title),
                                         style = MaterialTheme.typography.titleMedium,
                                         color = MaterialTheme.colorScheme.onSurface
                                 )
-                                Spacer(modifier = Modifier.height(4.dp))
+                                Spacer(modifier = Modifier.height(2.dp))
                                 Text(
                                         text = stringResource(R.string.clipboard_subtitle),
                                         style = MaterialTheme.typography.bodySmall,
@@ -629,21 +626,20 @@ private fun FileTransferCard(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
                 shape = RoundedCornerShape(12.dp)
         ) {
-                Column(modifier = Modifier.padding(20.dp).fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
                         Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                                 CardIcon(Icons.Default.UploadFile)
-                                Spacer(modifier = Modifier.width(14.dp))
-                                Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
                                         Text(
                                                 text = stringResource(R.string.file_title),
                                                 style = MaterialTheme.typography.titleMedium,
                                                 color = MaterialTheme.colorScheme.onSurface
                                         )
-                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Spacer(modifier = Modifier.height(2.dp))
                                         Text(
                                                 text = stringResource(R.string.file_subtitle),
                                                 style = MaterialTheme.typography.bodySmall,
@@ -792,10 +788,10 @@ private fun NotificationPermissionCard(trailingSpacerDp: Int = 0) {
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
                 shape = RoundedCornerShape(12.dp)
         ) {
-                Column(modifier = Modifier.padding(20.dp).fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                                 CardIcon(Icons.Default.Notifications)
-                                Spacer(modifier = Modifier.width(14.dp))
+                                Spacer(modifier = Modifier.width(12.dp))
                                 Text(
                                         text = stringResource(R.string.notif_title),
                                         style = MaterialTheme.typography.titleMedium,
@@ -834,7 +830,7 @@ private fun CardIcon(icon: ImageVector) {
                 imageVector = icon,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(18.dp)
         )
 }
 
