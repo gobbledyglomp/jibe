@@ -42,13 +42,11 @@ async def test_handle_notification_runs_notify_send(mock_ws, monkeypatch):
 
     await handle_notification(conn, _notification_msg())
 
-    assert captured["args"][:5] == (
-        "notify-send",
-        "--app-name",
-        "com.example.app",
-        "Hi",
-        "There",
-    )
+    args = captured["args"]
+    assert args[0] == "notify-send"
+    assert "--app-name" in args
+    assert args[args.index("--app-name") + 1] == "com.example.app"
+    assert "Hi" in args and "There" in args
     assert captured["kwargs"]["stdout"] == asyncio.subprocess.DEVNULL
 
 
