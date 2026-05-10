@@ -46,12 +46,16 @@
       devices: {
         title: 'Devices',
         name: 'Name',
+        battery: 'Battery',
         lastSeen: 'Last seen',
         paired: 'Paired',
         revokeConfirm: 'Revoke pairing for',
         revokeFail: 'Revoke failed:',
         renamePrompt: 'New device name',
         renameTitle: 'Click to rename',
+        ring: 'Ring',
+        ringTitle: 'Ring this phone',
+        ringFail: 'Ring failed:',
       },
       history: {
         title: 'History',
@@ -195,12 +199,16 @@
       devices: {
         title: 'Dispositivos',
         name: 'Nombre',
+        battery: 'Batería',
         lastSeen: 'Última vez',
         paired: 'Emparejado',
         revokeConfirm: '¿Revocar emparejamiento de',
         revokeFail: 'No se pudo revocar:',
         renamePrompt: 'Nuevo nombre del dispositivo',
         renameTitle: 'Clic para renombrar',
+        ring: 'Llamar',
+        ringTitle: 'Llamar a este teléfono',
+        ringFail: 'Error al llamar:',
       },
       history: {
         title: 'Historial',
