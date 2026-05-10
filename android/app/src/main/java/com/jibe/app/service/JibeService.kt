@@ -192,6 +192,8 @@ class JibeService : Service() {
                     state is ConnectionState.Connected -> "Jibe — Connected" to state.host
                     state is ConnectionState.PairingFailed ->
                             "Jibe" to "PIN rejected. Restart the daemon and retry."
+                    state is ConnectionState.PairingUnavailable ->
+                            "Jibe" to state.reason
                     state is ConnectionState.Failed -> {
                         val detail = state.reason.trim()
                         val clipped =

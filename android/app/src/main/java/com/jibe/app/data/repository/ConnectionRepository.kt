@@ -64,6 +64,9 @@ sealed class ConnectionState {
 
     /** Pairing was rejected. Unlike [Failed], this should not auto-reconnect in a loop. */
     data class PairingFailed(val reason: String, val guidance: String) : ConnectionState()
+
+    /** Daemon rejected pairing because pairing mode is not active yet. */
+    data class PairingUnavailable(val reason: String, val guidance: String) : ConnectionState()
 }
 
 /** Ping result — emitted after a pong arrives. */
@@ -94,16 +97,19 @@ class ConnectionRepository(
 ) {
     companion object {
         private const val TAG = "ConnectionRepo"
-        private const val MAX_FAST_RECONNECTS = 5
-        private const val RECONNECT_BASE_DELAY_MS = 1_500L
-        private const val RECONNECT_MAX_DELAY_MS = 60_000L
+        private const val MAX_FAST_RECONNECTS = 4
+        private const val RECONNECT_BASE_DELAY_MS = 1_000L
+        private const val RECONNECT_MAX_DELAY_MS = 8_000L
         private const val PING_TIMEOUT_MS = 5_000L
         private const val PAIRING_FAILURE_GUIDANCE =
                 "Restart the daemon to reset pairing, then tap Retry."
+        private const val PAIRING_INACTIVE_GUIDANCE =
+                "Start pairing mode on the daemon (--pair or SIGUSR1), then tap Retry."
         private const val MAX_PAIRING_PIN_FAILURES = 5
         private const val PAIRING_RETRY_SETTLE_MS = 120L
         private const val PAIRING_DIRECT_RECONNECT_MAX = 3
-        private const val PAIRING_RECONNECT_BASE_MS = 1_500L
+        private const val PAIRING_RECONNECT_BASE_MS = 1_000L
+        private const val PAIRING_RECONNECT_MAX_MS = 5_000L
     }
 
     private val _state = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
@@ -478,6 +484,8 @@ class ConnectionRepository(
                     } else if (credentials == null) {
                         if (expectPairingFailureOnEarlyDisconnect) {
                             transitionToPairingFailed(reason = error.message)
+                        } else if (isPairingModeInactiveReason(error.message)) {
+                            transitionToPairingUnavailable(reason = error.message)
                         } else {
                             expectPairingFailureOnEarlyDisconnect = false
                             _pairingLockoutProbeUi.value = false
@@ -555,7 +563,12 @@ class ConnectionRepository(
                     )
                     expectPairingFailureOnEarlyDisconnect = false
                     _pairingLockoutProbeUi.value = false
-                    _state.value = ConnectionState.Authenticating(host, hint = response.reason)
+                    if (isPairingModeInactiveReason(response.reason)) {
+                        transitionToPairingUnavailable(reason = response.reason)
+                    } else {
+                        _state.value =
+                                ConnectionState.Authenticating(host, hint = response.reason)
+                    }
                 }
             } else {
                 Log.w(TAG, "Auth rejected: ${response.reason}")
@@ -575,6 +588,21 @@ class ConnectionRepository(
         expectPairingFailureOnEarlyDisconnect = false
         _state.value = ConnectionState.PairingFailed(reason, guidance)
     }
+
+    private fun transitionToPairingUnavailable(
+            reason: String,
+            guidance: String = PAIRING_INACTIVE_GUIDANCE
+    ) {
+        _pairSubmitInFlight.value = false
+        _pairingLockoutProbeUi.value = false
+        pairingPinSubmitted = false
+        pairingWrongPinAttempts = 0
+        expectPairingFailureOnEarlyDisconnect = false
+        _state.value = ConnectionState.PairingUnavailable(reason, guidance)
+    }
+
+    private fun isPairingModeInactiveReason(reason: String): Boolean =
+            reason.contains("not active", ignoreCase = true)
 
     /** Handle disconnection using a two-phase reconnection strategy. */
     private fun handleDisconnection() {
@@ -607,7 +635,7 @@ class ConnectionRepository(
                                 val backoffMs =
                                         min(
                                                 PAIRING_RECONNECT_BASE_MS * pairingRetryCount,
-                                                RECONNECT_MAX_DELAY_MS
+                                                PAIRING_RECONNECT_MAX_MS
                                         )
                                 Log.d(
                                         TAG,

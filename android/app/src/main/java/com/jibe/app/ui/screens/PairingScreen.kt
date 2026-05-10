@@ -87,6 +87,9 @@ private sealed class PairingMotionTarget {
     data class FailedCard(val reason: String) : PairingMotionTarget()
 
     data class PairingFailedCard(val reason: String, val guidance: String) : PairingMotionTarget()
+
+    data class PairingUnavailableCard(val reason: String, val guidance: String) :
+            PairingMotionTarget()
 }
 
 private fun pairingMotionTarget(
@@ -105,6 +108,8 @@ private fun pairingMotionTarget(
                 is ConnectionState.Failed -> PairingMotionTarget.FailedCard(state.reason)
                 is ConnectionState.PairingFailed ->
                         PairingMotionTarget.PairingFailedCard(state.reason, state.guidance)
+                is ConnectionState.PairingUnavailable ->
+                        PairingMotionTarget.PairingUnavailableCard(state.reason, state.guidance)
         }
 
 /**
@@ -141,7 +146,17 @@ fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
                                 focusRequester.requestFocus()
                                 keyboardController?.show()
                         }
-                        current is ConnectionState.Connected -> onPaired()
+                        current is ConnectionState.PairingUnavailable -> {
+                                pinValue = TextFieldValue("")
+                                keyboardController?.hide()
+                        }
+                        current is ConnectionState.Connected -> {
+                                keyboardController?.hide()
+                                onPaired()
+                        }
+                        else -> {
+                                keyboardController?.hide()
+                        }
                 }
         }
 
@@ -262,6 +277,17 @@ fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
                                                                                 afterPairingLockout =
                                                                                         true
                                                                         )
+                                                                }
+                                                        )
+                                                }
+                                                is PairingMotionTarget.PairingUnavailableCard -> {
+                                                        PairingUnavailableIndicator(
+                                                                reason = motion.reason,
+                                                                guidance = motion.guidance,
+                                                                onRetry = {
+                                                                        pinValue =
+                                                                                TextFieldValue("")
+                                                                        repository.retryPairing()
                                                                 }
                                                         )
                                                 }
@@ -563,6 +589,67 @@ private fun PairingFailedIndicator(reason: String, guidance: String, onRetry: ()
                                         ButtonDefaults.buttonColors(
                                                 containerColor = JibeError.copy(alpha = 0.14f),
                                                 contentColor = JibeError
+                                        ),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                        ) {
+                                Text("Retry")
+                        }
+                }
+        }
+}
+
+@Composable
+private fun PairingUnavailableIndicator(
+        reason: String,
+        guidance: String,
+        onRetry: () -> Unit
+) {
+        Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = JibeSurfaceContainerHigh),
+                shape = RoundedCornerShape(16.dp)
+        ) {
+                Column(
+                        modifier = Modifier.padding(20.dp).fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                        Text(
+                                text = "Pairing mode is not active",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = JibeOnSurface,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Text(
+                                text = reason,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = JibeOnSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Text(
+                                text = guidance,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = JibeOnSurfaceVariant.copy(alpha = 0.8f),
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(modifier = Modifier.height(20.dp))
+
+                        Button(
+                                onClick = onRetry,
+                                colors =
+                                        ButtonDefaults.buttonColors(
+                                                containerColor = JibePrimary.copy(alpha = 0.14f),
+                                                contentColor = JibePrimary
                                         ),
                                 shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier.fillMaxWidth()

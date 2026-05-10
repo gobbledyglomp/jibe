@@ -236,6 +236,47 @@ class ConnectionRepositoryTest {
                 }
 
         @Test
+        fun `auth response without pairing mode emits PairingUnavailable`() =
+                testScope.runTest {
+                        repository.startDiscovery()
+                        discoveryStateFlow.value =
+                                DiscoveryState.Found(DiscoveredDaemon("Jibe", "10.0.0.5", 8765))
+                        advanceUntilIdle()
+                        recordingSocket.emit(WebSocketEvent.Connected)
+                        advanceUntilIdle()
+
+                        val authMsg =
+                                AuthResponse(
+                                        type = MessageType.AUTH_RESPONSE.value,
+                                        accepted = false,
+                                        reason =
+                                                "Pairing mode is not active. Start pairing on the daemon (--pair or SIGUSR1), then enter the PIN shown in the daemon logs."
+                                )
+
+                        recordingSocket.emit(
+                                WebSocketEvent.MessageReceived(
+                                        JibeMessage(
+                                                type = MessageType.AUTH_RESPONSE,
+                                                payload =
+                                                        MessageParser.gson.toJsonTree(authMsg)
+                                                                .asJsonObject
+                                        )
+                                )
+                        )
+                        advanceUntilIdle()
+
+                        assertEquals(
+                                ConnectionState.PairingUnavailable(
+                                        reason =
+                                                "Pairing mode is not active. Start pairing on the daemon (--pair or SIGUSR1), then enter the PIN shown in the daemon logs.",
+                                        guidance =
+                                                "Start pairing mode on the daemon (--pair or SIGUSR1), then tap Retry."
+                                ),
+                                repository.state.value
+                        )
+                }
+
+        @Test
         fun `auth response accepted saves credentials and emits Connected`() =
                 testScope.runTest {
                         repository.startDiscovery()

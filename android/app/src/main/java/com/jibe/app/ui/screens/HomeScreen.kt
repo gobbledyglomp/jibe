@@ -210,6 +210,7 @@ private fun ConnectionStatusCard(state: ConnectionState) {
                                         is ConnectionState.Authenticating,
                                         is ConnectionState.Discovering -> JibeWarning
                                         is ConnectionState.PairingFailed -> JibeError
+                                        is ConnectionState.PairingUnavailable -> JibeWarning
                                         is ConnectionState.Failed -> JibeError
                                         is ConnectionState.Disconnected ->
                                                 JibeOnSurfaceVariant.copy(alpha = 0.3f)
@@ -251,6 +252,8 @@ private fun ConnectionStatusCard(state: ConnectionState) {
                                                                         "Discovering…"
                                                                 is ConnectionState.PairingFailed ->
                                                                         "Pairing failed"
+                                                                is ConnectionState.PairingUnavailable ->
+                                                                        "Pairing unavailable"
                                                                 is ConnectionState.Failed ->
                                                                         "Failed"
                                                                 is ConnectionState.Disconnected ->
@@ -299,16 +302,37 @@ private fun ConnectionStatusCard(state: ConnectionState) {
                                 }
                         }
 
-                        if (state is ConnectionState.PairingFailed) {
+                        if (state is ConnectionState.PairingFailed ||
+                                        state is ConnectionState.PairingUnavailable
+                        ) {
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Text(
-                                        text = state.reason,
+                                        text =
+                                                when (state) {
+                                                        is ConnectionState.PairingFailed ->
+                                                                state.reason
+                                                        is ConnectionState.PairingUnavailable ->
+                                                                state.reason
+                                                        else -> ""
+                                                },
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = JibeError.copy(alpha = 0.85f)
+                                        color =
+                                                if (state is ConnectionState.PairingFailed) {
+                                                    JibeError.copy(alpha = 0.85f)
+                                                } else {
+                                                    JibeWarning.copy(alpha = 0.85f)
+                                                }
                                 )
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Text(
-                                        text = state.guidance,
+                                        text =
+                                                when (state) {
+                                                        is ConnectionState.PairingFailed ->
+                                                                state.guidance
+                                                        is ConnectionState.PairingUnavailable ->
+                                                                state.guidance
+                                                        else -> ""
+                                                },
                                         style = MaterialTheme.typography.bodySmall,
                                         color = JibeOnSurfaceVariant
                                 )
