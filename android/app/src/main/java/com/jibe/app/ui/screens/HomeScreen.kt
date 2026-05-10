@@ -30,10 +30,14 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -53,8 +57,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -67,25 +71,10 @@ import com.jibe.app.data.repository.PingResult
 import com.jibe.app.data.repository.TransferProgress
 import com.jibe.app.ui.components.JibeSpinner
 import com.jibe.app.ui.theme.JibeError
-import com.jibe.app.ui.theme.JibeOnSurface
-import com.jibe.app.ui.theme.JibeOnSurfaceVariant
-import com.jibe.app.ui.theme.JibePrimary
 import com.jibe.app.ui.theme.JibeSuccess
-import com.jibe.app.ui.theme.JibeSurfaceContainer
-import com.jibe.app.ui.theme.JibeSurfaceContainerHigh
 import com.jibe.app.ui.theme.JibeWarning
 import com.jibe.app.ui.theme.RobotoMono
 
-/**
- * Home dashboard — the main screen after pairing.
- *
- * Shows:
- * - Connection status (live dot + text)
- * - Daemon info (host, device ID)
- * - Ping button with round-trip latency display
- * - Clipboard sync, chunked file send, notification-mirroring hint
- * - "Forget device" destructive action
- */
 @Composable
 fun HomeScreen(
         repository: ConnectionRepository,
@@ -129,6 +118,7 @@ fun HomeScreen(
         val scrollState = rememberScrollState()
         val configuration = LocalConfiguration.current
         val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        val isConnected = state is ConnectionState.Connected
 
         Scaffold(containerColor = MaterialTheme.colorScheme.surface) { innerPadding ->
                 Column(
@@ -143,47 +133,65 @@ fun HomeScreen(
                 ) {
                         Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.End,
+                                horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                         ) {
-                                if (state is ConnectionState.Connected && featPresentation) {
-                                        TextButton(onClick = onOpenPresentation) {
-                                                Text(
-                                                        text = "Present",
-                                                        style = MaterialTheme.typography.labelLarge,
-                                                        color = JibePrimary
-                                                )
-                                        }
-                                }
-                                TextButton(onClick = onOpenSettings) {
-                                        Text(
-                                                text = "Settings",
-                                                style = MaterialTheme.typography.labelLarge,
-                                                color = JibeOnSurfaceVariant
+                                Text(
+                                        text = stringResource(R.string.app_brand),
+                                        style =
+                                                MaterialTheme.typography.headlineLarge.copy(
+                                                        fontFamily = RobotoMono,
+                                                        fontWeight = FontWeight.Bold,
+                                                        letterSpacing = (-1).sp
+                                                ),
+                                        color = MaterialTheme.colorScheme.primary
+                                )
+
+                                IconButton(onClick = onOpenSettings) {
+                                        Icon(
+                                                imageVector = Icons.Default.Settings,
+                                                contentDescription = stringResource(R.string.settings_title),
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.size(22.dp)
                                         )
                                 }
                         }
 
-                        Text(
-                                text = "jibe",
-                                style =
-                                        MaterialTheme.typography.headlineLarge.copy(
-                                                fontFamily = RobotoMono,
-                                                fontWeight = FontWeight.Bold,
-                                                letterSpacing = (-1).sp
-                                        ),
-                                color = JibePrimary
-                        )
-
-                        Spacer(modifier = Modifier.height(if (isLandscape) 16.dp else 32.dp))
+                        Spacer(modifier = Modifier.height(if (isLandscape) 16.dp else 24.dp))
 
                         ConnectionStatusCard(state = state)
 
                         Spacer(modifier = Modifier.height(12.dp))
 
+                        if (featClipboard) {
+                                ClipboardCard(
+                                        isConnected = isConnected,
+                                        repository = repository
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                        }
+
+                        if (featFile) {
+                                FileTransferCard(
+                                        isConnected = isConnected,
+                                        transferProgress = transferProgress,
+                                        onPickClick = { pickDocument.launch(arrayOf("*/*")) },
+                                        onCancelClick = { repository.cancelFileTransfer() }
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                        }
+
+                        if (featPresentation && isConnected) {
+                                PresentCard(onClick = onOpenPresentation)
+                                Spacer(modifier = Modifier.height(12.dp))
+                        }
+
+                        NotificationPermissionCard()
+
                         if (featPing) {
+                                Spacer(modifier = Modifier.height(12.dp))
                                 PingCard(
-                                        isConnected = state is ConnectionState.Connected,
+                                        isConnected = isConnected,
                                         pingInFlight = pingInFlight,
                                         lastLatency = lastLatency,
                                         onPing = {
@@ -193,28 +201,7 @@ fun HomeScreen(
                                                 }
                                         }
                                 )
-                                Spacer(modifier = Modifier.height(12.dp))
                         }
-
-                        if (featClipboard) {
-                                ClipboardCard(
-                                        isConnected = state is ConnectionState.Connected,
-                                        repository = repository
-                                )
-                                Spacer(modifier = Modifier.height(12.dp))
-                        }
-
-                        if (featFile) {
-                                FileTransferCard(
-                                        isConnected = state is ConnectionState.Connected,
-                                        transferProgress = transferProgress,
-                                        onPickClick = { pickDocument.launch(arrayOf("*/*")) },
-                                        onCancelClick = { repository.cancelFileTransfer() }
-                                )
-                                Spacer(modifier = Modifier.height(12.dp))
-                        }
-
-                        NotificationPermissionCard()
 
                         Spacer(modifier = Modifier.height(24.dp))
 
@@ -229,9 +216,9 @@ fun HomeScreen(
                         } else {
                                 TextButton(onClick = { showForgetConfirm = true }) {
                                         Text(
-                                                text = "Forget device",
+                                                text = stringResource(R.string.home_forget_device),
                                                 style = MaterialTheme.typography.labelMedium,
-                                                color = JibeOnSurfaceVariant.copy(alpha = 0.5f)
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                                         )
                                 }
                         }
@@ -253,14 +240,14 @@ private fun ConnectionStatusCard(state: ConnectionState) {
                                         is ConnectionState.PairingUnavailable -> JibeWarning
                                         is ConnectionState.Failed -> JibeError
                                         is ConnectionState.Disconnected ->
-                                                JibeOnSurfaceVariant.copy(alpha = 0.3f)
+                                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
                                 },
                         label = "status_color"
                 )
 
         Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = JibeSurfaceContainer),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
                 shape = RoundedCornerShape(12.dp)
         ) {
                 Column(modifier = Modifier.padding(20.dp)) {
@@ -283,24 +270,24 @@ private fun ConnectionStatusCard(state: ConnectionState) {
                                                 text =
                                                         when (currentState) {
                                                                 is ConnectionState.Connected ->
-                                                                        "Connected"
+                                                                        stringResource(R.string.state_connected)
                                                                 is ConnectionState.Connecting ->
-                                                                        "Connecting…"
+                                                                        stringResource(R.string.state_connecting)
                                                                 is ConnectionState.Authenticating ->
-                                                                        "Authenticating…"
+                                                                        stringResource(R.string.state_authenticating)
                                                                 is ConnectionState.Discovering ->
-                                                                        "Discovering…"
+                                                                        stringResource(R.string.state_discovering)
                                                                 is ConnectionState.PairingFailed ->
-                                                                        "Pairing failed"
+                                                                        stringResource(R.string.state_pairing_failed)
                                                                 is ConnectionState.PairingUnavailable ->
-                                                                        "Pairing unavailable"
+                                                                        stringResource(R.string.state_pairing_unavailable)
                                                                 is ConnectionState.Failed ->
-                                                                        "Failed"
+                                                                        stringResource(R.string.state_failed)
                                                                 is ConnectionState.Disconnected ->
-                                                                        "Disconnected"
+                                                                        stringResource(R.string.state_disconnected)
                                                         },
                                                 style = MaterialTheme.typography.titleMedium,
-                                                color = JibeOnSurface
+                                                color = MaterialTheme.colorScheme.onSurface
                                         )
                                 }
 
@@ -326,9 +313,9 @@ private fun ConnectionStatusCard(state: ConnectionState) {
 
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(
-                                                text = "Host",
+                                                text = stringResource(R.string.label_host),
                                                 style = MaterialTheme.typography.labelSmall,
-                                                color = JibeOnSurfaceVariant
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                         Spacer(modifier = Modifier.width(12.dp))
                                         Text(
@@ -337,7 +324,7 @@ private fun ConnectionStatusCard(state: ConnectionState) {
                                                         MaterialTheme.typography.labelSmall.copy(
                                                                 fontFamily = RobotoMono
                                                         ),
-                                                color = JibeOnSurface
+                                                color = MaterialTheme.colorScheme.onSurface
                                         )
                                 }
                         }
@@ -374,7 +361,7 @@ private fun ConnectionStatusCard(state: ConnectionState) {
                                                         else -> ""
                                                 },
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = JibeOnSurfaceVariant
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                         }
 
@@ -383,9 +370,9 @@ private fun ConnectionStatusCard(state: ConnectionState) {
 
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(
-                                                text = "Device",
+                                                text = stringResource(R.string.label_device),
                                                 style = MaterialTheme.typography.labelSmall,
-                                                color = JibeOnSurfaceVariant
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                         Spacer(modifier = Modifier.width(12.dp))
                                         Text(
@@ -394,7 +381,7 @@ private fun ConnectionStatusCard(state: ConnectionState) {
                                                         MaterialTheme.typography.labelSmall.copy(
                                                                 fontFamily = RobotoMono
                                                         ),
-                                                color = JibeOnSurface,
+                                                color = MaterialTheme.colorScheme.onSurface,
                                                 maxLines = 1
                                         )
                                 }
@@ -413,6 +400,44 @@ private fun ConnectionStatusCard(state: ConnectionState) {
 }
 
 @Composable
+private fun PresentCard(onClick: () -> Unit) {
+        Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+                shape = RoundedCornerShape(12.dp)
+        ) {
+                Row(
+                        modifier = Modifier.padding(20.dp).fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                        text = stringResource(R.string.present_title),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                        text = stringResource(R.string.present_subtitle),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                        }
+
+                        OutlinedButton(
+                                onClick = onClick,
+                                shape = RoundedCornerShape(8.dp),
+                                colors =
+                                        ButtonDefaults.outlinedButtonColors(
+                                                contentColor = MaterialTheme.colorScheme.primary
+                                        )
+                        ) { Text(text = stringResource(R.string.present_open), style = MaterialTheme.typography.labelLarge) }
+                }
+        }
+}
+
+@Composable
 private fun PingCard(
         isConnected: Boolean,
         pingInFlight: Boolean,
@@ -421,7 +446,7 @@ private fun PingCard(
 ) {
         Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = JibeSurfaceContainer),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
                 shape = RoundedCornerShape(12.dp)
         ) {
                 Row(
@@ -431,9 +456,9 @@ private fun PingCard(
                 ) {
                         Column {
                                 Text(
-                                        text = "Ping",
+                                        text = stringResource(R.string.ping_title),
                                         style = MaterialTheme.typography.titleMedium,
-                                        color = JibeOnSurface
+                                        color = MaterialTheme.colorScheme.onSurface
                                 )
 
                                 Spacer(modifier = Modifier.height(4.dp))
@@ -446,8 +471,8 @@ private fun PingCard(
                                                         fontWeight = FontWeight.Medium
                                                 ),
                                         color =
-                                                if (lastLatency >= 0) JibePrimary
-                                                else JibeOnSurfaceVariant
+                                                if (lastLatency >= 0) MaterialTheme.colorScheme.primary
+                                                else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                         }
 
@@ -457,9 +482,9 @@ private fun PingCard(
                                 shape = RoundedCornerShape(8.dp),
                                 colors =
                                         ButtonDefaults.outlinedButtonColors(
-                                                contentColor = JibePrimary
+                                                contentColor = MaterialTheme.colorScheme.primary
                                         )
-                        ) { Text(text = "Send", style = MaterialTheme.typography.labelLarge) }
+                        ) { Text(text = stringResource(R.string.action_send), style = MaterialTheme.typography.labelLarge) }
                 }
         }
 }
@@ -469,7 +494,7 @@ private fun ClipboardCard(isConnected: Boolean, repository: ConnectionRepository
         val context = LocalContext.current
         Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = JibeSurfaceContainer),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
                 shape = RoundedCornerShape(12.dp)
         ) {
                 Row(
@@ -479,15 +504,15 @@ private fun ClipboardCard(isConnected: Boolean, repository: ConnectionRepository
                 ) {
                         Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                        text = "Clipboard",
+                                        text = stringResource(R.string.clipboard_title),
                                         style = MaterialTheme.typography.titleMedium,
-                                        color = JibeOnSurface
+                                        color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                        text = "Send current clipboard text to the daemon",
+                                        text = stringResource(R.string.clipboard_subtitle),
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = JibeOnSurfaceVariant
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                         }
 
@@ -529,10 +554,10 @@ private fun ClipboardCard(isConnected: Boolean, repository: ConnectionRepository
                                 shape = RoundedCornerShape(8.dp),
                                 colors =
                                         ButtonDefaults.buttonColors(
-                                                containerColor = JibePrimary.copy(alpha = 0.12f),
-                                                contentColor = JibePrimary
+                                                containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                                contentColor = MaterialTheme.colorScheme.primary
                                         )
-                        ) { Text(text = "Sync", style = MaterialTheme.typography.labelLarge) }
+                        ) { Text(text = stringResource(R.string.clipboard_sync_action), style = MaterialTheme.typography.labelLarge) }
                 }
         }
 }
@@ -548,8 +573,8 @@ private fun TransferProgressBar(
 ) {
         val barModifier =
                 modifier.fillMaxWidth().height(TransferProgressBarHeight).clip(TransferProgressBarShape)
-        val trackColor = JibeOnSurface.copy(alpha = TransferProgressTrackAlpha)
-        val indicatorColor = JibePrimary
+        val trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = TransferProgressTrackAlpha)
+        val indicatorColor = MaterialTheme.colorScheme.primary
         if (progress != null) {
                 LinearProgressIndicator(
                         progress = progress,
@@ -583,7 +608,7 @@ private fun FileTransferCard(
 
         Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = JibeSurfaceContainer),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
                 shape = RoundedCornerShape(12.dp)
         ) {
                 Column(modifier = Modifier.padding(20.dp).fillMaxWidth()) {
@@ -594,15 +619,15 @@ private fun FileTransferCard(
                         ) {
                                 Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
                                         Text(
-                                                text = "Send file",
+                                                text = stringResource(R.string.file_title),
                                                 style = MaterialTheme.typography.titleMedium,
-                                                color = JibeOnSurface
+                                                color = MaterialTheme.colorScheme.onSurface
                                         )
                                         Spacer(modifier = Modifier.height(4.dp))
                                         Text(
-                                                text = "Chunked upload to ~/Downloads on the daemon",
+                                                text = stringResource(R.string.file_subtitle),
                                                 style = MaterialTheme.typography.bodySmall,
-                                                color = JibeOnSurfaceVariant
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                 }
 
@@ -625,7 +650,7 @@ private fun FileTransferCard(
                                                         )
                                         ) {
                                                 Text(
-                                                        text = "Cancel",
+                                                        text = stringResource(R.string.action_cancel),
                                                         style = MaterialTheme.typography.labelLarge
                                                 )
                                         }
@@ -638,14 +663,14 @@ private fun FileTransferCard(
                                                 colors =
                                                         ButtonDefaults.buttonColors(
                                                                 containerColor =
-                                                                        JibePrimary.copy(
+                                                                        MaterialTheme.colorScheme.primary.copy(
                                                                                 alpha = 0.12f
                                                                         ),
-                                                                contentColor = JibePrimary
+                                                                contentColor = MaterialTheme.colorScheme.primary
                                                         )
                                         ) {
                                                 Text(
-                                                        text = "Pick",
+                                                        text = stringResource(R.string.file_pick),
                                                         style = MaterialTheme.typography.labelLarge
                                                 )
                                         }
@@ -671,14 +696,14 @@ private fun FileTransferCard(
                                         }
                                         transferProgress.isCancelled -> {
                                                 Text(
-                                                        text = "Cancelled",
+                                                        text = stringResource(R.string.transfer_cancelled),
                                                         style = MaterialTheme.typography.bodySmall,
-                                                        color = JibeOnSurfaceVariant.copy(alpha = 0.9f)
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f)
                                                 )
                                         }
                                         transferProgress.isComplete -> {
                                                 Text(
-                                                        text = "Saved on daemon ✓",
+                                                        text = stringResource(R.string.transfer_saved),
                                                         style = MaterialTheme.typography.bodySmall,
                                                         color = JibeSuccess.copy(alpha = 0.9f)
                                                 )
@@ -687,9 +712,9 @@ private fun FileTransferCard(
                                                 TransferProgressBar(progress = null)
                                                 Spacer(modifier = Modifier.height(6.dp))
                                                 Text(
-                                                        text = "Verifying…",
+                                                        text = stringResource(R.string.transfer_verifying),
                                                         style = MaterialTheme.typography.labelSmall,
-                                                        color = JibeOnSurfaceVariant
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
                                         }
                                         transferProgress.totalBytes > 0 -> {
@@ -699,7 +724,6 @@ private fun FileTransferCard(
                                                                         .toFloat()
                                                 TransferProgressBar(progress = { p })
                                                 Spacer(modifier = Modifier.height(6.dp))
-                                                // Line 1: filename (truncated)
                                                 Text(
                                                         text = transferProgress.filename,
                                                         style =
@@ -708,12 +732,11 @@ private fun FileTransferCard(
                                                                                 fontFamily =
                                                                                         RobotoMono
                                                                         ),
-                                                        color = JibeOnSurface,
+                                                        color = MaterialTheme.colorScheme.onSurface,
                                                         maxLines = 1,
                                                         overflow = TextOverflow.Ellipsis
                                                 )
                                                 Spacer(modifier = Modifier.height(2.dp))
-                                                // Line 2: bytes · speed · ETA
                                                 Text(
                                                         text =
                                                                 buildTransferMeta(
@@ -725,7 +748,7 @@ private fun FileTransferCard(
                                                                                 fontFamily =
                                                                                         RobotoMono
                                                                         ),
-                                                        color = JibeOnSurfaceVariant
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
                                         }
                                         else -> {
@@ -744,21 +767,20 @@ private fun NotificationPermissionCard() {
 
         Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = JibeSurfaceContainerHigh),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
                 shape = RoundedCornerShape(12.dp)
         ) {
                 Column(modifier = Modifier.padding(20.dp).fillMaxWidth()) {
                         Text(
-                                text = "Notification mirroring",
+                                text = stringResource(R.string.notif_title),
                                 style = MaterialTheme.typography.titleMedium,
-                                color = JibeOnSurface
+                                color = MaterialTheme.colorScheme.onSurface
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                                text =
-                                        "Forward Android notifications to the Linux desktop. Grant notification access for Jibe.",
+                                text = stringResource(R.string.notif_body),
                                 style = MaterialTheme.typography.bodySmall,
-                                color = JibeOnSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         OutlinedButton(
@@ -770,9 +792,9 @@ private fun NotificationPermissionCard() {
                                 shape = RoundedCornerShape(8.dp),
                                 colors =
                                         ButtonDefaults.outlinedButtonColors(
-                                                contentColor = JibePrimary
+                                                contentColor = MaterialTheme.colorScheme.primary
                                         )
-                        ) { Text(text = "Open notification settings") }
+                        ) { Text(text = stringResource(R.string.notif_open_settings)) }
                 }
         }
 }
@@ -810,7 +832,7 @@ private fun buildTransferMeta(p: TransferProgress): String = buildString {
 private fun ForgetConfirmation(onConfirm: () -> Unit, onCancel: () -> Unit) {
         Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = JibeSurfaceContainerHigh),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
                 shape = RoundedCornerShape(18.dp)
         ) {
                 Column(
@@ -818,12 +840,12 @@ private fun ForgetConfirmation(onConfirm: () -> Unit, onCancel: () -> Unit) {
                         horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                         Text(
-                                text = "Forget this device?",
+                                text = stringResource(R.string.forget_title),
                                 style =
                                         MaterialTheme.typography.titleMedium.copy(
                                                 fontWeight = FontWeight.SemiBold
                                         ),
-                                color = JibeOnSurface,
+                                color = MaterialTheme.colorScheme.onSurface,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.fillMaxWidth()
                         )
@@ -831,10 +853,9 @@ private fun ForgetConfirmation(onConfirm: () -> Unit, onCancel: () -> Unit) {
                         Spacer(modifier = Modifier.height(8.dp))
 
                         Text(
-                                text =
-                                        "This removes the saved certificate and returns Jibe to pairing mode.",
+                                text = stringResource(R.string.forget_body),
                                 style = MaterialTheme.typography.bodySmall,
-                                color = JibeOnSurfaceVariant,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.fillMaxWidth()
                         )
@@ -849,7 +870,7 @@ private fun ForgetConfirmation(onConfirm: () -> Unit, onCancel: () -> Unit) {
                                 OutlinedButton(
                                         onClick = onCancel,
                                         shape = RoundedCornerShape(8.dp)
-                                ) { Text("Cancel") }
+                                ) { Text(stringResource(R.string.action_cancel)) }
 
                                 Spacer(modifier = Modifier.width(12.dp))
 
@@ -861,7 +882,7 @@ private fun ForgetConfirmation(onConfirm: () -> Unit, onCancel: () -> Unit) {
                                                         contentColor = JibeError
                                                 ),
                                         shape = RoundedCornerShape(8.dp)
-                                ) { Text("Forget") }
+                                ) { Text(stringResource(R.string.forget_confirm)) }
                         }
                 }
         }
