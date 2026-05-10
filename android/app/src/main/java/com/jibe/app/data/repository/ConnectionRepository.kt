@@ -628,6 +628,14 @@ class ConnectionRepository(
                         fastReconnectAttempts = 0
 
                         when (stateAtDisconnect) {
+                            is ConnectionState.PairingUnavailable -> {
+                                Log.i(
+                                        TAG,
+                                        "Daemon disappeared while pairing inactive — restarting NSD discovery"
+                                )
+                                startDiscovery()
+                                return@launch
+                            }
                             is ConnectionState.PairingFailed -> {
                                 _state.value = stateAtDisconnect
                             }
