@@ -31,7 +31,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Slideshow
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.UploadFile
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -411,6 +417,8 @@ private fun PresentCard(onClick: () -> Unit) {
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                 ) {
+                        CardIcon(Icons.Default.Slideshow)
+                        Spacer(modifier = Modifier.width(14.dp))
                         Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                         text = stringResource(R.string.present_title),
@@ -454,6 +462,8 @@ private fun PingCard(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                 ) {
+                        CardIcon(Icons.Default.Speed)
+                        Spacer(modifier = Modifier.width(14.dp))
                         Column {
                                 Text(
                                         text = stringResource(R.string.ping_title),
@@ -502,6 +512,8 @@ private fun ClipboardCard(isConnected: Boolean, repository: ConnectionRepository
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                 ) {
+                        CardIcon(Icons.Default.ContentCopy)
+                        Spacer(modifier = Modifier.width(14.dp))
                         Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                         text = stringResource(R.string.clipboard_title),
@@ -617,6 +629,8 @@ private fun FileTransferCard(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                         ) {
+                                CardIcon(Icons.Default.UploadFile)
+                                Spacer(modifier = Modifier.width(14.dp))
                                 Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
                                         Text(
                                                 text = stringResource(R.string.file_title),
@@ -771,11 +785,15 @@ private fun NotificationPermissionCard(trailingSpacerDp: Int = 0) {
                 shape = RoundedCornerShape(12.dp)
         ) {
                 Column(modifier = Modifier.padding(20.dp).fillMaxWidth()) {
-                        Text(
-                                text = stringResource(R.string.notif_title),
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurface
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                CardIcon(Icons.Default.Notifications)
+                                Spacer(modifier = Modifier.width(14.dp))
+                                Text(
+                                        text = stringResource(R.string.notif_title),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                )
+                        }
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
                                 text = stringResource(R.string.notif_body),
@@ -800,6 +818,16 @@ private fun NotificationPermissionCard(trailingSpacerDp: Int = 0) {
         if (trailingSpacerDp > 0) {
                 Spacer(modifier = Modifier.height(trailingSpacerDp.dp))
         }
+}
+
+@Composable
+private fun CardIcon(icon: ImageVector) {
+        Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp)
+        )
 }
 
 private fun notificationAccessEnabled(context: Context): Boolean {

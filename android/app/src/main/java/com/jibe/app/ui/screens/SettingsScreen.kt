@@ -15,6 +15,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.Slideshow
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -40,6 +46,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -133,37 +140,43 @@ fun SettingsScreen(dataStore: JibeDataStore, onBack: () -> Unit) {
                     title = stringResource(R.string.settings_feat_clipboard),
                     subtitle = stringResource(R.string.settings_feat_clipboard_desc),
                     checked = s.featClipboard,
-                    onCheckedChange = { v -> scope.launch { dataStore.setFeatClipboard(v) } }
+                    onCheckedChange = { v -> scope.launch { dataStore.setFeatClipboard(v) } },
+                    icon = Icons.Default.ContentCopy,
             )
             ToggleRow(
                     title = stringResource(R.string.settings_feat_notifications),
                     subtitle = stringResource(R.string.settings_feat_notifications_desc),
                     checked = s.featNotifications,
-                    onCheckedChange = { v -> scope.launch { dataStore.setFeatNotifications(v) } }
+                    onCheckedChange = { v -> scope.launch { dataStore.setFeatNotifications(v) } },
+                    icon = Icons.Default.Notifications,
             )
             ToggleRow(
                     title = stringResource(R.string.settings_feat_file_transfer),
                     subtitle = stringResource(R.string.settings_feat_file_transfer_desc),
                     checked = s.featFileTransfer,
-                    onCheckedChange = { v -> scope.launch { dataStore.setFeatFileTransfer(v) } }
+                    onCheckedChange = { v -> scope.launch { dataStore.setFeatFileTransfer(v) } },
+                    icon = Icons.Default.UploadFile,
             )
             ToggleRow(
                     title = stringResource(R.string.settings_feat_presentation),
                     subtitle = stringResource(R.string.settings_feat_presentation_desc),
                     checked = s.featPresentation,
-                    onCheckedChange = { v -> scope.launch { dataStore.setFeatPresentationRemote(v) } }
+                    onCheckedChange = { v -> scope.launch { dataStore.setFeatPresentationRemote(v) } },
+                    icon = Icons.Default.Slideshow,
             )
             ToggleRow(
                     title = stringResource(R.string.settings_feat_find_phone),
                     subtitle = stringResource(R.string.settings_feat_find_phone_desc),
                     checked = s.featFindPhone,
-                    onCheckedChange = { v -> scope.launch { dataStore.setFeatFindPhone(v) } }
+                    onCheckedChange = { v -> scope.launch { dataStore.setFeatFindPhone(v) } },
+                    icon = Icons.Default.PhoneAndroid,
             )
             ToggleRow(
                     title = stringResource(R.string.settings_feat_ping),
                     subtitle = stringResource(R.string.settings_feat_ping_desc),
                     checked = s.featPing,
-                    onCheckedChange = { v -> scope.launch { dataStore.setFeatPing(v) } }
+                    onCheckedChange = { v -> scope.launch { dataStore.setFeatPing(v) } },
+                    icon = Icons.Default.Speed,
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -187,7 +200,8 @@ private fun ToggleRow(
         title: String,
         subtitle: String,
         checked: Boolean,
-        onCheckedChange: (Boolean) -> Unit
+        onCheckedChange: (Boolean) -> Unit,
+        icon: ImageVector? = null,
 ) {
     Row(
             modifier =
@@ -195,6 +209,15 @@ private fun ToggleRow(
                             .padding(vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
     ) {
+        if (icon != null) {
+            Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.size(14.dp))
+        }
         Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
             Text(title, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
             Text(
