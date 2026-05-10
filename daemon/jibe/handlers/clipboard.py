@@ -178,7 +178,7 @@ async def handle_clipboard_sync(
 
     monitor.sync_after_remote_push(raw)
     try:
-        pyperclip.copy(raw)
+        await asyncio.to_thread(pyperclip.copy, raw)
     except Exception:
         logger.exception("pyperclip.copy failed for connection %s", conn.id)
         return

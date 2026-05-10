@@ -143,7 +143,7 @@ class ConnectionRegistry:
             message_json: Full JSON string for one protocol message.
             exclude: If set, this connection does not receive the message.
         """
-        for conn in self.get_authenticated():
+        for conn in list(self.get_authenticated()):
             if exclude is not None and conn.id == exclude.id:
                 continue
             await conn.send(message_json)
