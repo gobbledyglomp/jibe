@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Jibe — Login</title>
+  <link rel="stylesheet" href="/web/css/theme.css" />
+</head>
+<body style="display:flex;align-items:center;justify-content:center;padding:2rem;">
+  <div class="panel" style="width:100%;max-width:380px;">
+    <h1 style="margin:0 0 0.25rem;font-size:1.35rem;">Jibe</h1>
+    <p style="margin:0 0 1.25rem;color:var(--muted);font-size:0.875rem;">Dashboard login (localhost only)</p>
+    <div id="login-error" class="error-banner" style="display:none;"></div>
+    <form id="login-form">
+      <label class="small" for="user">Username</label>
+      <input id="user" name="username" autocomplete="username" style="width:100%;margin-bottom:0.75rem;" />
+      <label class="small" for="pass">Password</label>
+      <input id="pass" type="password" name="password" autocomplete="current-password" style="width:100%;margin-bottom:1rem;" />
+      <button type="submit" class="btn btn-primary" style="width:100%;">Sign in</button>
+    </form>
+  </div>
+  <script src="/web/js/auth.js"></script>
+  <script>
+    if (window.JibeAuth && window.JibeAuth.tokenPresent()) {
+      window.location.href = '/web/dashboard.html';
+    }
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const err = document.getElementById('login-error');
+      err.style.display = 'none';
+      const username = document.getElementById('user').value;
+      const password = document.getElementById('pass').value;
+      try {
+        const r = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password }),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          err.textContent = data.error || 'Login failed';
+          err.style.display = 'block';
+          return;
+        }
+        sessionStorage.setItem('jibe_token', data.token);
+        sessionStorage.setItem('jibe_role', data.role);
+        sessionStorage.setItem('jibe_username', data.username);
+        sessionStorage.setItem('jibe_expires_at', String(data.expires_at));
+        window.location.href = '/web/dashboard.html';
+      } catch {
+        err.textContent = 'Network error';
+        err.style.display = 'block';
+      }
+    });
+  </script>
+</body>
+</html>
