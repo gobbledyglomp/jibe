@@ -1,6 +1,7 @@
 (function () {
   const POLL_MS = 5000;
   const STORAGE_PING_CARD = 'jibe_show_ping_card';
+  const PING_ACTIVITY_DISPLAY_MAX = 10;
 
   function T(key) {
     return window.JibeI18n ? window.JibeI18n.t(key) : key;
@@ -675,7 +676,8 @@
           box.textContent = T('daemon.noPings');
           return;
         }
-        box.innerHTML = data.items
+        const tail = data.items.slice(-PING_ACTIVITY_DISPLAY_MAX).reverse();
+        box.innerHTML = tail
           .map(function (it) {
             const dir =
               it.direction === 'out' ? T('daemon.directionOut') : T('daemon.directionIn');
