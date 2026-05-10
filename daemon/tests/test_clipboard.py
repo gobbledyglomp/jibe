@@ -54,7 +54,10 @@ async def test_clipboard_monitor_broadcasts_when_clipboard_changes(mock_ws):
         if sleep_calls >= 2:
             raise asyncio.CancelledError()
 
-    with patch("jibe.handlers.clipboard.pyperclip.paste", side_effect=fake_paste):
+    with patch(
+        "jibe.handlers.clipboard.snapshot_plain_text_clipboard",
+        side_effect=fake_paste,
+    ):
         with patch("jibe.handlers.clipboard.asyncio.sleep", new=fake_sleep):
             with pytest.raises(asyncio.CancelledError):
                 await monitor.run()
@@ -88,7 +91,10 @@ async def test_clipboard_monitor_skips_when_unchanged(mock_ws):
         if sleep_calls >= 2:
             raise asyncio.CancelledError()
 
-    with patch("jibe.handlers.clipboard.pyperclip.paste", side_effect=fake_paste):
+    with patch(
+        "jibe.handlers.clipboard.snapshot_plain_text_clipboard",
+        side_effect=fake_paste,
+    ):
         with patch("jibe.handlers.clipboard.asyncio.sleep", new=fake_sleep):
             with pytest.raises(asyncio.CancelledError):
                 await monitor.run()
