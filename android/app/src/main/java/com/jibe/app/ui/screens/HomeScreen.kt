@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -435,6 +436,7 @@ private fun PresentCard(onClick: () -> Unit) {
 
                         OutlinedButton(
                                 onClick = onClick,
+                                modifier = Modifier.defaultMinSize(minWidth = CardActionMinWidth),
                                 shape = RoundedCornerShape(8.dp),
                                 colors =
                                         ButtonDefaults.outlinedButtonColors(
@@ -489,6 +491,7 @@ private fun PingCard(
                         OutlinedButton(
                                 onClick = onPing,
                                 enabled = isConnected && !pingInFlight,
+                                modifier = Modifier.defaultMinSize(minWidth = CardActionMinWidth),
                                 shape = RoundedCornerShape(8.dp),
                                 colors =
                                         ButtonDefaults.outlinedButtonColors(
@@ -563,6 +566,7 @@ private fun ClipboardCard(isConnected: Boolean, repository: ConnectionRepository
                                         }
                                 },
                                 enabled = isConnected,
+                                modifier = Modifier.defaultMinSize(minWidth = CardActionMinWidth),
                                 shape = RoundedCornerShape(8.dp),
                                 colors =
                                         ButtonDefaults.buttonColors(
@@ -573,6 +577,8 @@ private fun ClipboardCard(isConnected: Boolean, repository: ConnectionRepository
                 }
         }
 }
+
+private val CardActionMinWidth = 90.dp
 
 private val TransferProgressBarShape = RoundedCornerShape(4.dp)
 private val TransferProgressBarHeight = 5.dp
@@ -653,6 +659,7 @@ private fun FileTransferCard(
                                         Button(
                                                 onClick = onCancelClick,
                                                 enabled = isConnected,
+                                                modifier = Modifier.defaultMinSize(minWidth = CardActionMinWidth),
                                                 shape = RoundedCornerShape(8.dp),
                                                 colors =
                                                         ButtonDefaults.buttonColors(
@@ -673,6 +680,7 @@ private fun FileTransferCard(
                                         Button(
                                                 onClick = onPickClick,
                                                 enabled = isConnected,
+                                                modifier = Modifier.defaultMinSize(minWidth = CardActionMinWidth),
                                                 shape = RoundedCornerShape(8.dp),
                                                 colors =
                                                         ButtonDefaults.buttonColors(
