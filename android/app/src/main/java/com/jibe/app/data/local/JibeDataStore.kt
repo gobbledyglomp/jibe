@@ -20,6 +20,25 @@ data class DeviceCredentials(
         val certFingerprint: String
 )
 
+data class AppSettings(
+        val theme: String = "dark",
+        val language: String = FALLBACK_LANGUAGE,
+        val featClipboard: Boolean = true,
+        val featNotifications: Boolean = true,
+        val featFileTransfer: Boolean = true,
+        val featPresentation: Boolean = true,
+        val featFindPhone: Boolean = true,
+        val featPing: Boolean = false,
+)
+
+private const val FALLBACK_LANGUAGE = "en"
+private val SUPPORTED_LANGUAGES = setOf("en", "es")
+
+private fun detectSystemLanguage(): String {
+    val sysLang = java.util.Locale.getDefault().language
+    return if (sysLang in SUPPORTED_LANGUAGES) sysLang else FALLBACK_LANGUAGE
+}
+
 class JibeDataStore(private val context: Context) {
 
     companion object {
@@ -61,7 +80,31 @@ class JibeDataStore(private val context: Context) {
             context.dataStore.data.map { prefs -> prefs[KEY_THEME] ?: "dark" }
 
     val language: Flow<String> =
-            context.dataStore.data.map { prefs -> prefs[KEY_LANGUAGE] ?: "auto" }
+            context.dataStore.data.map { prefs ->
+                val stored = prefs[KEY_LANGUAGE]
+                when {
+                    stored != null && stored != "auto" -> stored
+                    else -> detectSystemLanguage()
+                }
+            }
+
+    val allSettings: Flow<AppSettings> =
+            context.dataStore.data.map { prefs ->
+                val lang = prefs[KEY_LANGUAGE]
+                AppSettings(
+                        theme = prefs[KEY_THEME] ?: "dark",
+                        language = when {
+                            lang != null && lang != "auto" -> lang
+                            else -> detectSystemLanguage()
+                        },
+                        featClipboard = prefs[KEY_FEAT_CLIPBOARD] ?: true,
+                        featNotifications = prefs[KEY_FEAT_NOTIFICATIONS] ?: true,
+                        featFileTransfer = prefs[KEY_FEAT_FILE_TRANSFER] ?: true,
+                        featPresentation = prefs[KEY_FEAT_PRESENTATION_REMOTE] ?: true,
+                        featFindPhone = prefs[KEY_FEAT_FIND_PHONE] ?: true,
+                        featPing = prefs[KEY_FEAT_PING] ?: false,
+                )
+            }
 
     val featClipboard: Flow<Boolean> =
             context.dataStore.data.map { prefs -> prefs[KEY_FEAT_CLIPBOARD] ?: true }
