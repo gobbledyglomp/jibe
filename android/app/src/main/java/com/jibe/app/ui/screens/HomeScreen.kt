@@ -468,7 +468,7 @@ private fun FileTransferCard(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                                Column(modifier = Modifier.weight(1f)) {
+                                Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
                                         Text(
                                                 text = "Send file",
                                                 style = MaterialTheme.typography.titleMedium,

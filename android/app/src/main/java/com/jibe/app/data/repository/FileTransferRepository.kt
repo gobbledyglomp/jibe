@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -50,6 +51,7 @@ class FileTransferRepository(
         const val CHUNK_SIZE_BYTES = 4 * 1024 * 1024
 
         private const val CHUNK_ACK_TIMEOUT_MS = 60_000L
+        private const val RESULT_VISIBLE_MS = 3_000L
     }
 
     private data class PendingChunkAck(
@@ -93,11 +95,17 @@ class FileTransferRepository(
         _progress.update { cur ->
             cur?.copy(
                     isComplete = true,
-                    error =
-                            if (ack.ok) null
-                            else (ack.reason ?: "Transfer rejected")
+                    error = if (ack.ok) null else (ack.reason ?: "Transfer rejected")
             )
                     ?: cur
+        }
+        if (ack.ok) {
+            scope.launch {
+                delay(RESULT_VISIBLE_MS)
+                _progress.update { cur ->
+                    if (cur?.isComplete == true && cur.error == null) null else cur
+                }
+            }
         }
     }
 
