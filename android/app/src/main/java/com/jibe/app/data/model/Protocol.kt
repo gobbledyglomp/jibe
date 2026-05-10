@@ -19,6 +19,7 @@ enum class MessageType(val value: String) {
         @SerializedName("error")           ERROR("error"),
         @SerializedName("device.battery")  DEVICE_BATTERY("device.battery"),
         @SerializedName("device.ring")     DEVICE_RING("device.ring"),
+        @SerializedName("device.features") DEVICE_FEATURES("device.features"),
         @SerializedName("remote.key")      REMOTE_KEY("remote.key");
 
         companion object {
@@ -32,7 +33,8 @@ data class AuthRequest(
         @SerializedName("type") val type: String = MessageType.AUTH_REQUEST.value,
         @SerializedName("device_name") val deviceName: String,
         @SerializedName("pin") val pin: String? = null,
-        @SerializedName("fingerprint") val fingerprint: String? = null
+        @SerializedName("fingerprint") val fingerprint: String? = null,
+        @SerializedName("feat_find_phone") val featFindPhone: Boolean = true,
 )
 
 data class AuthResponse(
@@ -118,6 +120,11 @@ data class DeviceBatteryMessage(
 
 data class DeviceRingMessage(
         @SerializedName("type") val type: String = MessageType.DEVICE_RING.value
+)
+
+data class DeviceFeaturesMessage(
+        @SerializedName("type") val type: String = MessageType.DEVICE_FEATURES.value,
+        @SerializedName("feat_find_phone") val featFindPhone: Boolean,
 )
 
 data class RemoteKeyMessage(

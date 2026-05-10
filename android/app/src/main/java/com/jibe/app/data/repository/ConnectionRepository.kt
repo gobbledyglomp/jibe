@@ -17,6 +17,7 @@ import com.jibe.app.data.model.ClipboardSyncMessage
 import com.jibe.app.data.model.ErrorMessage
 import com.jibe.app.data.model.FileAckMessage
 import com.jibe.app.data.model.DeviceBatteryMessage
+import com.jibe.app.data.model.DeviceFeaturesMessage
 import com.jibe.app.data.model.FileChunkAckMessage
 import com.jibe.app.data.model.MessageType
 import com.jibe.app.data.model.NotificationMessage
@@ -196,7 +197,15 @@ class ConnectionRepository(
             dataStore.featPresentationRemote.collect { _featPresentationRemote.value = it }
         }
         scope.launch {
-            dataStore.featFindPhone.collect { _featFindPhone.value = it }
+            dataStore.featFindPhone.collect { enabled ->
+                _featFindPhone.value = enabled
+                val client = wsClient
+                if (client != null && _state.value is ConnectionState.Connected) {
+                    client.send(
+                            MessageParser.toJson(DeviceFeaturesMessage(featFindPhone = enabled))
+                    )
+                }
+            }
         }
         scope.launch {
             dataStore.featPing.collect { _featPing.value = it }
@@ -316,7 +325,12 @@ class ConnectionRepository(
         val client = wsClient ?: return
         pairingPinSubmitted = true
         _pairSubmitInFlight.value = true
-        val authRequest = AuthRequest(deviceName = deviceName, pin = pin)
+        val authRequest =
+                AuthRequest(
+                        deviceName = deviceName,
+                        pin = pin,
+                        featFindPhone = _featFindPhone.value
+                )
         client.send(MessageParser.toJson(authRequest))
         Log.d(TAG, "Sent auth.request with PIN")
     }
@@ -523,12 +537,17 @@ class ConnectionRepository(
                     val authRequest =
                             AuthRequest(
                                     deviceName = deviceLabel,
-                                    fingerprint = credentials.fingerprint
+                                    fingerprint = credentials.fingerprint,
+                                    featFindPhone = _featFindPhone.value
                             )
                     wsClient?.send(MessageParser.toJson(authRequest))
                     Log.d(TAG, "Sent auto-reconnect auth.request with fingerprint")
                 } else {
-                    val probe = AuthRequest(deviceName = deviceLabel)
+                    val probe =
+                            AuthRequest(
+                                    deviceName = deviceLabel,
+                                    featFindPhone = _featFindPhone.value
+                            )
                     wsClient?.send(MessageParser.toJson(probe))
                     Log.d(TAG, "Sent pairing probe to trigger daemon PIN generation")
                 }
