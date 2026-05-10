@@ -77,7 +77,8 @@ fun JibeNavGraph(
                         navController.navigate(Route.Home.path) {
                             popUpTo(Route.Pairing.path) { inclusive = true }
                         }
-                    }
+                    },
+                    onOpenSettings = { navController.navigate(Route.Settings.path) },
             )
         }
 
