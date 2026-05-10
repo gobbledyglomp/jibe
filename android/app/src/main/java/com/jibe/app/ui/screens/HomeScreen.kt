@@ -53,6 +53,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -499,6 +500,38 @@ private fun ClipboardCard(isConnected: Boolean, repository: ConnectionRepository
         }
 }
 
+private val TransferProgressBarShape = RoundedCornerShape(4.dp)
+private val TransferProgressBarHeight = 5.dp
+private const val TransferProgressTrackAlpha = 0.10f
+
+@Composable
+private fun TransferProgressBar(
+        modifier: Modifier = Modifier,
+        progress: (() -> Float)?,
+) {
+        val barModifier =
+                modifier.fillMaxWidth().height(TransferProgressBarHeight).clip(TransferProgressBarShape)
+        val trackColor = JibeOnSurface.copy(alpha = TransferProgressTrackAlpha)
+        val indicatorColor = JibePrimary
+        if (progress != null) {
+                LinearProgressIndicator(
+                        progress = progress,
+                        modifier = barModifier,
+                        color = indicatorColor,
+                        trackColor = trackColor,
+                        strokeCap = StrokeCap.Round,
+                        drawStopIndicator = {},
+                )
+        } else {
+                LinearProgressIndicator(
+                        modifier = barModifier,
+                        color = indicatorColor,
+                        trackColor = trackColor,
+                        strokeCap = StrokeCap.Round,
+                )
+        }
+}
+
 @Composable
 private fun FileTransferCard(
         isConnected: Boolean,
@@ -614,9 +647,7 @@ private fun FileTransferCard(
                                                 )
                                         }
                                         awaitingAck -> {
-                                                LinearProgressIndicator(
-                                                        modifier = Modifier.fillMaxWidth()
-                                                )
+                                                TransferProgressBar(progress = null)
                                                 Spacer(modifier = Modifier.height(6.dp))
                                                 Text(
                                                         text = "Verifying…",
@@ -629,10 +660,7 @@ private fun FileTransferCard(
                                                         transferProgress.bytesSent.toFloat() /
                                                                 transferProgress.totalBytes
                                                                         .toFloat()
-                                                LinearProgressIndicator(
-                                                        progress = { p },
-                                                        modifier = Modifier.fillMaxWidth()
-                                                )
+                                                TransferProgressBar(progress = { p })
                                                 Spacer(modifier = Modifier.height(6.dp))
                                                 // Line 1: filename (truncated)
                                                 Text(
@@ -664,9 +692,7 @@ private fun FileTransferCard(
                                                 )
                                         }
                                         else -> {
-                                                LinearProgressIndicator(
-                                                        modifier = Modifier.fillMaxWidth()
-                                                )
+                                                TransferProgressBar(progress = null)
                                         }
                                 }
                         }
