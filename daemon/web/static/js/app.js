@@ -939,6 +939,10 @@
     route();
   });
 
+  window.addEventListener('jibe-theme', () => {
+    route();
+  });
+
   refreshChrome();
   loadVersion();
   window.addEventListener('hashchange', route);
