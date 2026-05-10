@@ -114,7 +114,9 @@
         eventLogHint:
           'Live tail of notable daemon activity (devices, pairing, transfers, pings, dashboard actions). Localhost only.',
         sendPing: 'Send ping to connected devices',
-        noEvents: 'No events recorded yet.',
+        pingSent: 'Sent to {n} device(s)',
+        noEvents: 'No events yet.',
+        eventLogError: 'Could not fetch event log',
       },
       settings: {
         title: 'Settings',
@@ -266,7 +268,9 @@
         eventLogHint:
           'Actividad destacada del demonio en vivo (dispositivos, emparejamiento, transferencias, pings, acciones del panel). Solo localhost.',
         sendPing: 'Enviar ping a dispositivos conectados',
-        noEvents: 'Aún no hay eventos registrados.',
+        pingSent: 'Enviado a {n} dispositivo(s)',
+        noEvents: 'Aún no hay eventos.',
+        eventLogError: 'No se pudo obtener el registro',
       },
       settings: {
         title: 'Ajustes',

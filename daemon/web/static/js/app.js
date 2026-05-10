@@ -721,37 +721,52 @@
 
     async function refreshEventLog() {
       const box = root.querySelector('#event-log-list');
-      if (!box || root.querySelector('#event-log-panel').style.display === 'none') return;
+      if (!box) return;
+      const panel = root.querySelector('#event-log-panel');
+      if (panel && panel.style.display === 'none') return;
       try {
         const data = await window.JibeApi.json('/api/daemon/event-log');
         if (!data.items || data.items.length === 0) {
-          box.textContent = T('daemon.noEvents');
+          box.innerHTML =
+            '<span style="color:var(--muted)">' + esc(T('daemon.noEvents')) + '</span>';
           return;
         }
         const tail = data.items.slice(-EVENT_LOG_DISPLAY_MAX).reverse();
         box.innerHTML = tail
           .map(function (it) {
+            const levelColor =
+              it.level === 'warn' ? 'var(--warn)' : 'var(--muted)';
             let line =
-              esc(it.at) +
-              ' · ' +
+              '<span style="color:' +
+              levelColor +
+              '">' +
+              esc(it.at.slice(11, 19)) +
+              '</span>' +
+              ' <span style="opacity:0.55">[' +
               esc(it.category) +
-              ' · ' +
+              ']</span> ' +
               esc(it.message);
             if (it.detail && Object.keys(it.detail).length > 0) {
-              line += ' · ' + esc(JSON.stringify(it.detail));
+              line +=
+                ' <span style="opacity:0.5">' +
+                esc(JSON.stringify(it.detail)) +
+                '</span>';
             }
-            return line;
+            return '<div>' + line + '</div>';
           })
-          .join('<br/>');
-      } catch {
-        box.textContent = '—';
+          .join('');
+      } catch (e) {
+        box.innerHTML =
+          '<span style="color:var(--danger)">' +
+          esc(T('daemon.eventLogError') + ': ' + (e.message || e)) +
+          '</span>';
       }
     }
 
     const eventLogPanel = root.querySelector('#event-log-panel');
     if (daemonEventLogEnabled()) {
       eventLogPanel.style.display = '';
-      root._eventLogPollTimer = setInterval(() => refreshEventLog().catch(() => {}), 2000);
+      root._eventLogPollTimer = setInterval(() => refreshEventLog().catch(() => {}), 3000);
       refreshEventLog().catch(() => {});
     }
 
@@ -789,11 +804,22 @@
     const pingBtn = root.querySelector('#ping-send');
     if (pingBtn) {
       pingBtn.onclick = async () => {
+        pingBtn.disabled = true;
+        const origText = pingBtn.textContent;
         try {
-          await window.JibeApi.json('/api/daemon/ping-send', { method: 'POST', body: '{}' });
+          const res = await window.JibeApi.json('/api/daemon/ping-send', {
+            method: 'POST',
+            body: '{}',
+          });
+          pingBtn.textContent = T('daemon.pingSent').replace('{n}', String(res.sent || 0));
           await refreshEventLog();
         } catch (e) {
-          alert(String(e.message || e));
+          pingBtn.textContent = '✕ ' + (e.message || e);
+        } finally {
+          setTimeout(() => {
+            pingBtn.textContent = origText;
+            pingBtn.disabled = false;
+          }, 2000);
         }
       };
     }
