@@ -20,6 +20,7 @@ from typing import Any, BinaryIO
 
 from jibe.core.api import JibeMessage, MessageType, format_error
 from jibe.core.config import FILE_TRANSFER_CHUNK_RAW_BYTES
+from jibe.core.db import JibeDatabase
 from jibe.network.connection import JibeConnection
 
 logger = logging.getLogger(__name__)
@@ -157,13 +158,17 @@ async def _send_chunk_ack(
     )
 
 
-def abort_transfers_for_connection(connection_id: str) -> None:
+async def abort_transfers_for_connection(
+    connection_id: str,
+    db: JibeDatabase | None = None,
+) -> None:
     """Abort any in-progress uploads owned by a disconnected WebSocket.
 
     Removes partial data from the transfer cache so disconnects do not leave garbage.
 
     Args:
         connection_id: ``JibeConnection.id`` for the socket that closed.
+        db: Optional database — terminal rows are marked ``cancelled``.
     """
     to_remove = [
         tid
@@ -176,7 +181,22 @@ def abort_transfers_for_connection(connection_id: str) -> None:
             tid,
             connection_id,
         )
+        await _try_finish_transfer_history(db, tid, "cancelled")
         _abort_transfer(tid)
+
+
+async def _try_finish_transfer_history(
+    db: JibeDatabase | None,
+    transfer_id: str,
+    status: str,
+) -> None:
+    """Best-effort ``transfer_history`` terminal status."""
+    if db is None:
+        return
+    try:
+        await db.finish_transfer(transfer_id, status)
+    except Exception:
+        logger.exception("transfer_history finish failed for %s", transfer_id)
 
 
 def _abort_transfer(transfer_id: str, *, rm_temp: bool = True) -> None:
@@ -215,7 +235,11 @@ class ActiveTransfer:
         self.hasher = hashlib.sha256()
 
 
-async def handle_file_start(conn: JibeConnection, msg: JibeMessage) -> None:
+async def handle_file_start(
+    conn: JibeConnection,
+    msg: JibeMessage,
+    db: JibeDatabase | None = None,
+) -> None:
     """Begin a new transfer: create temp dir and empty file."""
     payload = msg.payload
     transfer_id = payload.get("id")
@@ -265,6 +289,19 @@ async def handle_file_start(conn: JibeConnection, msg: JibeMessage) -> None:
     )
     logger.info("file.start id=%s name=%s size=%s chunks=%s", transfer_id, filename, size, total_chunks)
 
+    if db is not None and conn.device_id:
+        try:
+            await db.add_transfer(
+                transfer_id,
+                conn.device_id,
+                filename,
+                size,
+                direction="incoming",
+                status="in_progress",
+            )
+        except Exception:
+            logger.exception("transfer_history insert failed for %s", transfer_id)
+
 
 async def _abort_transfer_after_bad_chunk(
     conn: JibeConnection,
@@ -273,14 +310,20 @@ async def _abort_transfer_after_bad_chunk(
     *,
     chunk_reason: str,
     done_reason: str,
+    db: JibeDatabase | None = None,
 ) -> None:
     """Tear down transfer after a bad chunk and notify the client."""
+    await _try_finish_transfer_history(db, transfer_id, "failed")
     _abort_transfer(transfer_id)
     await _send_chunk_ack(conn, transfer_id, index, False, reason=chunk_reason)
     await _send_ack(conn, transfer_id, False, done_reason)
 
 
-async def handle_file_chunk_binary(conn: JibeConnection, frame: bytes) -> None:
+async def handle_file_chunk_binary(
+    conn: JibeConnection,
+    frame: bytes,
+    db: JibeDatabase | None = None,
+) -> None:
     """Decode one binary chunk frame and append raw payload to the temp file."""
     if len(frame) < FILE_CHUNK_HEADER_SIZE:
         await conn.send(format_error("malformed_payload", "Binary chunk frame too short"))
@@ -339,6 +382,7 @@ async def handle_file_chunk_binary(conn: JibeConnection, frame: bytes) -> None:
             index,
             chunk_reason="Chunk sequence mismatch",
             done_reason="Chunk sequence mismatch",
+            db=db,
         )
         return
 
@@ -349,6 +393,7 @@ async def handle_file_chunk_binary(conn: JibeConnection, frame: bytes) -> None:
             index,
             chunk_reason="Chunk exceeds maximum size",
             done_reason="Chunk exceeds maximum size",
+            db=db,
         )
         return
 
@@ -360,6 +405,7 @@ async def handle_file_chunk_binary(conn: JibeConnection, frame: bytes) -> None:
             index,
             chunk_reason="Chunk overflows declared file size",
             done_reason="Chunk overflows declared file size",
+            db=db,
         )
         return
 
@@ -380,7 +426,11 @@ async def handle_file_chunk_binary(conn: JibeConnection, frame: bytes) -> None:
     )
 
 
-async def handle_file_cancel(conn: JibeConnection, msg: JibeMessage) -> None:
+async def handle_file_cancel(
+    conn: JibeConnection,
+    msg: JibeMessage,
+    db: JibeDatabase | None = None,
+) -> None:
     """Abort an active transfer without closing the connection."""
     payload = msg.payload
     transfer_id = payload.get("id")
@@ -403,11 +453,16 @@ async def handle_file_cancel(conn: JibeConnection, msg: JibeMessage) -> None:
         await conn.send(format_error("forbidden", "Transfer belongs to another connection"))
         return
 
+    await _try_finish_transfer_history(db, transfer_id, "cancelled")
     _abort_transfer(transfer_id)
     await _send_ack(conn, transfer_id, False, "Cancelled")
 
 
-async def handle_file_done(conn: JibeConnection, msg: JibeMessage) -> None:
+async def handle_file_done(
+    conn: JibeConnection,
+    msg: JibeMessage,
+    db: JibeDatabase | None = None,
+) -> None:
     """Verify integrity, move file into Downloads, and acknowledge."""
     payload = msg.payload
     transfer_id = payload.get("id")
@@ -417,6 +472,7 @@ async def handle_file_done(conn: JibeConnection, msg: JibeMessage) -> None:
         await conn.send(format_error("unknown_transfer", "No active transfer for this id"))
         return
     if not isinstance(checksum, str) or not checksum:
+        await _try_finish_transfer_history(db, transfer_id, "failed")
         _abort_transfer(transfer_id)
         await _send_ack(conn, transfer_id, False, "Missing checksum")
         return
@@ -434,6 +490,7 @@ async def handle_file_done(conn: JibeConnection, msg: JibeMessage) -> None:
         return
 
     if transfer.chunks_received != transfer.total_chunks:
+        await _try_finish_transfer_history(db, transfer_id, "failed")
         _abort_transfer(transfer_id)
         await _send_ack(
             conn,
@@ -443,6 +500,7 @@ async def handle_file_done(conn: JibeConnection, msg: JibeMessage) -> None:
         )
         return
     if transfer.bytes_written != transfer.size:
+        await _try_finish_transfer_history(db, transfer_id, "failed")
         _abort_transfer(transfer_id)
         await _send_ack(conn, transfer_id, False, "Size mismatch after reassembly")
         return
@@ -450,6 +508,7 @@ async def handle_file_done(conn: JibeConnection, msg: JibeMessage) -> None:
     digest = transfer.hasher.hexdigest()
     if digest.lower() != checksum.lower():
         logger.warning("Checksum mismatch for %s: expected %s got %s", transfer_id, checksum, digest)
+        await _try_finish_transfer_history(db, transfer_id, "failed")
         _abort_transfer(transfer_id)
         await _send_ack(conn, transfer_id, False, "Checksum mismatch")
         return
@@ -459,6 +518,7 @@ async def handle_file_done(conn: JibeConnection, msg: JibeMessage) -> None:
         await asyncio.to_thread(transfer.file_handle.close)
     except Exception:
         logger.exception("Failed finishing temp file for %s", transfer_id)
+        await _try_finish_transfer_history(db, transfer_id, "failed")
         _abort_transfer(transfer_id, rm_temp=True)
         await _send_ack(conn, transfer_id, False, "Failed to finalise temp file")
         return
@@ -474,6 +534,7 @@ async def handle_file_done(conn: JibeConnection, msg: JibeMessage) -> None:
         logger.info("Saved transfer %s to %s", transfer_id, dest)
     except Exception:
         logger.exception("Failed moving completed file for %s", transfer_id)
+        await _try_finish_transfer_history(db, transfer_id, "failed")
         try:
             shutil.rmtree(transfer.temp_dir, ignore_errors=True)
             _remove_empty_transfer_root()
@@ -488,4 +549,5 @@ async def handle_file_done(conn: JibeConnection, msg: JibeMessage) -> None:
     except Exception:
         logger.exception("Failed removing temp dir for completed transfer %s", transfer_id)
 
+    await _try_finish_transfer_history(db, transfer_id, "completed")
     await _send_ack(conn, transfer_id, True)

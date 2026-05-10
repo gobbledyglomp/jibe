@@ -19,6 +19,7 @@ import subprocess
 import pyperclip
 
 from jibe.core.api import JibeMessage, MessageType
+from jibe.core.db import JibeDatabase
 from jibe.network.connection import ConnectionRegistry, JibeConnection
 
 logger = logging.getLogger(__name__)
@@ -90,13 +91,19 @@ def snapshot_plain_text_clipboard() -> str | None:
 class ClipboardMonitor:
     """Polls the OS clipboard and broadcasts ``clipboard.sync`` on change."""
 
-    def __init__(self, registry: ConnectionRegistry) -> None:
+    def __init__(
+        self,
+        registry: ConnectionRegistry,
+        db: JibeDatabase | None = None,
+    ) -> None:
         """Initialise the monitor.
 
         Args:
             registry: Active connections used for outbound broadcasts.
+            db: Optional persistence for outbound clipboard events.
         """
         self._registry = registry
+        self._db = db
         self._last_clipboard: str | None = None
 
     def sync_after_remote_push(self, content: str) -> None:
@@ -136,6 +143,15 @@ class ClipboardMonitor:
                     }
                 )
                 await self._registry.broadcast_json_to_authenticated(payload)
+                if self._db is not None:
+                    try:
+                        await self._db.add_clipboard_event(
+                            current,
+                            "local",
+                            "outgoing",
+                        )
+                    except Exception:
+                        logger.exception("clipboard_history insert failed for local broadcast")
                 logger.debug("Broadcast clipboard.sync (%d chars)", len(current))
         except asyncio.CancelledError:
             logger.debug("Clipboard monitor cancelled")
@@ -146,6 +162,7 @@ async def handle_clipboard_sync(
     conn: JibeConnection,
     msg: JibeMessage,
     monitor: ClipboardMonitor,
+    db: JibeDatabase | None = None,
 ) -> None:
     """Apply ``clipboard.sync`` from a peer to the local clipboard.
 
@@ -164,3 +181,14 @@ async def handle_clipboard_sync(
         pyperclip.copy(raw)
     except Exception:
         logger.exception("pyperclip.copy failed for connection %s", conn.id)
+        return
+
+    if db is not None and conn.device_id:
+        try:
+            await db.add_clipboard_event(
+                raw,
+                conn.device_id,
+                "incoming",
+            )
+        except Exception:
+            logger.exception("clipboard_history insert failed for %s", conn.id)

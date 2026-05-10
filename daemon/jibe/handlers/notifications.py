@@ -15,6 +15,7 @@ import os
 import tempfile
 
 from jibe.core.api import JibeMessage, format_error
+from jibe.core.db import JibeDatabase
 from jibe.network.connection import JibeConnection
 
 logger = logging.getLogger(__name__)
@@ -50,7 +51,11 @@ def _unlink_silently(path: str | None) -> None:
         pass
 
 
-async def handle_notification(conn: JibeConnection, msg: JibeMessage) -> None:
+async def handle_notification(
+    conn: JibeConnection,
+    msg: JibeMessage,
+    db: JibeDatabase | None = None,
+) -> None:
     """Forward ``notification`` payloads to ``notify-send``."""
     payload = msg.payload
     app = payload.get("app")
@@ -70,6 +75,18 @@ async def handle_notification(conn: JibeConnection, msg: JibeMessage) -> None:
     if not isinstance(ts, int):
         await conn.send(format_error("malformed_payload", "notification requires integer timestamp"))
         return
+
+    if db is not None:
+        try:
+            await db.add_notification(
+                conn.device_id,
+                app.strip(),
+                title,
+                body,
+                str(ts),
+            )
+        except Exception:
+            logger.exception("notification_log insert failed for %s", conn.id)
 
     raw_app_name = payload.get("app_name")
     display_name = (
