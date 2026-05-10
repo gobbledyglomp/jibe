@@ -432,6 +432,13 @@ class ConnectionRepository(
                 Intent(appContext, RingAlertActivity::class.java).apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
                 }
+
+        try {
+            appContext.startActivity(intent)
+        } catch (_: Exception) {
+            Log.w(TAG, "Direct ring activity launch failed, relying on notification")
+        }
+
         val ringNotifId = RingAlertActivity.RING_NOTIFICATION_ID
         val fullScreenPi = PendingIntent.getActivity(
                 appContext, ringNotifId, intent,
