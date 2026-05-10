@@ -31,11 +31,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -70,10 +74,6 @@ import com.jibe.app.data.repository.DEFAULT_DEVICE_DISPLAY_NAME
 import com.jibe.app.data.repository.WRONG_PAIRING_PIN_HINT_PREFIX
 import com.jibe.app.ui.components.JibeSpinner
 import com.jibe.app.ui.theme.JibeError
-import com.jibe.app.ui.theme.JibeOnSurface
-import com.jibe.app.ui.theme.JibeOnSurfaceVariant
-import com.jibe.app.ui.theme.JibePrimary
-import com.jibe.app.ui.theme.JibeSurfaceContainerHigh
 import com.jibe.app.ui.theme.RobotoMono
 
 private sealed class PairingMotionTarget {
@@ -120,7 +120,7 @@ private fun pairingMotionTarget(
  * by the daemon when run in pairing mode).
  */
 @Composable
-fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
+fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit, onOpenSettings: () -> Unit = {}) {
         val state by repository.state.collectAsState()
         val pairSubmitInFlight by repository.pairSubmitInFlight.collectAsState()
         val pairingLockoutProbeUi by repository.pairingLockoutProbeUi.collectAsState()
@@ -167,34 +167,34 @@ fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
         }
 
         Scaffold(containerColor = MaterialTheme.colorScheme.surface) { innerPadding ->
-                Column(
-                        modifier =
-                                Modifier.fillMaxSize()
-                                        .padding(innerPadding)
-                                        .windowInsetsPadding(
-                                                WindowInsets.navigationBars.union(WindowInsets.ime)
-                                        )
-                                        .padding(horizontal = 32.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                ) {
+                Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+                    Column(
+                            modifier =
+                                    Modifier.fillMaxSize()
+                                            .windowInsetsPadding(
+                                                    WindowInsets.navigationBars.union(WindowInsets.ime)
+                                            )
+                                            .padding(horizontal = 32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                    ) {
                         Text(
-                                text = "jibe",
+                                text = stringResource(R.string.app_brand),
                                 style =
                                         MaterialTheme.typography.headlineLarge.copy(
                                                 fontFamily = RobotoMono,
                                                 fontWeight = FontWeight.Bold,
                                                 letterSpacing = (-1).sp
                                         ),
-                                color = JibePrimary
+                                color = MaterialTheme.colorScheme.primary
                         )
 
                         Spacer(modifier = Modifier.height(8.dp))
 
                         Text(
-                                text = "Android ↔ Linux",
+                                text = stringResource(R.string.pairing_tagline),
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = JibeOnSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
 
                         Spacer(modifier = Modifier.height(48.dp))
@@ -255,11 +255,11 @@ fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
                                                 }
                                                 PairingMotionTarget.ConnectedFlash -> {
                                                         Text(
-                                                                text = "Connected",
+                                                                text = stringResource(R.string.state_connected),
                                                                 style =
                                                                         MaterialTheme.typography
                                                                                 .titleMedium,
-                                                                color = JibePrimary
+                                                                color = MaterialTheme.colorScheme.primary
                                                         )
                                                 }
                                                 is PairingMotionTarget.FailedCard -> {
@@ -299,6 +299,20 @@ fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
                                         }
                                 }
                         }
+                    }
+                    IconButton(
+                            onClick = onOpenSettings,
+                            modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(top = 16.dp, end = 8.dp)
+                    ) {
+                        Icon(
+                                imageVector = Icons.Default.Settings,
+                                contentDescription = stringResource(R.string.settings_title),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(22.dp)
+                        )
+                    }
                 }
         }
 }
@@ -311,17 +325,17 @@ private fun DiscoveringIndicator() {
                 Spacer(modifier = Modifier.height(20.dp))
 
                 Text(
-                        text = "Searching for daemon…",
+                        text = stringResource(R.string.pairing_searching),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = JibeOnSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                        text = "Run: python main.py --pair",
+                        text = stringResource(R.string.pairing_run_hint),
                         style = MaterialTheme.typography.labelSmall.copy(fontFamily = RobotoMono),
-                        color = JibeOnSurfaceVariant.copy(alpha = 0.5f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                         textAlign = TextAlign.Center
                 )
         }
@@ -335,9 +349,9 @@ private fun ConnectingIndicator(host: String) {
                 Spacer(modifier = Modifier.height(20.dp))
 
                 Text(
-                        text = "Connecting…",
+                        text = stringResource(R.string.state_connecting),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = JibeOnSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
                 Spacer(modifier = Modifier.height(4.dp))
@@ -345,7 +359,7 @@ private fun ConnectingIndicator(host: String) {
                 Text(
                         text = host,
                         style = MaterialTheme.typography.bodySmall.copy(fontFamily = RobotoMono),
-                        color = JibeOnSurfaceVariant.copy(alpha = 0.7f)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
         }
 }
@@ -362,9 +376,9 @@ private fun PinInput(
 ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                        text = "Enter the PIN shown on your daemon",
+                        text = stringResource(R.string.pairing_enter_pin),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = JibeOnSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
                 if (hint != null) {
@@ -372,7 +386,7 @@ private fun PinInput(
                         Text(
                                 text = hint,
                                 style = MaterialTheme.typography.labelSmall,
-                                color = JibePrimary,
+                                color = MaterialTheme.colorScheme.primary,
                                 textAlign = TextAlign.Center
                         )
                 }
@@ -420,7 +434,7 @@ private fun PinInput(
                                                         .clip(RoundedCornerShape(8.dp))
                                                         .background(
                                                                 if (isFilled)
-                                                                        JibeSurfaceContainerHigh
+                                                                        MaterialTheme.colorScheme.surfaceContainerHigh
                                                                 else
                                                                         MaterialTheme.colorScheme
                                                                                 .surface
@@ -429,11 +443,11 @@ private fun PinInput(
                                                                 width = 1.dp,
                                                                 color =
                                                                         if (isFilled)
-                                                                                JibePrimary.copy(
+                                                                                MaterialTheme.colorScheme.primary.copy(
                                                                                         alpha = 0.5f
                                                                                 )
                                                                         else
-                                                                                JibeOnSurfaceVariant
+                                                                                MaterialTheme.colorScheme.onSurfaceVariant
                                                                                         .copy(
                                                                                                 alpha =
                                                                                                         0.2f
@@ -452,7 +466,7 @@ private fun PinInput(
                                                                         fontWeight =
                                                                                 FontWeight.Medium
                                                                 ),
-                                                        color = JibeOnSurface
+                                                        color = MaterialTheme.colorScheme.onSurface
                                                 )
                                         } else {
                                                 Box(
@@ -460,7 +474,7 @@ private fun PinInput(
                                                                 Modifier.size(6.dp)
                                                                         .clip(CircleShape)
                                                                         .background(
-                                                                                JibeOnSurfaceVariant
+                                                                                MaterialTheme.colorScheme.onSurfaceVariant
                                                                                         .copy(
                                                                                                 alpha =
                                                                                                         0.15f
@@ -493,11 +507,11 @@ private fun PinInput(
                         enabled = value.text.length == 6 && !submitInFlight,
                         colors =
                                 ButtonDefaults.buttonColors(
-                                        containerColor = JibePrimary,
-                                        contentColor = MaterialTheme.colorScheme.surface,
-                                        disabledContainerColor = JibePrimary.copy(alpha = 0.5f),
+                                        containerColor = MaterialTheme.colorScheme.primary,
+                                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                                        disabledContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
                                         disabledContentColor =
-                                                MaterialTheme.colorScheme.surface.copy(alpha = 0.5f)
+                                                MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.5f)
                                 ),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
@@ -505,12 +519,12 @@ private fun PinInput(
                         if (submitInFlight) {
                                 CircularProgressIndicator(
                                         modifier = Modifier.size(22.dp),
-                                        color = MaterialTheme.colorScheme.surface,
+                                        color = MaterialTheme.colorScheme.onPrimary,
                                         strokeWidth = 2.dp
                                 )
                         } else {
                                 Text(
-                                        text = "Pair",
+                                        text = stringResource(R.string.pairing_pair),
                                         style = MaterialTheme.typography.labelLarge,
                                         modifier = Modifier.padding(vertical = 4.dp)
                                 )
@@ -523,7 +537,7 @@ private fun PinInput(
 private fun FailedIndicator(reason: String, onRetry: () -> Unit) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                        text = "Pairing failed",
+                        text = stringResource(R.string.state_pairing_failed),
                         style = MaterialTheme.typography.titleMedium,
                         color = JibeError
                 )
@@ -533,7 +547,7 @@ private fun FailedIndicator(reason: String, onRetry: () -> Unit) {
                 Text(
                         text = reason,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = JibeOnSurfaceVariant,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
                 )
 
@@ -541,9 +555,9 @@ private fun FailedIndicator(reason: String, onRetry: () -> Unit) {
 
                 Button(
                         onClick = onRetry,
-                        colors = ButtonDefaults.buttonColors(containerColor = JibePrimary),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                         shape = RoundedCornerShape(8.dp)
-                ) { Text("Retry") }
+                ) { Text(stringResource(R.string.action_retry)) }
         }
 }
 
@@ -551,7 +565,7 @@ private fun FailedIndicator(reason: String, onRetry: () -> Unit) {
 private fun PairingFailedIndicator(reason: String, guidance: String, onRetry: () -> Unit) {
         Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = JibeSurfaceContainerHigh),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
                 shape = RoundedCornerShape(16.dp)
         ) {
                 Column(
@@ -559,9 +573,9 @@ private fun PairingFailedIndicator(reason: String, guidance: String, onRetry: ()
                         horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                         Text(
-                                text = "PIN rejected",
+                                text = stringResource(R.string.pairing_pin_rejected),
                                 style = MaterialTheme.typography.titleMedium,
-                                color = JibeOnSurface,
+                                color = MaterialTheme.colorScheme.onSurface,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.fillMaxWidth()
                         )
@@ -571,7 +585,7 @@ private fun PairingFailedIndicator(reason: String, guidance: String, onRetry: ()
                         Text(
                                 text = reason,
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = JibeOnSurfaceVariant,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.fillMaxWidth()
                         )
@@ -581,7 +595,7 @@ private fun PairingFailedIndicator(reason: String, guidance: String, onRetry: ()
                         Text(
                                 text = guidance,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = JibeOnSurfaceVariant.copy(alpha = 0.8f),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.fillMaxWidth()
                         )
@@ -598,7 +612,7 @@ private fun PairingFailedIndicator(reason: String, guidance: String, onRetry: ()
                                 shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier.fillMaxWidth()
                         ) {
-                                Text("Retry")
+                                Text(stringResource(R.string.action_retry))
                         }
                 }
         }
@@ -608,7 +622,7 @@ private fun PairingFailedIndicator(reason: String, guidance: String, onRetry: ()
 private fun PairingUnavailableIndicator(reason: String, onRetry: () -> Unit) {
         Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = JibeSurfaceContainerHigh),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
                 shape = RoundedCornerShape(16.dp)
         ) {
                 Column(
@@ -618,7 +632,7 @@ private fun PairingUnavailableIndicator(reason: String, onRetry: () -> Unit) {
                         Text(
                                 text = stringResource(R.string.pairing_unavailable_title),
                                 style = MaterialTheme.typography.titleMedium,
-                                color = JibeOnSurface,
+                                color = MaterialTheme.colorScheme.onSurface,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.fillMaxWidth()
                         )
@@ -628,7 +642,7 @@ private fun PairingUnavailableIndicator(reason: String, onRetry: () -> Unit) {
                         Text(
                                 text = stringResource(R.string.pairing_unavailable_body),
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = JibeOnSurfaceVariant,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.fillMaxWidth()
                         )
@@ -639,7 +653,7 @@ private fun PairingUnavailableIndicator(reason: String, onRetry: () -> Unit) {
                                 Text(
                                         text = stringResource(R.string.pairing_unavailable_message_label),
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = JibeOnSurfaceVariant.copy(alpha = 0.6f),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                                         textAlign = TextAlign.Center,
                                         modifier = Modifier.fillMaxWidth()
                                 )
@@ -652,7 +666,7 @@ private fun PairingUnavailableIndicator(reason: String, onRetry: () -> Unit) {
                                                 MaterialTheme.typography.labelSmall.copy(
                                                         fontFamily = RobotoMono
                                                 ),
-                                        color = JibeOnSurfaceVariant.copy(alpha = 0.82f),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.82f),
                                         textAlign = TextAlign.Center,
                                         maxLines = 3,
                                         overflow = TextOverflow.Ellipsis,
@@ -666,8 +680,8 @@ private fun PairingUnavailableIndicator(reason: String, onRetry: () -> Unit) {
                                 onClick = onRetry,
                                 colors =
                                         ButtonDefaults.buttonColors(
-                                                containerColor = JibePrimary.copy(alpha = 0.14f),
-                                                contentColor = JibePrimary
+                                                containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                                                contentColor = MaterialTheme.colorScheme.primary
                                         ),
                                 shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier.fillMaxWidth()
