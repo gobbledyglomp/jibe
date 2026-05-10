@@ -22,13 +22,32 @@ from jibe.network.connection import JibeConnection
 logger = logging.getLogger(__name__)
 
 
-async def handle_ping(conn: JibeConnection, msg: JibeMessage) -> None:
+async def handle_ping(
+    conn: JibeConnection,
+    msg: JibeMessage,
+    *,
+    activity_log=None,
+) -> None:
     """Respond to a ping with a pong.
+
+    Echoes optional ``client_ts`` / ``ts`` and ``probe`` fields so clients can
+    measure RTT or correlate dashboard-initiated probes.
 
     Args:
         conn: The authenticated connection that sent the ping.
-        msg: The ping message (payload is ignored).
+        msg: The ping message (optional payload fields echoed when present).
+        activity_log: When set, records an incoming ping for the dashboard.
     """
-    pong = json.dumps({"type": MessageType.PONG.value})
-    await conn.send(pong)
+    payload = msg.payload if isinstance(msg.payload, dict) else {}
+    body: dict = {"type": MessageType.PONG.value}
+    if "client_ts" in payload:
+        body["client_ts"] = payload["client_ts"]
+    elif "ts" in payload:
+        body["client_ts"] = payload["ts"]
+    if "probe" in payload:
+        body["probe"] = payload["probe"]
+
+    await conn.send(json.dumps(body))
+    if activity_log is not None and conn.is_authenticated:
+        activity_log.record_incoming(conn.device_name or "device", conn.device_id)
     logger.debug("Sent pong to %s", conn.id)
