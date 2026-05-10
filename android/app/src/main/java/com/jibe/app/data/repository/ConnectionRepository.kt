@@ -10,6 +10,7 @@ import com.jibe.app.data.model.AuthResponse
 import com.jibe.app.data.model.ClipboardSyncMessage
 import com.jibe.app.data.model.ErrorMessage
 import com.jibe.app.data.model.FileAckMessage
+import com.jibe.app.data.model.FileChunkAckMessage
 import com.jibe.app.data.model.MessageType
 import com.jibe.app.data.model.NotificationMessage
 import com.jibe.app.data.model.PingMessage
@@ -124,7 +125,7 @@ class ConnectionRepository(
 
     private val fileTransfers =
             FileTransferRepository(scope, connectionDispatcher) { json ->
-                wsClient?.send(json)
+                wsClient?.send(json) == true
             }
 
     /** Outbound file upload progress (Android → Linux). */
@@ -453,6 +454,10 @@ class ConnectionRepository(
             MessageType.FILE_ACK -> {
                 val ack = MessageParser.payloadAs<FileAckMessage>(message)
                 fileTransfers.onFileAck(ack)
+            }
+            MessageType.FILE_CHUNK_ACK -> {
+                val ack = MessageParser.payloadAs<FileChunkAckMessage>(message)
+                fileTransfers.onFileChunkAck(ack)
             }
             MessageType.ERROR -> {
                 val error = MessageParser.payloadAs<ErrorMessage>(message)

@@ -28,6 +28,7 @@ from jibe.handlers.notifications import handle_notification
 from jibe.handlers.ping import handle_ping
 from jibe.handlers.router import MessageRouter
 from jibe.handlers.transfer import (
+    abort_transfers_for_connection,
     handle_file_chunk,
     handle_file_done,
     handle_file_start,
@@ -162,6 +163,7 @@ class JibeServer:
         finally:
             timeout_task.cancel()
             self._registry.remove(conn)
+            abort_transfers_for_connection(conn.id)
             if conn.is_authenticated and conn.device_id:
                 try:
                     await self._db.end_session(conn.id)

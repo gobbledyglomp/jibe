@@ -76,6 +76,68 @@ async def _send_ack(conn: JibeConnection, transfer_id: str, ok: bool, reason: st
     await conn.send(_format_file_ack(transfer_id, ok, reason))
 
 
+def _format_file_chunk_ack(
+    transfer_id: str,
+    index: int,
+    ok: bool,
+    *,
+    bytes_received: int = 0,
+    reason: str | None = None,
+) -> str:
+    payload: dict[str, str | int | bool] = {
+        "type": MessageType.FILE_CHUNK_ACK.value,
+        "id": transfer_id,
+        "index": index,
+        "ok": ok,
+        "bytes_received": bytes_received,
+    }
+    if reason is not None:
+        payload["reason"] = reason
+    return json.dumps(payload)
+
+
+async def _send_chunk_ack(
+    conn: JibeConnection,
+    transfer_id: str,
+    index: int,
+    ok: bool,
+    *,
+    bytes_received: int = 0,
+    reason: str | None = None,
+) -> None:
+    await conn.send(
+        _format_file_chunk_ack(
+            transfer_id,
+            index,
+            ok,
+            bytes_received=bytes_received,
+            reason=reason,
+        )
+    )
+
+
+def abort_transfers_for_connection(connection_id: str) -> None:
+    """Abort any in-progress uploads owned by a disconnected WebSocket.
+
+    Removes partial data under ``~/Downloads/.jibe-tmp`` so disconnects do not leave garbage.
+
+    Args:
+        connection_id: ``JibeConnection.id`` for the socket that closed.
+    """
+    to_remove = [
+        tid
+        for tid, t in _transfers.items()
+        if t.owner_connection_id == connection_id
+    ]
+    for tid in to_remove:
+        logger.info(
+            "Aborting transfer %s after disconnect of connection %s",
+            tid,
+            connection_id,
+        )
+        _abort_transfer(tid)
+
+
 def _abort_transfer(transfer_id: str, *, rm_temp: bool = True) -> None:
     transfer = _transfers.pop(transfer_id, None)
     if transfer is None:
@@ -96,6 +158,7 @@ class ActiveTransfer:
     """In-progress assembly state for one upload."""
 
     transfer_id: str
+    owner_connection_id: str
     filename: str
     size: int
     total_chunks: int
@@ -148,6 +211,7 @@ async def handle_file_start(conn: JibeConnection, msg: JibeMessage) -> None:
 
     _transfers[transfer_id] = ActiveTransfer(
         transfer_id=transfer_id,
+        owner_connection_id=conn.id,
         filename=filename,
         size=size,
         total_chunks=total_chunks,
@@ -173,15 +237,26 @@ async def handle_file_chunk(conn: JibeConnection, msg: JibeMessage) -> None:
     if not isinstance(index, int) or index < 0:
         await conn.send(format_error("malformed_payload", "file.chunk requires non-negative index"))
         _abort_transfer(transfer_id)
+        await _send_chunk_ack(conn, transfer_id, -1, False, reason="Invalid chunk index")
         await _send_ack(conn, transfer_id, False, "Aborted: invalid chunk index")
         return
     if not isinstance(data_b64, str):
         await conn.send(format_error("malformed_payload", "file.chunk requires base64 data"))
         _abort_transfer(transfer_id)
+        await _send_chunk_ack(conn, transfer_id, index, False, reason="Invalid chunk payload")
         await _send_ack(conn, transfer_id, False, "Aborted: invalid chunk payload")
         return
 
     transfer = _transfers[transfer_id]
+    if transfer.owner_connection_id != conn.id:
+        logger.warning(
+            "file.chunk id=%s sent from wrong connection (owner=%s, got=%s)",
+            transfer_id,
+            transfer.owner_connection_id,
+            conn.id,
+        )
+        await conn.send(format_error("forbidden", "Transfer belongs to another connection"))
+        return
     if index != transfer.chunks_received:
         logger.warning(
             "Chunk index mismatch for %s: expected %s got %s",
@@ -190,6 +265,7 @@ async def handle_file_chunk(conn: JibeConnection, msg: JibeMessage) -> None:
             index,
         )
         _abort_transfer(transfer_id)
+        await _send_chunk_ack(conn, transfer_id, index, False, reason="Chunk sequence mismatch")
         await _send_ack(conn, transfer_id, False, "Chunk sequence mismatch")
         return
 
@@ -198,17 +274,20 @@ async def handle_file_chunk(conn: JibeConnection, msg: JibeMessage) -> None:
     except binascii.Error:
         await conn.send(format_error("malformed_payload", "Invalid base64 in file.chunk"))
         _abort_transfer(transfer_id)
+        await _send_chunk_ack(conn, transfer_id, index, False, reason="Invalid base64")
         await _send_ack(conn, transfer_id, False, "Aborted: invalid base64")
         return
 
     if len(raw) > EXPECTED_CHUNK_RAW_BYTES:
         _abort_transfer(transfer_id)
+        await _send_chunk_ack(conn, transfer_id, index, False, reason="Chunk exceeds maximum size")
         await _send_ack(conn, transfer_id, False, "Chunk exceeds maximum size")
         return
 
     remaining = transfer.size - transfer.bytes_written
     if len(raw) > remaining:
         _abort_transfer(transfer_id)
+        await _send_chunk_ack(conn, transfer_id, index, False, reason="Chunk overflows declared file size")
         await _send_ack(conn, transfer_id, False, "Chunk overflows declared file size")
         return
 
@@ -216,6 +295,13 @@ async def handle_file_chunk(conn: JibeConnection, msg: JibeMessage) -> None:
     transfer.hasher.update(raw)
     transfer.bytes_written += len(raw)
     transfer.chunks_received += 1
+    await _send_chunk_ack(
+        conn,
+        transfer_id,
+        index,
+        True,
+        bytes_received=transfer.bytes_written,
+    )
 
 
 async def handle_file_done(conn: JibeConnection, msg: JibeMessage) -> None:
@@ -233,6 +319,16 @@ async def handle_file_done(conn: JibeConnection, msg: JibeMessage) -> None:
         return
 
     transfer = _transfers[transfer_id]
+
+    if transfer.owner_connection_id != conn.id:
+        logger.warning(
+            "file.done id=%s sent from wrong connection (owner=%s, got=%s)",
+            transfer_id,
+            transfer.owner_connection_id,
+            conn.id,
+        )
+        await conn.send(format_error("forbidden", "Transfer belongs to another connection"))
+        return
 
     if transfer.chunks_received != transfer.total_chunks:
         _abort_transfer(transfer_id)

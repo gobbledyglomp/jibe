@@ -6,6 +6,7 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import android.util.Base64
 import com.jibe.app.data.model.FileAckMessage
+import com.jibe.app.data.model.FileChunkAckMessage
 import com.jibe.app.data.model.FileChunkMessage
 import com.jibe.app.data.model.FileDoneMessage
 import com.jibe.app.data.model.FileStartMessage
@@ -14,6 +15,7 @@ import java.io.IOException
 import java.security.MessageDigest
 import java.util.UUID
 import kotlin.math.min
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,6 +24,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 
 /** Progress state for outbound chunked file uploads to the daemon. */
 data class TransferProgress(
@@ -40,28 +43,52 @@ data class TransferProgress(
 class FileTransferRepository(
         private val scope: CoroutineScope,
         private val ioDispatcher: CoroutineDispatcher,
-        private val sendJson: (String) -> Unit,
+        private val sendJson: (String) -> Boolean,
 ) {
 
     companion object {
         const val CHUNK_SIZE_BYTES = 65_536
+        private const val CHUNK_ACK_TIMEOUT_MS = 30_000L
     }
+
+    private data class PendingChunkAck(
+            val transferId: String,
+            val index: Int,
+            val ack: CompletableDeferred<FileChunkAckMessage>,
+    )
 
     private val _progress = MutableStateFlow<TransferProgress?>(null)
     val progress: StateFlow<TransferProgress?> = _progress.asStateFlow()
 
     private var pendingTransferId: String? = null
+    private var pendingChunkAck: PendingChunkAck? = null
 
     /** Clears in-flight transfer UI state when the socket tears down. */
     fun reset() {
+        pendingChunkAck?.ack?.cancel()
+        pendingChunkAck = null
         pendingTransferId = null
         _progress.value = null
+    }
+
+    /** Releases the sender when the daemon confirms a chunk has been written. */
+    fun onFileChunkAck(ack: FileChunkAckMessage) {
+        val pending = pendingChunkAck ?: return
+        if (pending.transferId != ack.id || pending.index != ack.index) return
+        pendingChunkAck = null
+        pending.ack.complete(ack)
     }
 
     /** Applies a daemon ``file.ack`` to the current pending transfer, if any. */
     fun onFileAck(ack: FileAckMessage) {
         if (ack.id != pendingTransferId) return
         pendingTransferId = null
+        if (!ack.ok) {
+            pendingChunkAck?.ack?.completeExceptionally(
+                    IOException(ack.reason ?: "Transfer rejected")
+            )
+            pendingChunkAck = null
+        }
         _progress.update { cur ->
             cur?.copy(
                     isComplete = true,
@@ -80,6 +107,7 @@ class FileTransferRepository(
                 try {
                     sendFileBlocking(uri, contentResolver)
                 } catch (e: Exception) {
+                    pendingChunkAck = null
                     _progress.update {
                         it?.copy(isComplete = true, error = e.message ?: "Transfer failed")
                                 ?: TransferProgress(
@@ -96,7 +124,7 @@ class FileTransferRepository(
         }
     }
 
-    private fun sendFileBlocking(uri: Uri, contentResolver: ContentResolver) {
+    private suspend fun sendFileBlocking(uri: Uri, contentResolver: ContentResolver) {
         val transferId = UUID.randomUUID().toString()
         pendingTransferId = transferId
 
@@ -118,16 +146,20 @@ class FileTransferRepository(
                         error = null
                 )
 
-        sendJson(
-                MessageParser.toJson(
-                        FileStartMessage(
-                                id = transferId,
-                                filename = filename,
-                                size = totalBytes,
-                                totalChunks = totalChunks
+        if (
+                !sendJson(
+                        MessageParser.toJson(
+                                FileStartMessage(
+                                        id = transferId,
+                                        filename = filename,
+                                        size = totalBytes,
+                                        totalChunks = totalChunks
+                                )
                         )
                 )
-        )
+        ) {
+            throw IOException("WebSocket rejected file.start")
+        }
 
         val digest = MessageDigest.getInstance("SHA-256")
         val buffer = ByteArray(CHUNK_SIZE_BYTES)
@@ -144,13 +176,30 @@ class FileTransferRepository(
                 val chunk = buffer.copyOf(read)
                 val data = Base64.encodeToString(chunk, Base64.NO_WRAP)
 
-                sendJson(
-                        MessageParser.toJson(
-                                FileChunkMessage(id = transferId, index = index, data = data)
-                        )
-                )
+                val ack = CompletableDeferred<FileChunkAckMessage>()
+                pendingChunkAck = PendingChunkAck(transferId, index, ack)
 
-                sent += read.toLong()
+                if (
+                        !sendJson(
+                                MessageParser.toJson(
+                                        FileChunkMessage(
+                                                id = transferId,
+                                                index = index,
+                                                data = data
+                                        )
+                                )
+                        )
+                ) {
+                    pendingChunkAck = null
+                    throw IOException("WebSocket rejected file.chunk")
+                }
+
+                val chunkAck = withTimeout(CHUNK_ACK_TIMEOUT_MS) { ack.await() }
+                if (!chunkAck.ok) {
+                    throw IOException(chunkAck.reason ?: "Daemon rejected file chunk")
+                }
+
+                sent = chunkAck.bytesReceived
                 index++
                 _progress.value =
                         TransferProgress(
@@ -167,9 +216,9 @@ class FileTransferRepository(
         val checksum =
                 digest.digest().joinToString("") { b -> "%02x".format(b) }
 
-        sendJson(
-                MessageParser.toJson(FileDoneMessage(id = transferId, checksum = checksum))
-        )
+        if (!sendJson(MessageParser.toJson(FileDoneMessage(id = transferId, checksum = checksum)))) {
+            throw IOException("WebSocket rejected file.done")
+        }
     }
 
     private fun displayName(cr: ContentResolver, uri: Uri): String {

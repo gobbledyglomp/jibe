@@ -1,6 +1,7 @@
 package com.jibe.app.network
 
 import java.security.SecureRandom
+import java.util.concurrent.TimeUnit
 import javax.net.ssl.SSLContext
 import okhttp3.OkHttpClient
 
@@ -15,6 +16,12 @@ import okhttp3.OkHttpClient
  * - Reconnection: trustedFingerprint is set → reject cert mismatches
  */
 object OkHttpFactory {
+
+    /** OkHttp default read timeout is 10s; large ``file.chunk`` streams exceed that before any inbound traffic. */
+    private const val SOCKET_TIMEOUT_SEC = 0L
+
+    /** Client-initiated WebSocket pings so long uploads do not look idle to middleboxes or stacks. */
+    private const val WEBSOCKET_PING_INTERVAL_SEC = 20L
 
     /**
      * Create an OkHttpClient wired with the Jibe TLS trust manager.
@@ -35,6 +42,12 @@ object OkHttpFactory {
                 OkHttpClient.Builder()
                         .sslSocketFactory(sslContext.socketFactory, trustManager)
                         .hostnameVerifier { _, _ -> true }
+                        // Long uploads send many outbound chunks without inbound app messages until
+                        // file.done; OkHttp defaults (read timeout 10s) close the socket mid-transfer.
+                        .readTimeout(SOCKET_TIMEOUT_SEC, TimeUnit.SECONDS)
+                        .writeTimeout(SOCKET_TIMEOUT_SEC, TimeUnit.SECONDS)
+                        .callTimeout(SOCKET_TIMEOUT_SEC, TimeUnit.SECONDS)
+                        .pingInterval(WEBSOCKET_PING_INTERVAL_SEC, TimeUnit.SECONDS)
                         .build()
 
         return client to trustManager

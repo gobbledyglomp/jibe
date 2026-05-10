@@ -27,6 +27,7 @@ class MessageType(str, Enum):
     NOTIFICATION = "notification"
     FILE_START = "file.start"
     FILE_CHUNK = "file.chunk"
+    FILE_CHUNK_ACK = "file.chunk.ack"
     FILE_DONE = "file.done"
     FILE_ACK = "file.ack"
     ERROR = "error"

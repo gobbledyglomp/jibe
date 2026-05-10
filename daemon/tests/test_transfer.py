@@ -1,16 +1,15 @@
 """Tests for chunked file transfer handlers."""
 
-import asyncio
 import base64
 import hashlib
-from pathlib import Path
-from unittest.mock import AsyncMock
+import json
 
 import pytest
 
 from jibe.core.api import JibeMessage, MessageType
 from jibe.handlers import transfer as transfer_mod
 from jibe.handlers.transfer import (
+    abort_transfers_for_connection,
     handle_file_chunk,
     handle_file_done,
     handle_file_start,
@@ -71,6 +70,12 @@ async def test_transfer_happy_path(mock_ws, monkeypatch, tmp_path):
     assert saved.read_bytes() == raw
 
     sends = [c[0][0] for c in conn.ws.send_str.await_args_list]
+    chunk_acks = [json.loads(s) for s in sends if '"type": "file.chunk.ack"' in s]
+    assert chunk_acks
+    assert chunk_acks[-1]["ok"] is True
+    assert chunk_acks[-1]["index"] == 0
+    assert chunk_acks[-1]["bytes_received"] == len(raw)
+
     acks = [s for s in sends if '"type": "file.ack"' in s or '"file.ack"' in s]
     assert acks, "expected a file.ack frame"
     assert '"ok": true' in acks[-1]
@@ -150,3 +155,31 @@ async def test_transfer_duplicate_start_rejected(mock_ws, monkeypatch, tmp_path)
 
     sends = [c[0][0] for c in conn.ws.send_str.await_args_list]
     assert any("transfer_conflict" in s for s in sends)
+
+
+@pytest.mark.asyncio
+async def test_abort_transfers_for_connection_removes_workspace(mock_ws, monkeypatch, tmp_path):
+    """Disconnect cleanup should delete partial temp dirs owned by that socket."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    conn = JibeConnection(mock_ws, "127.0.0.1")
+    tid = "550e8400-e29b-41d4-a716-446655440099"
+
+    await handle_file_start(
+        conn,
+        _msg(
+            MessageType.FILE_START,
+            id=tid,
+            filename="partial.bin",
+            size=100,
+            total_chunks=1,
+        ),
+    )
+
+    workspace = tmp_path / "Downloads" / ".jibe-tmp" / tid
+    assert workspace.is_dir()
+
+    abort_transfers_for_connection(conn.id)
+
+    assert tid not in transfer_mod._transfers
+    assert not workspace.exists()

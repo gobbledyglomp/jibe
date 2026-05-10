@@ -39,6 +39,13 @@
     "index": 0,
     "data": "iVBORw0KGgoAAAANSUhEUgAA..."
   },
+  "file.chunk.ack": {
+    "type": "file.chunk.ack",
+    "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+    "index": 0,
+    "ok": true,
+    "bytes_received": 65536
+  },
   "file.done": {
     "type": "file.done",
     "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",

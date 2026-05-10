@@ -267,6 +267,49 @@ No additional fields.
 | `index` | `integer` | Zero-based chunk index                        |
 | `data`  | `string`  | Base64-encoded chunk data                     |
 
+Each chunk is flow-controlled. The sender must wait for the corresponding
+`file.chunk.ack` before sending the next `file.chunk`. This prevents WebSocket
+send queues from growing with large files.
+
+---
+
+### `file.chunk.ack`
+
+| Field         | Value                                                                  |
+| ------------- | ---------------------------------------------------------------------- |
+| **Direction** | Linux → Android                                                        |
+| **Purpose**   | Acknowledge that one file chunk has been validated and written to disk |
+
+```json
+{
+  "type": "file.chunk.ack",
+  "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "index": 0,
+  "ok": true,
+  "bytes_received": 65536
+}
+```
+
+```json
+{
+  "type": "file.chunk.ack",
+  "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "index": 0,
+  "ok": false,
+  "bytes_received": 0,
+  "reason": "Invalid base64"
+}
+```
+
+| Field            | Type      | Description                                                        |
+| ---------------- | --------- | ------------------------------------------------------------------ |
+| `type`           | `string`  | Always `"file.chunk.ack"`                                          |
+| `id`             | `string`  | Transfer ID matching the `file.chunk` message                      |
+| `index`          | `integer` | Zero-based chunk index being acknowledged                          |
+| `ok`             | `boolean` | `true` if the chunk was written and the next chunk may be sent      |
+| `bytes_received` | `integer` | Total raw bytes written for this transfer after the acknowledged chunk |
+| `reason`         | `string`  | Present when `ok` is `false` — human-readable failure explanation |
+
 ---
 
 ### `file.done`
