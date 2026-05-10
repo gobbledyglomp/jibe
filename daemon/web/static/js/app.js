@@ -183,19 +183,27 @@
             const ringBtn = document.createElement('button');
             ringBtn.className = 'btn btn-sm';
             ringBtn.textContent = T('devices.ring');
-            ringBtn.title = T('devices.ringTitle');
-            ringBtn.addEventListener('click', async () => {
+            const ringDisabled = d.feat_find_phone === false;
+            if (ringDisabled) {
               ringBtn.disabled = true;
-              try {
-                await window.JibeApi.request('/api/ring/' + encodeURIComponent(d.id), {
-                  method: 'POST',
-                });
-              } catch (e) {
-                alert(T('devices.ringFail') + ' ' + (e.message || e));
-              } finally {
-                ringBtn.disabled = false;
-              }
-            });
+              ringBtn.classList.add('btn-disabled-ring');
+              ringBtn.setAttribute('aria-disabled', 'true');
+              ringBtn.title = T('devices.ringDisabledTitle');
+            } else {
+              ringBtn.title = T('devices.ringTitle');
+              ringBtn.addEventListener('click', async () => {
+                ringBtn.disabled = true;
+                try {
+                  await window.JibeApi.request('/api/ring/' + encodeURIComponent(d.id), {
+                    method: 'POST',
+                  });
+                } catch (e) {
+                  alert(T('devices.ringFail') + ' ' + (e.message || e));
+                } finally {
+                  ringBtn.disabled = false;
+                }
+              });
+            }
             td.appendChild(ringBtn);
           }
           const revokeBtn = document.createElement('button');

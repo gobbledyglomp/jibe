@@ -123,6 +123,24 @@ a {
   font-size: 0.75rem;
 }
 
+/* Ring control unavailable — find my phone disabled on device */
+.btn.btn-disabled-ring,
+.btn.btn-disabled-ring:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  pointer-events: none;
+  color: var(--muted);
+  background: var(--detail-row-bg);
+  border-color: var(--border);
+  border-style: dashed;
+  box-shadow: none;
+}
+
+.btn.btn-disabled-ring:hover {
+  border-color: var(--border);
+  filter: none;
+}
+
 input,
 select {
   background: var(--bg);

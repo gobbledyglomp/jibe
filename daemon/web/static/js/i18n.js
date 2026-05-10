@@ -55,6 +55,7 @@
         renameTitle: 'Click to rename',
         ring: 'Ring',
         ringTitle: 'Ring this phone',
+        ringDisabledTitle: 'Find my phone is disabled on this device',
         ringFail: 'Ring failed:',
       },
       history: {
@@ -208,6 +209,7 @@
         renameTitle: 'Clic para renombrar',
         ring: 'Llamar',
         ringTitle: 'Llamar a este teléfono',
+        ringDisabledTitle: '«Encontrar mi teléfono» está desactivado en el dispositivo',
         ringFail: 'Error al llamar:',
       },
       history: {
