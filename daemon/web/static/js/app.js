@@ -890,6 +890,12 @@
       esc(T('settings.changePassword')) +
       '</button>' +
       '<div id="pw-msg" style="margin-top:0.45rem;font-size:0.85rem;"></div>' +
+      '<div id="recovery-path-row" style="margin-top:1rem;display:none;">' +
+      '<label class="small">' +
+      esc(T('settings.recoveryFilePath')) +
+      '</label>' +
+      '<code id="recovery-path-val" class="mono" style="font-size:0.78rem;opacity:0.75;overflow-wrap:anywhere;display:block;"></code>' +
+      '</div>' +
       '</div></section>';
 
     let adminBlocks = '';
@@ -983,6 +989,17 @@
         msg.textContent = T('settings.passwordFail') + ' ' + (e.message || e);
       }
     };
+
+    window.JibeApi.json('/api/auth/recovery-status').then((d) => {
+      if (d.recovery_file_path) {
+        const row = root.querySelector('#recovery-path-row');
+        const val = root.querySelector('#recovery-path-val');
+        if (row && val) {
+          val.textContent = d.recovery_file_path;
+          row.style.display = 'block';
+        }
+      }
+    }).catch(() => {});
 
     if (admin) {
       root.querySelector('#set-daemon-event-log').checked = daemonEventLogEnabled();

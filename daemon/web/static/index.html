@@ -10,8 +10,8 @@
   <div class="panel" style="width:100%;max-width:420px;">
     <h1 style="margin:0 0 0.25rem;font-size:1.35rem;" id="login-title"></h1>
     <p style="margin:0 0 1rem;color:var(--muted);font-size:0.875rem;" id="login-sub"></p>
-    <div id="recovery-banner" class="banner-warn login-recovery-banner" style="display:none;font-size:0.8rem;"></div>
     <div id="login-error" class="error-banner" style="display:none;"></div>
+    <div id="recovery-hint" style="display:none;margin-top:0.5rem;font-size:0.78rem;color:var(--muted);line-height:1.5;"></div>
     <form id="login-form">
       <label class="small" for="user" id="lbl-user"></label>
       <input id="user" name="username" autocomplete="username" style="width:100%;margin-bottom:0.75rem;" />
@@ -60,45 +60,33 @@
       document.getElementById('recovery-submit').textContent = L('login.resetSubmit');
     }
 
-    function appendPathWithSoftBreaks(container, path) {
-      var parts = String(path).split('/');
-      parts.forEach(function (part, i) {
-        if (i > 0) {
-          container.appendChild(document.createElement('wbr'));
-          container.appendChild(document.createTextNode('/'));
-        }
-        container.appendChild(document.createTextNode(part));
-      });
-    }
+    var _recoveryStatus = null;
 
-    async function refreshRecoveryBanner() {
-      var banner = document.getElementById('recovery-banner');
+    async function loadRecoveryStatus() {
       try {
         var r = await fetch('/api/auth/recovery-status');
-        var d = await r.json().catch(function () { return {}; });
-        if (d.recovery_enabled) {
-          banner.className = 'banner-warn login-recovery-banner';
-          banner.style.cssText = '';
-          banner.innerHTML = '';
-          var msg = document.createElement('span');
-          msg.textContent = L('login.recoveryBanner').replace('{path}', '');
-          banner.appendChild(msg);
-          if (d.recovery_file_path) {
-            var code = document.createElement('code');
-            code.className = 'login-recovery-path';
-            appendPathWithSoftBreaks(code, d.recovery_file_path);
-            banner.appendChild(code);
-          }
-          banner.style.display = 'block';
-        } else {
-          banner.className = 'login-recovery-banner';
-          banner.style.cssText = 'font-size:0.75rem;color:var(--muted);margin-bottom:1.35rem;';
-          banner.textContent = L('login.noRecoveryFile');
-          banner.style.display = 'block';
-        }
+        _recoveryStatus = await r.json().catch(function () { return {}; });
       } catch {
-        banner.style.display = 'none';
+        _recoveryStatus = {};
       }
+    }
+
+    function showRecoveryHint() {
+      var hint = document.getElementById('recovery-hint');
+      if (!_recoveryStatus || !_recoveryStatus.recovery_enabled) {
+        hint.style.display = 'none';
+        return;
+      }
+      hint.innerHTML = '';
+      var line = document.createTextNode(L('login.recoveryHint') + ' ');
+      hint.appendChild(line);
+      if (_recoveryStatus.recovery_file_path) {
+        var code = document.createElement('code');
+        code.style.cssText = 'font-size:0.75rem;opacity:0.75;overflow-wrap:anywhere;display:inline;';
+        code.textContent = _recoveryStatus.recovery_file_path;
+        hint.appendChild(code);
+      }
+      hint.style.display = 'block';
     }
 
     if (window.JibeAuth && window.JibeAuth.tokenPresent()) {
@@ -106,10 +94,9 @@
     }
 
     paintLoginChrome();
-    refreshRecoveryBanner();
+    loadRecoveryStatus();
     window.addEventListener('jibe-locale', function () {
       paintLoginChrome();
-      refreshRecoveryBanner();
     });
 
     var modalBg = document.getElementById('recovery-modal-bg');
@@ -180,6 +167,7 @@
         if (!r.ok) {
           err.textContent = data.error || 'Login failed';
           err.style.display = 'block';
+          showRecoveryHint();
           return;
         }
         sessionStorage.setItem('jibe_token', data.token);

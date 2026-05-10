@@ -19,17 +19,12 @@
         password: 'Password',
         signIn: 'Sign in',
         forgotLink: 'Forgot password?',
-        recoveryBanner:
-          'Recovery is enabled. If you are locked out, open this file and use the token inside to reset your password:\n{path}',
         recoveryModalTitle: 'Reset password with recovery token',
         recoveryToken: 'Recovery token',
         newPassword: 'New password (min 10 characters)',
         resetSubmit: 'Set new password',
         close: 'Close',
-        recoveryDisabledHint:
-          'Recovery file not present on this machine. Use your saved password or restore from backup.',
-        noRecoveryFile:
-          'No recovery token file is configured. Save your password securely; an admin can rotate a recovery token from Settings after login.',
+        recoveryHint: 'Recovery key file:',
       },
       nav: {
         devices: 'Devices',
@@ -147,6 +142,7 @@
         devEventLog: 'Show daemon event log on Daemon page',
         devEventLogHelp:
           'Streams notable events to the browser and still lets you broadcast an application ping for RTT.',
+        recoveryFilePath: 'Recovery key file',
         recoveryRotate: 'Generate new recovery token',
         recoveryRotateHelp:
           'Invalidates the old token file. Copy the new token immediately — it is shown only once.',
@@ -172,17 +168,12 @@
         password: 'Contraseña',
         signIn: 'Entrar',
         forgotLink: '¿Olvidaste la contraseña?',
-        recoveryBanner:
-          'Recuperación activa. Si no puedes entrar, abre este archivo y usa el token que contiene para restablecer la contraseña:\n{path}',
         recoveryModalTitle: 'Restablecer contraseña con token de recuperación',
         recoveryToken: 'Token de recuperación',
         newPassword: 'Nueva contraseña (mín. 10 caracteres)',
         resetSubmit: 'Establecer nueva contraseña',
         close: 'Cerrar',
-        recoveryDisabledHint:
-          'No hay archivo de recuperación en este equipo. Usa la contraseña guardada o restaura desde una copia.',
-        noRecoveryFile:
-          'No hay token de recuperación. Guarda tu contraseña; un administrador puede generar un token en Ajustes tras entrar.',
+        recoveryHint: 'Archivo de recuperación:',
       },
       nav: {
         devices: 'Dispositivos',
@@ -301,6 +292,7 @@
         devEventLog: 'Mostrar registro de eventos del demonio en la página Demonio',
         devEventLogHelp:
           'Transmite eventos destacados al navegador y sigue permitiendo un ping de aplicación para medir RTT.',
+        recoveryFilePath: 'Archivo de clave de recuperación',
         recoveryRotate: 'Generar nuevo token de recuperación',
         recoveryRotateHelp:
           'Invalida el token anterior. Copia el nuevo al instante — solo se muestra una vez.',

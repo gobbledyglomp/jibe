@@ -519,7 +519,11 @@ class JibeServer:
         return web.json_response({"ok": True})
 
     async def handle_api_auth_recovery_status(self, request: web.Request) -> web.Response:
-        """GET /api/auth/recovery-status — whether a recovery token file exists."""
+        """GET /api/auth/recovery-status — whether a recovery token file exists.
+
+        Requires JWT when called from an authenticated session (Settings page).
+        Also called unauthenticated from the login page for the recovery modal.
+        """
         enabled = self._db.recovery_key_configured()
         payload: dict = {"recovery_enabled": enabled}
         if enabled:
