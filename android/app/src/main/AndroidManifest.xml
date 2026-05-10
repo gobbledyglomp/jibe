@@ -50,6 +50,14 @@
             android:noHistory="true"
             android:taskAffinity="" />
 
+        <activity
+            android:name=".service.RingAlertActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@style/Theme.Jibe" />
+
         <service
             android:name=".service.JibeNotificationService"
             android:exported="true"
