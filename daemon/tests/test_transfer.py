@@ -1,6 +1,5 @@
 """Tests for chunked file transfer handlers."""
 
-import base64
 import hashlib
 import json
 
@@ -10,9 +9,10 @@ from jibe.core.api import JibeMessage, MessageType
 from jibe.handlers import transfer as transfer_mod
 from jibe.handlers.transfer import (
     abort_transfers_for_connection,
-    handle_file_chunk,
+    handle_file_chunk_binary,
     handle_file_done,
     handle_file_start,
+    pack_binary_file_chunk,
 )
 from jibe.network.connection import JibeConnection
 
@@ -50,15 +50,7 @@ async def test_transfer_happy_path(mock_ws, monkeypatch, tmp_path):
         ),
     )
 
-    await handle_file_chunk(
-        conn,
-        _msg(
-            MessageType.FILE_CHUNK,
-            id=tid,
-            index=0,
-            data=base64.b64encode(raw).decode("ascii"),
-        ),
-    )
+    await handle_file_chunk_binary(conn, pack_binary_file_chunk(tid, 0, raw))
 
     await handle_file_done(
         conn,
@@ -102,15 +94,7 @@ async def test_transfer_checksum_mismatch(mock_ws, monkeypatch, tmp_path):
         ),
     )
 
-    await handle_file_chunk(
-        conn,
-        _msg(
-            MessageType.FILE_CHUNK,
-            id=tid,
-            index=0,
-            data=base64.b64encode(raw).decode("ascii"),
-        ),
-    )
+    await handle_file_chunk_binary(conn, pack_binary_file_chunk(tid, 0, raw))
 
     await handle_file_done(
         conn,

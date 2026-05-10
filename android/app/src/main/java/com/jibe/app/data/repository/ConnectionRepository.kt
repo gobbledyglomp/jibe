@@ -124,9 +124,12 @@ class ConnectionRepository(
     val pairingLockoutProbeUi: StateFlow<Boolean> = _pairingLockoutProbeUi.asStateFlow()
 
     private val fileTransfers =
-            FileTransferRepository(scope, connectionDispatcher) { json ->
-                wsClient?.send(json) == true
-            }
+            FileTransferRepository(
+                    scope,
+                    connectionDispatcher,
+                    sendJson = { json -> wsClient?.send(json) == true },
+                    sendBinary = { bytes -> wsClient?.sendBinary(bytes) == true },
+            )
 
     /** Outbound file upload progress (Android → Linux). */
     val transferProgress: StateFlow<TransferProgress?> = fileTransfers.progress

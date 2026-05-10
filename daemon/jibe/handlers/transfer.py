@@ -1,32 +1,54 @@
-"""File transfer: receive chunked uploads from Android over ``file.start`` / ``file.chunk`` / ``file.done``.
+"""File transfer: receive chunked uploads from Android.
 
-Assembles Base64 chunks into a temporary file, verifies SHA-256 on completion,
-then moves the result into ``~/Downloads``.
+Chunk payloads use compact **binary WebSocket frames** (see ``FILE_CHUNK_HEADER_STRUCT``).
+Control messages remain JSON: ``file.start``, ``file.done``, ``file.chunk.ack``, ``file.ack``.
 """
 
 from __future__ import annotations
 
 import asyncio
-import base64
-import binascii
 import hashlib
 import json
 import logging
 import os
 import shutil
+import struct
+import uuid as uuid_stdlib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, BinaryIO
 
 from jibe.core.api import JibeMessage, MessageType, format_error
+from jibe.core.config import FILE_TRANSFER_CHUNK_RAW_BYTES
 from jibe.network.connection import JibeConnection
 
 logger = logging.getLogger(__name__)
 
-# Must match the Android sender chunk size (`FileTransferRepository`).
-EXPECTED_CHUNK_RAW_BYTES = 65_536
+# Must match Android ``FileTransferRepository.CHUNK_SIZE_BYTES``.
+EXPECTED_CHUNK_RAW_BYTES = FILE_TRANSFER_CHUNK_RAW_BYTES
+
+# Binary chunk wire format (big-endian). Magic ASCII ``JBFC`` — Jibe Binary File Chunk.
+FILE_CHUNK_BINARY_MAGIC = b"JBFC"
+FILE_CHUNK_BINARY_VERSION = 1
+FILE_CHUNK_HEADER_STRUCT = struct.Struct("!4sBBHII16s")
+FILE_CHUNK_HEADER_SIZE = FILE_CHUNK_HEADER_STRUCT.size
 
 _transfers: dict[str, "ActiveTransfer"] = {}
+
+
+def pack_binary_file_chunk(transfer_id: str, chunk_index: int, payload: bytes) -> bytes:
+    """Build one binary WebSocket frame body for a file chunk (tests + documentation)."""
+    uid = uuid_stdlib.UUID(transfer_id)
+    header = FILE_CHUNK_HEADER_STRUCT.pack(
+        FILE_CHUNK_BINARY_MAGIC,
+        FILE_CHUNK_BINARY_VERSION,
+        0,
+        0,
+        chunk_index,
+        len(payload),
+        uid.bytes,
+    )
+    return header + payload
 
 
 def _downloads_root() -> Path:
@@ -244,39 +266,66 @@ async def handle_file_start(conn: JibeConnection, msg: JibeMessage) -> None:
     logger.info("file.start id=%s name=%s size=%s chunks=%s", transfer_id, filename, size, total_chunks)
 
 
-async def handle_file_chunk(conn: JibeConnection, msg: JibeMessage) -> None:
-    """Decode one chunk and append to the temp file."""
-    payload = msg.payload
-    transfer_id = payload.get("id")
-    index = payload.get("index")
-    data_b64 = payload.get("data")
+async def _abort_transfer_after_bad_chunk(
+    conn: JibeConnection,
+    transfer_id: str,
+    index: int,
+    *,
+    chunk_reason: str,
+    done_reason: str,
+) -> None:
+    """Tear down transfer after a bad chunk and notify the client."""
+    _abort_transfer(transfer_id)
+    await _send_chunk_ack(conn, transfer_id, index, False, reason=chunk_reason)
+    await _send_ack(conn, transfer_id, False, done_reason)
 
-    if not isinstance(transfer_id, str) or transfer_id not in _transfers:
+
+async def handle_file_chunk_binary(conn: JibeConnection, frame: bytes) -> None:
+    """Decode one binary chunk frame and append raw payload to the temp file."""
+    if len(frame) < FILE_CHUNK_HEADER_SIZE:
+        await conn.send(format_error("malformed_payload", "Binary chunk frame too short"))
+        return
+
+    try:
+        magic, ver, _flags, _rsv, index, payload_len, uuid_bytes = FILE_CHUNK_HEADER_STRUCT.unpack_from(
+            frame
+        )
+    except struct.error:
+        await conn.send(format_error("malformed_payload", "Invalid binary chunk header"))
+        return
+
+    if magic != FILE_CHUNK_BINARY_MAGIC:
+        await conn.send(format_error("malformed_payload", "Unknown binary chunk magic"))
+        return
+    if ver != FILE_CHUNK_BINARY_VERSION:
+        await conn.send(format_error("malformed_payload", "Unsupported binary chunk version"))
+        return
+    if len(frame) != FILE_CHUNK_HEADER_SIZE + payload_len:
+        await conn.send(format_error("malformed_payload", "Binary chunk length mismatch"))
+        return
+
+    try:
+        transfer_id = str(uuid_stdlib.UUID(bytes=uuid_bytes))
+    except ValueError:
+        await conn.send(format_error("malformed_payload", "Invalid transfer id in binary chunk"))
+        return
+
+    if transfer_id not in _transfers:
         await conn.send(format_error("unknown_transfer", "No active transfer for this id"))
-        return
-    if not isinstance(index, int) or index < 0:
-        await conn.send(format_error("malformed_payload", "file.chunk requires non-negative index"))
-        _abort_transfer(transfer_id)
-        await _send_chunk_ack(conn, transfer_id, -1, False, reason="Invalid chunk index")
-        await _send_ack(conn, transfer_id, False, "Aborted: invalid chunk index")
-        return
-    if not isinstance(data_b64, str):
-        await conn.send(format_error("malformed_payload", "file.chunk requires base64 data"))
-        _abort_transfer(transfer_id)
-        await _send_chunk_ack(conn, transfer_id, index, False, reason="Invalid chunk payload")
-        await _send_ack(conn, transfer_id, False, "Aborted: invalid chunk payload")
         return
 
     transfer = _transfers[transfer_id]
+
     if transfer.owner_connection_id != conn.id:
         logger.warning(
-            "file.chunk id=%s sent from wrong connection (owner=%s, got=%s)",
+            "binary chunk id=%s sent from wrong connection (owner=%s, got=%s)",
             transfer_id,
             transfer.owner_connection_id,
             conn.id,
         )
         await conn.send(format_error("forbidden", "Transfer belongs to another connection"))
         return
+
     if index != transfer.chunks_received:
         logger.warning(
             "Chunk index mismatch for %s: expected %s got %s",
@@ -284,37 +333,44 @@ async def handle_file_chunk(conn: JibeConnection, msg: JibeMessage) -> None:
             transfer.chunks_received,
             index,
         )
-        _abort_transfer(transfer_id)
-        await _send_chunk_ack(conn, transfer_id, index, False, reason="Chunk sequence mismatch")
-        await _send_ack(conn, transfer_id, False, "Chunk sequence mismatch")
+        await _abort_transfer_after_bad_chunk(
+            conn,
+            transfer_id,
+            index,
+            chunk_reason="Chunk sequence mismatch",
+            done_reason="Chunk sequence mismatch",
+        )
         return
 
-    try:
-        raw = base64.b64decode(data_b64, validate=True)
-    except binascii.Error:
-        await conn.send(format_error("malformed_payload", "Invalid base64 in file.chunk"))
-        _abort_transfer(transfer_id)
-        await _send_chunk_ack(conn, transfer_id, index, False, reason="Invalid base64")
-        await _send_ack(conn, transfer_id, False, "Aborted: invalid base64")
-        return
-
-    if len(raw) > EXPECTED_CHUNK_RAW_BYTES:
-        _abort_transfer(transfer_id)
-        await _send_chunk_ack(conn, transfer_id, index, False, reason="Chunk exceeds maximum size")
-        await _send_ack(conn, transfer_id, False, "Chunk exceeds maximum size")
+    if payload_len > EXPECTED_CHUNK_RAW_BYTES:
+        await _abort_transfer_after_bad_chunk(
+            conn,
+            transfer_id,
+            index,
+            chunk_reason="Chunk exceeds maximum size",
+            done_reason="Chunk exceeds maximum size",
+        )
         return
 
     remaining = transfer.size - transfer.bytes_written
-    if len(raw) > remaining:
-        _abort_transfer(transfer_id)
-        await _send_chunk_ack(conn, transfer_id, index, False, reason="Chunk overflows declared file size")
-        await _send_ack(conn, transfer_id, False, "Chunk overflows declared file size")
+    if payload_len > remaining:
+        await _abort_transfer_after_bad_chunk(
+            conn,
+            transfer_id,
+            index,
+            chunk_reason="Chunk overflows declared file size",
+            done_reason="Chunk overflows declared file size",
+        )
         return
 
-    await asyncio.to_thread(transfer.file_handle.write, raw)
-    transfer.hasher.update(raw)
-    transfer.bytes_written += len(raw)
+    payload_view = memoryview(frame)[FILE_CHUNK_HEADER_SIZE:]
+    transfer.hasher.update(payload_view)
+    raw_for_disk = payload_view.tobytes()
+    await asyncio.to_thread(transfer.file_handle.write, raw_for_disk)
+
+    transfer.bytes_written += payload_len
     transfer.chunks_received += 1
+
     await _send_chunk_ack(
         conn,
         transfer_id,

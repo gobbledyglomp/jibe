@@ -21,7 +21,12 @@ from jibe.core.api import (
     parse_message,
 )
 from jibe.core.auth import AuthManager
-from jibe.core.config import AUTH_TIMEOUT_SECONDS, DEFAULT_PORT, WS_HEARTBEAT_SECONDS
+from jibe.core.config import (
+    AUTH_TIMEOUT_SECONDS,
+    DEFAULT_PORT,
+    WS_HEARTBEAT_SECONDS,
+    WS_MAX_MESSAGE_BYTES,
+)
 from jibe.core.db import JibeDatabase
 from jibe.handlers.clipboard import ClipboardMonitor, handle_clipboard_sync
 from jibe.handlers.notifications import handle_notification
@@ -29,7 +34,7 @@ from jibe.handlers.ping import handle_ping
 from jibe.handlers.router import MessageRouter
 from jibe.handlers.transfer import (
     abort_transfers_for_connection,
-    handle_file_chunk,
+    handle_file_chunk_binary,
     handle_file_done,
     handle_file_start,
 )
@@ -97,7 +102,6 @@ class JibeServer:
         self._router.register(MessageType.PING, handle_ping)
         self._router.register(MessageType.CLIPBOARD_SYNC, handle_clipboard)
         self._router.register(MessageType.FILE_START, handle_file_start)
-        self._router.register(MessageType.FILE_CHUNK, handle_file_chunk)
         self._router.register(MessageType.FILE_DONE, handle_file_done)
         self._router.register(MessageType.NOTIFICATION, handle_notification)
 
@@ -133,7 +137,11 @@ class JibeServer:
         1. AWAITING_AUTH: only `auth.request` is accepted
         2. AUTHENTICATED: all valid message types are routed
         """
-        ws = web.WebSocketResponse(heartbeat=WS_HEARTBEAT_SECONDS)
+        ws = web.WebSocketResponse(
+            heartbeat=WS_HEARTBEAT_SECONDS,
+            max_msg_size=WS_MAX_MESSAGE_BYTES,
+            compress=False,
+        )
         await ws.prepare(request)
 
         client_ip = request.remote or "unknown"
@@ -155,6 +163,9 @@ class JibeServer:
             async for msg in ws:
                 if msg.type == web.WSMsgType.TEXT:
                     await self._handle_text_message(conn, msg.data)
+
+                elif msg.type == web.WSMsgType.BINARY:
+                    await self._handle_binary_message(conn, msg.data)
 
                 elif msg.type == web.WSMsgType.ERROR:
                     logger.error("WebSocket error on %s: %s", conn.id, ws.exception())
@@ -231,6 +242,25 @@ class JibeServer:
         )
 
         await self._router.dispatch(conn, jibe_msg)
+
+    async def _handle_binary_message(self, conn: JibeConnection, data: bytes) -> None:
+        """Authenticated-only binary payloads — currently file chunk frames only."""
+        if not conn.is_authenticated:
+            await conn.send(
+                format_error(
+                    "auth_required",
+                    "You must authenticate before sending binary frames.",
+                )
+            )
+            return
+
+        logger.debug(
+            "[%s] binary frame (%d bytes) from %s",
+            conn.device_name,
+            len(data),
+            conn.id,
+        )
+        await handle_file_chunk_binary(conn, data)
 
     @staticmethod
     def _is_localhost(request: web.Request) -> bool:

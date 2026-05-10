@@ -1,13 +1,13 @@
 # Jibe WebSocket Protocol Specification
 
-> Version: 0.3.0-beta · Status: Draft
+> Version: 0.4.0-beta · Status: Draft
 
 ## Design Philosophy
 
-Jibe communicates over a single **WebSocket** connection between the Android app and the Linux daemon. Every message is a **JSON object** sent as a WebSocket text frame. The protocol is:
+Jibe communicates over a single **WebSocket** connection between the Android app and the Linux daemon. Control messages are **JSON objects** sent as WebSocket **text** frames. **File payloads** are sent as WebSocket **binary** frames with a small fixed header (see [`file.chunk` (binary)](#filechunk-binary)). The protocol is:
 
-- **Human-readable** - JSON makes debugging easy (inspect with browser devtools, `websocat`, or `jq`)
-- **Simple** - no binary framing, no compression negotiation, no sub-protocols
+- **Human-readable control plane** - JSON makes debugging easy (inspect with browser devtools, `websocat`, or `jq`)
+- **Efficient bulk transfer** - raw bytes over binary frames avoid Base64 and oversized JSON on large files
 - **Easy to extend** - adding a new message type never breaks existing ones; unknown types are rejected with a clean error, not silently ignored
 - **Stateless per-message** - each message is self-contained; the server does not track request/response pairs (the connection itself is stateful, but individual messages are not)
 
@@ -58,7 +58,7 @@ sequenceDiagram
 
 ## Message Format
 
-Every message is a JSON object with at minimum a `type` field:
+Except for [binary file chunks](#filechunk-binary), every message is a JSON object with at minimum a `type` field:
 
 ```json
 {
@@ -240,36 +240,45 @@ No additional fields.
 | `id`           | `string`  | UUID identifying this transfer — all subsequent chunks reference this ID |
 | `filename`     | `string`  | Original filename including extension                                    |
 | `size`         | `integer` | Total file size in bytes                                                 |
-| `total_chunks` | `integer` | Number of `file.chunk` messages that will follow                         |
+| `total_chunks` | `integer` | Number of binary [`file.chunk`](#filechunk-binary) frames that will follow |
 
 ---
 
-### `file.chunk`
+### `file.chunk` (binary)
 
-| Field         | Value                                         |
-| ------------- | --------------------------------------------- |
-| **Direction** | Android → Linux                               |
-| **Purpose**   | Deliver one chunk of a file being transferred |
+| Field         | Value                                                    |
+| ------------- | -------------------------------------------------------- |
+| **Direction** | Android → Linux                                          |
+| **Purpose**   | Deliver one raw chunk of a file being transferred        |
+| **Transport** | WebSocket **binary** frame (not JSON; no `type` field)    |
 
-```json
-{
-  "type": "file.chunk",
-  "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
-  "index": 0,
-  "data": "iVBORw0KGgoAAAANSUhEUgAA..."
-}
-```
+After `file.start`, the sender sends exactly `total_chunks` binary frames in order.
+Each frame body is:
 
-| Field   | Type      | Description                                   |
-| ------- | --------- | --------------------------------------------- |
-| `type`  | `string`  | Always `"file.chunk"`                         |
-| `id`    | `string`  | Transfer ID matching the `file.start` message |
-| `index` | `integer` | Zero-based chunk index                        |
-| `data`  | `string`  | Base64-encoded chunk data                     |
+| Offset | Size | Type / endianness | Description |
+| ------ | ---- | ----------------- | ----------- |
+| `0`    | `4`  | ASCII             | Magic bytes `"JBFC"` (`0x4A 0x42 0x46 0x43`) |
+| `4`    | `1`  | unsigned byte     | Header format version (currently `1`) |
+| `5`    | `1`  | unsigned byte     | Flags (reserved; send `0`) |
+| `6`    | `2`  | big-endian `u16`  | Reserved (send `0`) |
+| `8`    | `4`  | big-endian `u32`  | Chunk index (zero-based, matches `file.chunk.ack`) |
+| `12`   | `4`  | big-endian `u32`  | Payload length in bytes (`N`) |
+| `16`   | `16` | raw bytes         | Transfer UUID (same as `file.start` `id`, RFC 4122 byte layout) |
+| `32`   | `N`  | raw bytes         | Chunk payload (plaintext file bytes) |
 
-Each chunk is flow-controlled. The sender must wait for the corresponding
-`file.chunk.ack` before sending the next `file.chunk`. This prevents WebSocket
-send queues from growing with large files.
+Total frame size is **`32 + N`** bytes. The final chunk may be smaller than the
+implementation’s preferred chunk size so that the sum of all payloads equals `size`
+from `file.start`.
+
+Flow control matches JSON-era behaviour: the sender must wait for the corresponding
+`file.chunk.ack` before sending the next binary chunk. This keeps WebSocket send
+queues bounded.
+
+On LAN, implementations should use a large raw chunk size (for example **4 MiB**) so
+round-trip latency per ack does not dominate throughput.
+
+Legacy JSON `file.chunk` messages with Base64 `data` are **not** accepted by current
+daemons; clients must use binary frames.
 
 ---
 
@@ -286,7 +295,7 @@ send queues from growing with large files.
   "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
   "index": 0,
   "ok": true,
-  "bytes_received": 65536
+  "bytes_received": 2097152
 }
 ```
 
@@ -297,14 +306,14 @@ send queues from growing with large files.
   "index": 0,
   "ok": false,
   "bytes_received": 0,
-  "reason": "Invalid base64"
+  "reason": "Invalid chunk header"
 }
 ```
 
 | Field            | Type      | Description                                                        |
 | ---------------- | --------- | ------------------------------------------------------------------ |
 | `type`           | `string`  | Always `"file.chunk.ack"`                                          |
-| `id`             | `string`  | Transfer ID matching the `file.chunk` message                      |
+| `id`             | `string`  | Transfer ID matching the binary chunk’s UUID in the header           |
 | `index`          | `integer` | Zero-based chunk index being acknowledged                          |
 | `ok`             | `boolean` | `true` if the chunk was written and the next chunk may be sent      |
 | `bytes_received` | `integer` | Total raw bytes written for this transfer after the acknowledged chunk |

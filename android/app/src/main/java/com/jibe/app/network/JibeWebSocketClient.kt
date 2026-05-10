@@ -11,6 +11,7 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import okio.ByteString.Companion.toByteString
 
 /** Events emitted by the WebSocket connection to the upper layers. */
 sealed class WebSocketEvent {
@@ -93,6 +94,10 @@ class JibeWebSocketClient(private val client: OkHttpClient) : JibeWebSocketHandl
                                 }
                             }
 
+                            override fun onMessage(webSocket: WebSocket, bytes: okio.ByteString) {
+                                Log.w(TAG, "Ignoring unexpected binary frame (${bytes.size} bytes)")
+                            }
+
                             override fun onClosing(
                                     webSocket: WebSocket,
                                     code: Int,
@@ -135,6 +140,16 @@ class JibeWebSocketClient(private val client: OkHttpClient) : JibeWebSocketHandl
                             return false
                         }
         return ws.send(json)
+    }
+
+    override fun sendBinary(payload: ByteArray): Boolean {
+        val ws =
+                webSocket
+                        ?: run {
+                            Log.w(TAG, "Attempted to send binary on a closed WebSocket")
+                            return false
+                        }
+        return ws.send(payload.toByteString())
     }
 
     /** Close the WebSocket connection cleanly. */

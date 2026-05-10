@@ -68,12 +68,19 @@ class ConnectionRepositoryTest {
 
                 val sentPayloads = mutableListOf<String>()
 
+                val sentBinaries = mutableListOf<ByteArray>()
+
                 override fun connect(host: String, port: Int) {
                         connectCalls.add(host to port)
                 }
 
                 override fun send(json: String): Boolean {
                         sentPayloads.add(json)
+                        return true
+                }
+
+                override fun sendBinary(payload: ByteArray): Boolean {
+                        sentBinaries.add(payload.copyOf())
                         return true
                 }
 

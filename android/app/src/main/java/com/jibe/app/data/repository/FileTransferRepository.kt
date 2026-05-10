@@ -4,10 +4,8 @@ import android.content.ContentResolver
 import android.database.Cursor
 import android.net.Uri
 import android.provider.OpenableColumns
-import android.util.Base64
 import com.jibe.app.data.model.FileAckMessage
 import com.jibe.app.data.model.FileChunkAckMessage
-import com.jibe.app.data.model.FileChunkMessage
 import com.jibe.app.data.model.FileDoneMessage
 import com.jibe.app.data.model.FileStartMessage
 import com.jibe.app.network.MessageParser
@@ -36,19 +34,22 @@ data class TransferProgress(
 )
 
 /**
- * Streams a document URI to the daemon using ``file.start`` / ``file.chunk`` / ``file.done``.
+ * Streams a document URI using JSON ``file.start`` / ``file.done`` and binary chunk frames.
  *
- * Chunk size matches [EXPECTED_CHUNK_RAW_BYTES] on the Linux receiver.
+ * Chunk size matches daemon ``FILE_TRANSFER_CHUNK_RAW_BYTES``.
  */
 class FileTransferRepository(
         private val scope: CoroutineScope,
         private val ioDispatcher: CoroutineDispatcher,
         private val sendJson: (String) -> Boolean,
+        private val sendBinary: (ByteArray) -> Boolean,
 ) {
 
     companion object {
-        const val CHUNK_SIZE_BYTES = 65_536
-        private const val CHUNK_ACK_TIMEOUT_MS = 30_000L
+        /** Raw bytes per chunk (must match daemon ``FILE_TRANSFER_CHUNK_RAW_BYTES``). */
+        const val CHUNK_SIZE_BYTES = 4 * 1024 * 1024
+
+        private const val CHUNK_ACK_TIMEOUT_MS = 60_000L
     }
 
     private data class PendingChunkAck(
@@ -173,25 +174,14 @@ class FileTransferRepository(
                 if (read <= 0) throw IOException("Unexpected end of file")
 
                 digest.update(buffer, 0, read)
-                val chunk = buffer.copyOf(read)
-                val data = Base64.encodeToString(chunk, Base64.NO_WRAP)
 
                 val ack = CompletableDeferred<FileChunkAckMessage>()
                 pendingChunkAck = PendingChunkAck(transferId, index, ack)
 
-                if (
-                        !sendJson(
-                                MessageParser.toJson(
-                                        FileChunkMessage(
-                                                id = transferId,
-                                                index = index,
-                                                data = data
-                                        )
-                                )
-                        )
-                ) {
+                val frame = FileChunkBinaryWire.encode(transferId, index, buffer, read)
+                if (!sendBinary(frame)) {
                     pendingChunkAck = null
-                    throw IOException("WebSocket rejected file.chunk")
+                    throw IOException("WebSocket rejected binary chunk")
                 }
 
                 val chunkAck = withTimeout(CHUNK_ACK_TIMEOUT_MS) { ack.await() }
