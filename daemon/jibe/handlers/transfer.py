@@ -12,6 +12,7 @@ import binascii
 import hashlib
 import json
 import logging
+import os
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -33,9 +34,27 @@ def _downloads_root() -> Path:
     return Path.home() / "Downloads"
 
 
+def _transfer_temp_root() -> Path:
+    """Root for in-progress transfer assembly under the user's cache directory."""
+    xdg_cache_home = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
+    return xdg_cache_home / "jibe" / "transfers"
+
+
 def _temp_transfer_dir(transfer_id: str) -> Path:
     """Directory for in-progress chunk assembly."""
-    return _downloads_root() / ".jibe-tmp" / transfer_id
+    return _transfer_temp_root() / transfer_id
+
+
+def _remove_empty_transfer_root() -> None:
+    """Remove the scratch transfer root if no active workspaces remain."""
+    root = _transfer_temp_root()
+    try:
+        root.rmdir()
+    except FileNotFoundError:
+        return
+    except OSError:
+        # Directory is not empty or cannot be removed; either is harmless.
+        return
 
 
 def _safe_filename(name: str) -> str:
@@ -119,7 +138,7 @@ async def _send_chunk_ack(
 def abort_transfers_for_connection(connection_id: str) -> None:
     """Abort any in-progress uploads owned by a disconnected WebSocket.
 
-    Removes partial data under ``~/Downloads/.jibe-tmp`` so disconnects do not leave garbage.
+    Removes partial data from the transfer cache so disconnects do not leave garbage.
 
     Args:
         connection_id: ``JibeConnection.id`` for the socket that closed.
@@ -149,6 +168,7 @@ def _abort_transfer(transfer_id: str, *, rm_temp: bool = True) -> None:
     if rm_temp:
         try:
             shutil.rmtree(transfer.temp_dir, ignore_errors=True)
+            _remove_empty_transfer_root()
         except Exception:
             logger.exception("Failed removing temp dir for %s", transfer_id)
 
@@ -373,6 +393,7 @@ async def handle_file_done(conn: JibeConnection, msg: JibeMessage) -> None:
         logger.exception("Failed moving completed file for %s", transfer_id)
         try:
             shutil.rmtree(transfer.temp_dir, ignore_errors=True)
+            _remove_empty_transfer_root()
         except Exception:
             logger.exception("Cleanup after failed move for %s", transfer_id)
         await _send_ack(conn, transfer_id, False, "Failed to save file to Downloads")
@@ -380,6 +401,7 @@ async def handle_file_done(conn: JibeConnection, msg: JibeMessage) -> None:
 
     try:
         shutil.rmtree(transfer.temp_dir, ignore_errors=True)
+        _remove_empty_transfer_root()
     except Exception:
         logger.exception("Failed removing temp dir for completed transfer %s", transfer_id)
 

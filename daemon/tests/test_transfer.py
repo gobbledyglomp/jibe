@@ -68,6 +68,7 @@ async def test_transfer_happy_path(mock_ws, monkeypatch, tmp_path):
     downloads = tmp_path / "Downloads"
     saved = downloads / "note.txt"
     assert saved.read_bytes() == raw
+    assert not (tmp_path / ".cache" / "jibe" / "transfers").exists()
 
     sends = [c[0][0] for c in conn.ws.send_str.await_args_list]
     chunk_acks = [json.loads(s) for s in sends if '"type": "file.chunk.ack"' in s]
@@ -176,10 +177,13 @@ async def test_abort_transfers_for_connection_removes_workspace(mock_ws, monkeyp
         ),
     )
 
-    workspace = tmp_path / "Downloads" / ".jibe-tmp" / tid
+    workspace = tmp_path / ".cache" / "jibe" / "transfers" / tid
+    temp_root = workspace.parent
     assert workspace.is_dir()
 
     abort_transfers_for_connection(conn.id)
 
     assert tid not in transfer_mod._transfers
     assert not workspace.exists()
+    assert not temp_root.exists()
+    assert not (tmp_path / "Downloads" / ".jibe-tmp").exists()
