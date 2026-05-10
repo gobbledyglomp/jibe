@@ -86,15 +86,15 @@ class MainActivity : ComponentActivity() {
         // during the brief window before the service binds.
         setContent {
             val themeStr by dataStore.theme.collectAsStateWithLifecycle(initialValue = "dark")
-            val lang by dataStore.language.collectAsStateWithLifecycle(initialValue = "auto")
+            val lang by dataStore.language.collectAsStateWithLifecycle(initialValue = "en")
 
             LaunchedEffect(lang) {
-                val locales =
+                val locales = LocaleListCompat.forLanguageTags(
                         when (lang) {
-                            "en" -> LocaleListCompat.forLanguageTags("en-US")
-                            "es" -> LocaleListCompat.forLanguageTags("es")
-                            else -> LocaleListCompat.getEmptyLocaleList()
+                            "es" -> "es"
+                            else -> "en-US"
                         }
+                )
                 AppCompatDelegate.setApplicationLocales(locales)
             }
 
