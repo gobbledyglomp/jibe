@@ -1,16 +1,18 @@
 """System tray integration via pystray.
 
-Linux desktops using StatusNotifier/AppIndicator may show the context menu on
-single left-click and map primary activation to double-click or another gesture;
-``Open Dashboard`` is always available from the menu as well.
+Backend selection order on Linux:
+  1. AppIndicator (D-Bus / SNI) — required for KDE Plasma 6 and GNOME
+  2. GTK StatusIcon — legacy fallback
+  3. XOrg XEmbed — last resort (modern desktops may not show menus)
 """
 
 from __future__ import annotations
 
 import asyncio
+import importlib
 import logging
-import subprocess
 import threading
+import webbrowser
 from pathlib import Path
 
 from PIL import Image
@@ -23,19 +25,58 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 _DEFAULT_ICON = _REPO_ROOT / "branding" / "logos" / "jibe-icon-filled-512.png"
 
 
+def _make_tray_image(path: Path) -> Image.Image:
+    """Return a 64×64 white-on-transparent icon suitable for the system tray.
+
+    The source PNG has a solid dark background (#121824) with white logo
+    strokes.  We use the luminance of each pixel as its alpha value:
+    bright (stroke) pixels become opaque white; dark (background) pixels
+    become fully transparent.
+    """
+    if path.exists():
+        src = Image.open(path).convert("RGBA")
+        lum = src.convert("L")  # background ≈ 25 brightness, strokes ≈ 255
+        result = Image.new("RGBA", src.size, (255, 255, 255, 0))
+        result.putalpha(lum)
+        return result.resize((64, 64), Image.Resampling.LANCZOS)
+    logger.warning("Tray icon not found at %s — using blank placeholder", path)
+    return Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+
+
+def _best_icon_class():  # type: ignore[return]
+    """Return the most capable pystray Icon class for this environment.
+
+    AppIndicator communicates via D-Bus and implements the StatusNotifier
+    protocol used by KDE Plasma 6 and modern GNOME.  Fall back to GTK
+    StatusIcon (deprecated but broadly supported), then to xorg XEmbed.
+    """
+    for backend in ("_appindicator", "_gtk"):
+        try:
+            mod = importlib.import_module(f"pystray.{backend}")
+            cls = getattr(mod, "Icon")
+            logger.debug("pystray backend: %s", backend)
+            return cls
+        except Exception:
+            pass
+    import pystray
+
+    logger.debug("pystray backend: default (xorg)")
+    return pystray.Icon
+
+
 class JibeTray:
     """pystray icon: open dashboard, pairing controls, quit."""
 
     def __init__(
         self,
         *,
-        port: int,
+        dashboard_url: str,
         loop: asyncio.AbstractEventLoop,
         shutdown_event: asyncio.Event,
         auth_manager: AuthManager,
         icon_path: Path | None = None,
     ) -> None:
-        self._port = port
+        self._dashboard_url = dashboard_url
         self._loop = loop
         self._shutdown_event = shutdown_event
         self._auth = auth_manager
@@ -44,16 +85,10 @@ class JibeTray:
         self._thread: threading.Thread | None = None
 
     def _open_dashboard(self) -> None:
-        url = f"http://127.0.0.1:{self._port}/web/index.html"
         try:
-            subprocess.Popen(
-                ["xdg-open", url],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                start_new_session=True,
-            )
+            webbrowser.open_new_tab(self._dashboard_url)
         except Exception:
-            logger.exception("xdg-open failed for dashboard URL %s", url)
+            logger.exception("Failed to open dashboard URL %s", self._dashboard_url)
 
     def _pairing_start(self) -> None:
         self._loop.call_soon_threadsafe(self._auth.start_pairing)
@@ -62,15 +97,11 @@ class JibeTray:
         self._loop.call_soon_threadsafe(self._auth.stop_pairing)
 
     def start(self) -> None:
-        """Run the tray icon in a background thread."""
-        import pystray
+        """Load the icon and run the tray in a background thread."""
+        import pystray  # noqa: PLC0415 — intentional lazy import
 
-        path = self._icon_path
-        if not path.exists():
-            logger.warning("Tray icon missing at %s — using placeholder", path)
-            img = Image.new("RGBA", (64, 64), (0x58, 0xA6, 0xFF, 255))
-        else:
-            img = Image.open(path).convert("RGBA").resize((64, 64), Image.Resampling.LANCZOS)
+        img = _make_tray_image(self._icon_path)
+        IconClass = _best_icon_class()
 
         def on_quit(icon: pystray.Icon, _item: pystray.MenuItem) -> None:
             self._loop.call_soon_threadsafe(self._shutdown_event.set)
@@ -95,7 +126,7 @@ class JibeTray:
             pystray.MenuItem("Quit", on_quit),
         )
 
-        icon = pystray.Icon("jibe", img, "Jibe", menu=menu)
+        icon = IconClass("jibe", img, "Jibe", menu=menu)
         self._icon = icon
 
         self._thread = threading.Thread(target=icon.run, name="jibe-tray", daemon=True)

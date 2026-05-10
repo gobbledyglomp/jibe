@@ -74,15 +74,16 @@ async def run_daemon(
     loop = asyncio.get_running_loop()
     shutdown_event = asyncio.Event()
 
-    loop.add_signal_handler(
-        signal.SIGUSR1,
-        lambda: server.auth.start_pairing(),
-    )
+    def _request_shutdown() -> None:
+        shutdown_event.set()
+
+    loop.add_signal_handler(signal.SIGUSR1, lambda: server.auth.start_pairing())
+    loop.add_signal_handler(signal.SIGTERM, _request_shutdown)
 
     tray: JibeTray | None = None
     if enable_tray and _have_desktop():
         tray = JibeTray(
-            port=port,
+            dashboard_url=f"http://127.0.0.1:{server.dashboard_port}/",
             loop=loop,
             shutdown_event=shutdown_event,
             auth_manager=server.auth,
@@ -100,11 +101,15 @@ async def run_daemon(
         if tray is not None:
             tray.start()
 
-        logger.info("Ready. Press Ctrl+C to stop.")
+        logger.info(
+            "Ready — dashboard at http://127.0.0.1:%d/ · Ctrl+C to stop.",
+            server.dashboard_port,
+        )
         await shutdown_event.wait()
 
     except asyncio.CancelledError:
         logger.info("Shutting down...")
+        raise
 
     finally:
         if tray is not None:

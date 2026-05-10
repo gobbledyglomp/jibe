@@ -117,6 +117,9 @@ class JibeServer:
         self._db = db
         self._ssl_context = ssl_context
         self._cert_path = cert_path
+        # When TLS is active the main site is WSS-only; the dashboard is served
+        # on a separate plain-HTTP site on the next port (localhost-only).
+        self._dashboard_port = (port + 1) if ssl_context is not None else port
         self._auth = AuthManager(db)
         self._registry = ConnectionRegistry()
         self._clipboard_monitor = ClipboardMonitor(self._registry, db=db)
@@ -133,7 +136,13 @@ class JibeServer:
         self._setup_routes()
         self._runner: web.AppRunner | None = None
         self._site: web.TCPSite | None = None
+        self._dashboard_site: web.TCPSite | None = None
         self._clipboard_monitor_task: asyncio.Task[None] | None = None
+
+    @property
+    def dashboard_port(self) -> int:
+        """TCP port for the plain-HTTP dashboard / REST API listener."""
+        return self._dashboard_port
 
     @property
     def auth(self) -> AuthManager:
@@ -693,6 +702,21 @@ class JibeServer:
             ssl_context=self._ssl_context,
         )
         await self._site.start()
+
+        if self._ssl_context is not None:
+            # The TLS site handles WebSocket only; serve the dashboard and REST
+            # API over a plain-HTTP site bound to localhost so the browser can
+            # reach it without TLS certificate warnings.
+            self._dashboard_site = web.TCPSite(
+                self._runner,
+                "127.0.0.1",
+                self._dashboard_port,
+            )
+            await self._dashboard_site.start()
+            logger.info(
+                "Dashboard HTTP listening on http://127.0.0.1:%d/",
+                self._dashboard_port,
+            )
 
         self._clipboard_monitor_task = asyncio.create_task(self._clipboard_monitor.run())
 
