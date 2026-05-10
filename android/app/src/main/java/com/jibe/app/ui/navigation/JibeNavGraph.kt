@@ -85,6 +85,7 @@ fun JibeNavGraph(
         composable(Route.Home.path) {
             HomeScreen(
                     repository = repository,
+                    dataStore = dataStore,
                     onDeviceForgotten = {
                         navController.navigate(Route.Pairing.path) {
                             popUpTo(Route.Home.path) { inclusive = true }

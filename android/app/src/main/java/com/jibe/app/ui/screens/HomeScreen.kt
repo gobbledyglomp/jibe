@@ -25,8 +25,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.shape.CircleShape
@@ -55,10 +56,13 @@ import androidx.compose.runtime.Composable
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -71,32 +75,45 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jibe.app.R
+import com.jibe.app.data.local.AppSettings
+import com.jibe.app.data.local.FeatureId
+import com.jibe.app.data.local.JibeDataStore
+import com.jibe.app.data.local.reorderSubset
 import com.jibe.app.data.repository.ConnectionRepository
 import com.jibe.app.data.repository.ConnectionState
 import com.jibe.app.data.repository.ClipboardTextReader
 import com.jibe.app.data.repository.PingResult
 import com.jibe.app.data.repository.TransferProgress
 import com.jibe.app.ui.components.JibeSpinner
+import com.jibe.app.ui.components.dragHandle
+import com.jibe.app.ui.components.rememberReorderState
+import com.jibe.app.ui.components.reorderableItem
 import com.jibe.app.ui.theme.JibeError
 import com.jibe.app.ui.theme.JibeSuccess
 import com.jibe.app.ui.theme.JibeWarning
 import com.jibe.app.ui.theme.RobotoMono
+import kotlinx.coroutines.launch
+
+private val HOME_CARD_FEATURES = setOf(
+        FeatureId.CLIPBOARD,
+        FeatureId.FILE_TRANSFER,
+        FeatureId.PRESENTATION,
+        FeatureId.PING,
+)
 
 @Composable
 fun HomeScreen(
         repository: ConnectionRepository,
+        dataStore: JibeDataStore,
         onDeviceForgotten: () -> Unit,
         onOpenSettings: () -> Unit = {},
         onOpenPresentation: () -> Unit = {}
 ) {
         val state by repository.state.collectAsState()
         val transferProgress by repository.transferProgress.collectAsState()
-        val featPing by repository.featPingEnabled.collectAsStateWithLifecycle(initialValue = false)
-        val featClipboard by repository.featClipboardSync.collectAsStateWithLifecycle(initialValue = true)
-        val featFile by repository.featFileTransferEnabled.collectAsStateWithLifecycle(initialValue = true)
-        val featPresentation by
-                repository.featPresentationRemote.collectAsStateWithLifecycle(initialValue = true)
+        val settings by dataStore.allSettings.collectAsStateWithLifecycle(initialValue = AppSettings())
         val context = LocalContext.current
+        val scope = rememberCoroutineScope()
         val pickDocument =
                 rememberLauncherForActivityResult(
                         contract = ActivityResultContracts.OpenDocument(),
@@ -122,112 +139,164 @@ fun HomeScreen(
                 if (state !is ConnectionState.Connected) pingInFlight = false
         }
 
-        val scrollState = rememberScrollState()
         val configuration = LocalConfiguration.current
         val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         val isConnected = state is ConnectionState.Connected
 
+        val visibleFeatures = remember { mutableStateListOf<FeatureId>() }
+        val fullOrder = settings.featureOrder
+
+        LaunchedEffect(fullOrder, settings.featClipboard, settings.featFileTransfer, settings.featPresentation, settings.featPing) {
+                val ordered = fullOrder.filter { id ->
+                        id in HOME_CARD_FEATURES && when (id) {
+                                FeatureId.CLIPBOARD -> settings.featClipboard
+                                FeatureId.FILE_TRANSFER -> settings.featFileTransfer
+                                FeatureId.PRESENTATION -> settings.featPresentation
+                                FeatureId.PING -> settings.featPing
+                                else -> false
+                        }
+                }
+                if (visibleFeatures.toList() != ordered) {
+                        visibleFeatures.clear()
+                        visibleFeatures.addAll(ordered)
+                }
+        }
+
+        val listState = rememberLazyListState()
+        val reorderableKeys by remember {
+                derivedStateOf { visibleFeatures.map { it.key } }
+        }
+        val reorderState = rememberReorderState(
+                lazyListState = listState,
+                reorderableKeys = { reorderableKeys },
+                onSwap = { from, to ->
+                        visibleFeatures.add(to, visibleFeatures.removeAt(from))
+                },
+                onDone = {
+                        val newFull = reorderSubset(fullOrder, HOME_CARD_FEATURES, visibleFeatures.toList())
+                        scope.launch { dataStore.setFeatureOrder(newFull) }
+                },
+        )
+
         Scaffold(containerColor = MaterialTheme.colorScheme.surface) { innerPadding ->
-                Column(
+                LazyColumn(
+                        state = listState,
                         modifier =
                                 Modifier.fillMaxSize()
-                                        .verticalScroll(scrollState)
                                         .padding(innerPadding)
-                                        .padding(horizontal = if (isLandscape) 40.dp else 24.dp)
-                                        .padding(top = if (isLandscape) 20.dp else 48.dp)
-                                        .padding(bottom = 32.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                                        .padding(horizontal = if (isLandscape) 40.dp else 24.dp),
                 ) {
-                        Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                        ) {
-                                Text(
-                                        text = stringResource(R.string.app_brand),
-                                        style =
-                                                MaterialTheme.typography.headlineLarge.copy(
-                                                        fontFamily = RobotoMono,
-                                                        fontWeight = FontWeight.Bold,
-                                                        letterSpacing = (-1).sp
-                                                ),
-                                        color = MaterialTheme.colorScheme.primary
-                                )
-
-                                IconButton(onClick = onOpenSettings) {
-                                        Icon(
-                                                imageVector = Icons.Default.Settings,
-                                                contentDescription = stringResource(R.string.settings_title),
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                modifier = Modifier.size(22.dp)
-                                        )
-                                }
-                        }
-
-                        Spacer(modifier = Modifier.height(if (isLandscape) 16.dp else 24.dp))
-
-                        ConnectionStatusCard(state = state)
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        if (featClipboard) {
-                                ClipboardCard(
-                                        isConnected = isConnected,
-                                        repository = repository
-                                )
-                                Spacer(modifier = Modifier.height(12.dp))
-                        }
-
-                        if (featFile) {
-                                FileTransferCard(
-                                        isConnected = isConnected,
-                                        transferProgress = transferProgress,
-                                        onPickClick = { pickDocument.launch(arrayOf("*/*")) },
-                                        onCancelClick = { repository.cancelFileTransfer() }
-                                )
-                                Spacer(modifier = Modifier.height(12.dp))
-                        }
-
-                        if (featPresentation && isConnected) {
-                                PresentCard(onClick = onOpenPresentation)
-                                Spacer(modifier = Modifier.height(12.dp))
-                        }
-
-                        NotificationPermissionCard(trailingSpacerDp = 12)
-
-                        if (featPing) {
-                                PingCard(
-                                        isConnected = isConnected,
-                                        pingInFlight = pingInFlight,
-                                        lastLatency = lastLatency,
-                                        onPing = {
-                                                if (!pingInFlight) {
-                                                        pingInFlight = true
-                                                        repository.sendPing()
-                                                }
-                                        }
-                                )
-                                Spacer(modifier = Modifier.height(12.dp))
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        if (showForgetConfirm) {
-                                ForgetConfirmation(
-                                        onConfirm = {
-                                                repository.forgetDevice()
-                                                onDeviceForgotten()
-                                        },
-                                        onCancel = { showForgetConfirm = false }
-                                )
-                        } else {
-                                TextButton(onClick = { showForgetConfirm = true }) {
+                        item(key = "brand") {
+                                Spacer(modifier = Modifier.height(if (isLandscape) 20.dp else 48.dp))
+                                Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                ) {
                                         Text(
-                                                text = stringResource(R.string.home_forget_device),
-                                                style = MaterialTheme.typography.labelMedium,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                                text = stringResource(R.string.app_brand),
+                                                style =
+                                                        MaterialTheme.typography.headlineLarge.copy(
+                                                                fontFamily = RobotoMono,
+                                                                fontWeight = FontWeight.Bold,
+                                                                letterSpacing = (-1).sp
+                                                        ),
+                                                color = MaterialTheme.colorScheme.primary
                                         )
+
+                                        IconButton(onClick = onOpenSettings) {
+                                                Icon(
+                                                        imageVector = Icons.Default.Settings,
+                                                        contentDescription = stringResource(R.string.settings_title),
+                                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        modifier = Modifier.size(22.dp)
+                                                )
+                                        }
                                 }
+
+                                Spacer(modifier = Modifier.height(if (isLandscape) 16.dp else 24.dp))
+
+                                ConnectionStatusCard(state = state)
+
+                                Spacer(modifier = Modifier.height(12.dp))
+                        }
+
+                        items(
+                                items = visibleFeatures,
+                                key = { it.key }
+                        ) { featureId ->
+                                val isDragged = reorderState.isDragged(featureId.key)
+                                Column(
+                                        modifier = Modifier
+                                                .reorderableItem(reorderState, featureId.key)
+                                                .then(if (!isDragged) Modifier.animateItem() else Modifier)
+                                ) {
+                                        when (featureId) {
+                                                FeatureId.CLIPBOARD ->
+                                                        ClipboardCard(
+                                                                isConnected = isConnected,
+                                                                repository = repository,
+                                                                dragModifier = Modifier.dragHandle(reorderState, featureId.key),
+                                                        )
+                                                FeatureId.FILE_TRANSFER ->
+                                                        FileTransferCard(
+                                                                isConnected = isConnected,
+                                                                transferProgress = transferProgress,
+                                                                onPickClick = { pickDocument.launch(arrayOf("*/*")) },
+                                                                onCancelClick = { repository.cancelFileTransfer() },
+                                                                dragModifier = Modifier.dragHandle(reorderState, featureId.key),
+                                                        )
+                                                FeatureId.PRESENTATION ->
+                                                        PresentCard(
+                                                                isConnected = isConnected,
+                                                                onClick = onOpenPresentation,
+                                                                dragModifier = Modifier.dragHandle(reorderState, featureId.key),
+                                                        )
+                                                FeatureId.PING ->
+                                                        PingCard(
+                                                                isConnected = isConnected,
+                                                                pingInFlight = pingInFlight,
+                                                                lastLatency = lastLatency,
+                                                                onPing = {
+                                                                        if (!pingInFlight) {
+                                                                                pingInFlight = true
+                                                                                repository.sendPing()
+                                                                        }
+                                                                },
+                                                                dragModifier = Modifier.dragHandle(reorderState, featureId.key),
+                                                        )
+                                                else -> {}
+                                        }
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                }
+                        }
+
+                        item(key = "notif_perm") {
+                                NotificationPermissionCard(trailingSpacerDp = 12)
+                        }
+
+                        item(key = "footer") {
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                if (showForgetConfirm) {
+                                        ForgetConfirmation(
+                                                onConfirm = {
+                                                        repository.forgetDevice()
+                                                        onDeviceForgotten()
+                                                },
+                                                onCancel = { showForgetConfirm = false }
+                                        )
+                                } else {
+                                        TextButton(onClick = { showForgetConfirm = true }) {
+                                                Text(
+                                                        text = stringResource(R.string.home_forget_device),
+                                                        style = MaterialTheme.typography.labelMedium,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                                )
+                                        }
+                                }
+
+                                Spacer(modifier = Modifier.height(32.dp))
                         }
                 }
         }
@@ -407,14 +476,14 @@ private fun ConnectionStatusCard(state: ConnectionState) {
 }
 
 @Composable
-private fun PresentCard(onClick: () -> Unit) {
+private fun PresentCard(isConnected: Boolean, onClick: () -> Unit, dragModifier: Modifier = Modifier) {
         Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
                 shape = RoundedCornerShape(12.dp)
         ) {
                 Row(
-                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                        modifier = dragModifier.padding(16.dp).fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                 ) {
                         CardIcon(Icons.Default.Slideshow)
@@ -435,6 +504,7 @@ private fun PresentCard(onClick: () -> Unit) {
 
                         OutlinedButton(
                                 onClick = onClick,
+                                enabled = isConnected,
                                 modifier = Modifier.defaultMinSize(minWidth = CardActionMinWidth),
                                 shape = RoundedCornerShape(8.dp),
                                 colors =
@@ -451,7 +521,8 @@ private fun PingCard(
         isConnected: Boolean,
         pingInFlight: Boolean,
         lastLatency: Long,
-        onPing: () -> Unit
+        onPing: () -> Unit,
+        dragModifier: Modifier = Modifier,
 ) {
         Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -459,7 +530,7 @@ private fun PingCard(
                 shape = RoundedCornerShape(12.dp)
         ) {
                 Row(
-                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                        modifier = dragModifier.padding(16.dp).fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                 ) {
                         CardIcon(Icons.Default.Speed)
@@ -501,7 +572,7 @@ private fun PingCard(
 }
 
 @Composable
-private fun ClipboardCard(isConnected: Boolean, repository: ConnectionRepository) {
+private fun ClipboardCard(isConnected: Boolean, repository: ConnectionRepository, dragModifier: Modifier = Modifier) {
         val context = LocalContext.current
         Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -509,7 +580,7 @@ private fun ClipboardCard(isConnected: Boolean, repository: ConnectionRepository
                 shape = RoundedCornerShape(12.dp)
         ) {
                 Row(
-                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                        modifier = dragModifier.padding(16.dp).fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                 ) {
                         CardIcon(Icons.Default.ContentCopy)
@@ -614,7 +685,8 @@ private fun FileTransferCard(
         isConnected: Boolean,
         transferProgress: TransferProgress?,
         onPickClick: () -> Unit,
-        onCancelClick: () -> Unit
+        onCancelClick: () -> Unit,
+        dragModifier: Modifier = Modifier,
 ) {
         val busy =
                 transferProgress?.let {
@@ -626,7 +698,7 @@ private fun FileTransferCard(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
                 shape = RoundedCornerShape(12.dp)
         ) {
-                Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
+                Column(modifier = dragModifier.padding(16.dp).fillMaxWidth()) {
                         Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
