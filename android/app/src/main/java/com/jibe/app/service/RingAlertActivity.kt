@@ -1,9 +1,6 @@
 package com.jibe.app.service
 
 import android.app.NotificationManager
-import android.media.AudioManager
-import android.media.Ringtone
-import android.media.RingtoneManager
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
@@ -35,18 +32,16 @@ import com.jibe.app.R
 import com.jibe.app.ui.theme.JibeTheme
 
 /**
- * Full-screen ring alert for ``device.ring`` from the daemon — plays the default ringtone at
- * maximum volume until dismissed. Designed to work over the lock screen.
+ * Full-screen overlay for "Find my phone" — shows a large "Stop" button.
+ *
+ * Audio is managed by [RingPlayer] and may already be playing before this
+ * activity launches. Dismissing the activity stops the ring.
  */
 class RingAlertActivity : ComponentActivity() {
 
     companion object {
         const val RING_NOTIFICATION_ID = 9001
     }
-
-    private var ringtone: Ringtone? = null
-    private var audioManager: AudioManager? = null
-    private var previousVolume: Int = -1
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -65,37 +60,27 @@ class RingAlertActivity : ComponentActivity() {
         @Suppress("DEPRECATION")
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
-        val am = getSystemService(AUDIO_SERVICE) as AudioManager
-        audioManager = am
-        previousVolume = am.getStreamVolume(AudioManager.STREAM_RING)
-        val maxVolume = am.getStreamMaxVolume(AudioManager.STREAM_RING)
-        am.setStreamVolume(AudioManager.STREAM_RING, maxVolume, 0)
-
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         nm.cancel(RING_NOTIFICATION_ID)
 
-        val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
-        ringtone = RingtoneManager.getRingtone(this, uri)?.also {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                it.isLooping = true
-            }
-            it.play()
+        if (!RingPlayer.isPlaying) {
+            RingPlayer.start(this)
         }
 
         setContent {
             JibeTheme(isDark = true) {
-                RingAlertContent(onStop = { finish() })
+                RingAlertContent(onStop = {
+                    RingPlayer.stop()
+                    finish()
+                })
             }
         }
     }
 
     override fun onDestroy() {
-        ringtone?.stop()
-        ringtone = null
-        if (previousVolume >= 0) {
-            audioManager?.setStreamVolume(AudioManager.STREAM_RING, previousVolume, 0)
-        }
-        audioManager = null
+        RingPlayer.stop()
+        val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        nm.cancel(RING_NOTIFICATION_ID)
         super.onDestroy()
     }
 }
