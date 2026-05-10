@@ -106,6 +106,10 @@
 
   async function renderDevices(root, role) {
     stopPollDevices();
+    const devPerPage = 25;
+    let devPage = 1;
+    let devList = [];
+
     root.innerHTML =
       '<h1>' +
       esc(T('devices.title')) +
@@ -117,14 +121,21 @@
       esc(T('devices.paired')) +
       '</th>' +
       (role === 'admin' ? '<th></th>' : '') +
-      '</tr></thead><tbody id="dev-body"></tbody></table></div>';
+      '</tr></thead><tbody id="dev-body"></tbody></table></div>' +
+      '<div style="margin-top:0.75rem;display:flex;gap:0.5rem;align-items:center;" id="dev-pager"></div>';
 
     const tbody = root.querySelector('#dev-body');
+    const pagerEl = root.querySelector('#dev-pager');
 
-    async function refresh() {
-      const data = await window.JibeApi.json('/api/devices');
+    function paintDeviceRows() {
+      const total = devList.length;
+      const pages = Math.max(1, Math.ceil(total / devPerPage));
+      devPage = Math.min(Math.max(1, devPage), pages);
+      const start = (devPage - 1) * devPerPage;
+      const slice = devList.slice(start, start + devPerPage);
+
       tbody.innerHTML = '';
-      data.devices.forEach((d) => {
+      slice.forEach((d) => {
         const tr = document.createElement('tr');
         const dot = d.online ? 'dot-online' : 'dot-offline';
         const ol = d.online ? T('common.online') : T('common.offline');
@@ -156,7 +167,7 @@
               await window.JibeApi.request('/api/devices/' + encodeURIComponent(d.id), {
                 method: 'DELETE',
               });
-              await refresh();
+              await fetchDevices();
             } catch (e) {
               alert(T('devices.revokeFail') + ' ' + (e.message || e));
             }
@@ -180,14 +191,45 @@
               method: 'PATCH',
               body: JSON.stringify({ name: nv }),
             });
-            refresh();
+            fetchDevices();
           });
         });
       }
+
+      pagerEl.innerHTML =
+        '<span style="color:var(--muted);font-size:0.85rem;">' +
+        esc(T('common.page')) +
+        ' ' +
+        devPage +
+        ' / ' +
+        pages +
+        ' (' +
+        total +
+        ')</span>' +
+        '<button type="button" class="btn btn-sm" id="dev-prev">' +
+        esc(T('common.prev')) +
+        '</button>' +
+        '<button type="button" class="btn btn-sm" id="dev-next">' +
+        esc(T('common.next')) +
+        '</button>';
+      pagerEl.querySelector('#dev-prev').onclick = () => {
+        devPage = Math.max(1, devPage - 1);
+        paintDeviceRows();
+      };
+      pagerEl.querySelector('#dev-next').onclick = () => {
+        devPage = Math.min(pages, devPage + 1);
+        paintDeviceRows();
+      };
     }
 
-    await refresh();
-    pollDevicesTimer = setInterval(() => refresh().catch(() => {}), POLL_MS);
+    async function fetchDevices() {
+      const data = await window.JibeApi.json('/api/devices');
+      devList = data.devices || [];
+      paintDeviceRows();
+    }
+
+    await fetchDevices();
+    pollDevicesTimer = setInterval(() => fetchDevices().catch(() => {}), POLL_MS);
   }
 
   async function renderHistory(root) {
