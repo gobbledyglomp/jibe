@@ -41,7 +41,10 @@ from jibe.core.config import (
 )
 from jibe.core.db import JibeDatabase
 from jibe.core.tls import generate_self_signed_cert, get_cert_fingerprint
+from jibe.handlers.battery import forget_battery, get_all_batteries, handle_battery
 from jibe.handlers.clipboard import ClipboardMonitor, handle_clipboard_sync
+from jibe.handlers.ring import send_ring
+from jibe.handlers.remote import handle_remote_key
 from jibe.handlers.notifications import handle_notification
 from jibe.handlers.ping import handle_ping
 from jibe.handlers.pong import handle_pong
@@ -186,6 +189,11 @@ class JibeServer:
         """Expose the registry for status queries."""
         return self._registry
 
+    @property
+    def event_log(self) -> DashboardEventLog:
+        """Dashboard-facing activity log (localhost REST)."""
+        return self._event_log
+
     def _register_handlers(self) -> None:
         """Register message handlers with the router."""
         monitor = self._clipboard_monitor
@@ -223,6 +231,8 @@ class JibeServer:
         self._router.register(MessageType.FILE_CANCEL, handle_transfer_cancel)
         self._router.register(MessageType.FILE_DONE, handle_transfer_done)
         self._router.register(MessageType.NOTIFICATION, handle_notify)
+        self._router.register(MessageType.DEVICE_BATTERY, handle_battery)
+        self._router.register(MessageType.REMOTE_KEY, handle_remote_key)
 
     def _setup_routes(self) -> None:
         """Configure HTTP, WebSocket, static files, and REST."""
@@ -289,6 +299,9 @@ class JibeServer:
         app.router.add_get("/api/daemon/ping-activity", self.handle_api_daemon_event_log)
         app.router.add_post("/api/daemon/ping-send", self.handle_api_daemon_ping_send)
 
+        app.router.add_get("/api/battery", self.handle_api_battery)
+        app.router.add_post("/api/ring/{device_id}", self.handle_api_ring)
+
     async def handle_root_redirect(self, request: web.Request) -> web.Response:
         """Redirect browser root to the login page."""
         raise web.HTTPFound(location="/web/index.html")
@@ -351,6 +364,7 @@ class JibeServer:
             self._registry.remove(conn)
             await abort_transfers_for_connection(conn.id, db=self._db)
             if conn.is_authenticated and conn.device_id:
+                forget_battery(conn.device_id)
                 self._event_log.record(
                     "device",
                     f"Device disconnected: {conn.device_name or conn.device_id}",
@@ -646,7 +660,7 @@ class JibeServer:
         probe = self._probe_tracker.start_probe()
         payload = json.dumps({"type": MessageType.PING.value, "probe": probe})
         n = 0
-        for conn in self._registry.get_authenticated():
+        for conn in list(self._registry.get_authenticated()):
             await conn.send(payload)
             n += 1
         self._event_log.record(
@@ -656,6 +670,22 @@ class JibeServer:
             probe=probe[:12],
         )
         return web.json_response({"sent": n, "probe": probe})
+
+    async def handle_api_battery(self, request: web.Request) -> web.Response:
+        """GET /api/battery — cached battery levels for all connected devices."""
+        self._require_user(request)
+        return web.json_response({"battery": get_all_batteries()})
+
+    async def handle_api_ring(self, request: web.Request) -> web.Response:
+        """POST /api/ring/{device_id} — send device.ring to a connected device (admin)."""
+        user = self._require_user(request)
+        self._require_admin(user)
+        device_id = request.match_info["device_id"]
+        conn = self._registry.get_by_device_id(device_id)
+        if conn is None:
+            raise web.HTTPNotFound(text=json.dumps({"error": "device not connected"}))
+        await send_ring(conn, event_log=self._event_log)
+        return web.json_response({"ok": True})
 
     async def handle_api_status(self, request: web.Request) -> web.Response:
         """GET /api/status."""
