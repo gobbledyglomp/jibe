@@ -130,6 +130,22 @@ class AuthManager:
             self._failed_attempts.clear()
             logger.debug("Pairing mode deactivated")
 
+    def pairing_status_snapshot(self) -> dict:
+        """Return pairing state for localhost REST (PIN only while active)."""
+        active = self.is_pairing_active
+        pin: str | None = None
+        expires_at: float | None = None
+        if active and self._pairing_session is not None:
+            pin = self._pairing_session.pin
+            expires_at = self._pairing_session.created_at + PIN_EXPIRY_SECONDS
+        failed = sum(self._failed_attempts.values())
+        return {
+            "active": active,
+            "pin": pin,
+            "expires_at": expires_at,
+            "failed_attempts": failed,
+        }
+
     @property
     def is_pairing_active(self) -> bool:
         """Whether a valid (non-expired) pairing session exists."""
