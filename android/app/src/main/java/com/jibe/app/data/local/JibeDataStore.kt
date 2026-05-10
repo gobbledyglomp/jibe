@@ -135,7 +135,13 @@ class JibeDataStore(private val context: Context) {
     }
 
     suspend fun clearCredentials() {
-        context.dataStore.edit { it.clear() }
+        context.dataStore.edit { prefs ->
+            prefs.remove(KEY_DEVICE_ID)
+            prefs.remove(KEY_FINGERPRINT)
+            prefs.remove(KEY_DAEMON_HOST)
+            prefs.remove(KEY_DAEMON_PORT)
+            prefs.remove(KEY_CERT_FINGERPRINT)
+        }
     }
 
     suspend fun setTheme(theme: String) {
