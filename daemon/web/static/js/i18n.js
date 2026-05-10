@@ -20,7 +20,7 @@
         signIn: 'Sign in',
         forgotLink: 'Forgot password?',
         recoveryBanner:
-          'Recovery is enabled. If you are locked out, use the token from the recovery file next to your database (see daemon log on first setup), or reset below.',
+          'Recovery is enabled. If you are locked out, open this file and use the token inside to reset your password:\n{path}',
         recoveryModalTitle: 'Reset password with recovery token',
         recoveryToken: 'Recovery token',
         newPassword: 'New password (min 10 characters)',
@@ -174,7 +174,7 @@
         signIn: 'Entrar',
         forgotLink: '¿Olvidaste la contraseña?',
         recoveryBanner:
-          'Recuperación activa. Si no puedes entrar, usa el token del archivo de recuperación junto a la base de datos (véase el log del demonio en el primer arranque), o restablece abajo.',
+          'Recuperación activa. Si no puedes entrar, abre este archivo y usa el token que contiene para restablecer la contraseña:\n{path}',
         recoveryModalTitle: 'Restablecer contraseña con token de recuperación',
         recoveryToken: 'Token de recuperación',
         newPassword: 'Nueva contraseña (mín. 10 caracteres)',

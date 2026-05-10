@@ -455,7 +455,11 @@ class JibeServer:
 
     async def handle_api_auth_recovery_status(self, request: web.Request) -> web.Response:
         """GET /api/auth/recovery-status — whether a recovery token file exists."""
-        return web.json_response({"recovery_enabled": self._db.recovery_key_configured()})
+        enabled = self._db.recovery_key_configured()
+        payload: dict = {"recovery_enabled": enabled}
+        if enabled:
+            payload["recovery_file_path"] = str(self._db.recovery_key_path().resolve())
+        return web.json_response(payload)
 
     async def handle_api_auth_recovery_reset(self, request: web.Request) -> web.Response:
         """POST /api/auth/recovery-reset — set oldest admin password using recovery token."""

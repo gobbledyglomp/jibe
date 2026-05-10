@@ -61,25 +61,30 @@
     }
 
     async function refreshRecoveryBanner() {
-      const banner = document.getElementById('recovery-banner');
+      var banner = document.getElementById('recovery-banner');
       try {
-        const r = await fetch('/api/auth/recovery-status');
-        const d = await r.json().catch(() => ({}));
+        var r = await fetch('/api/auth/recovery-status');
+        var d = await r.json().catch(function () { return {}; });
         if (d.recovery_enabled) {
           banner.className = 'banner-warn';
-          banner.style.fontSize = '';
-          banner.style.color = '';
-          banner.textContent = L('login.recoveryBanner');
+          banner.style.cssText = '';
+          banner.innerHTML = '';
+          var msg = document.createElement('span');
+          msg.textContent = L('login.recoveryBanner').replace('{path}', '');
+          banner.appendChild(msg);
+          if (d.recovery_file_path) {
+            banner.appendChild(document.createElement('br'));
+            var code = document.createElement('code');
+            code.style.cssText = 'display:block;margin-top:0.35rem;font-size:0.8rem;word-break:break-all;opacity:0.85;';
+            code.textContent = d.recovery_file_path;
+            banner.appendChild(code);
+          }
           banner.style.display = 'block';
         } else {
           banner.className = '';
-          banner.style.display = 'block';
-          banner.style.fontSize = '0.75rem';
-          banner.style.color = 'var(--muted)';
-          banner.style.border = 'none';
-          banner.style.background = 'transparent';
-          banner.style.padding = '0';
+          banner.style.cssText = 'font-size:0.75rem;color:var(--muted);';
           banner.textContent = L('login.noRecoveryFile');
+          banner.style.display = 'block';
         }
       } catch {
         banner.style.display = 'none';
