@@ -43,6 +43,7 @@ from jibe.core.db import JibeDatabase
 from jibe.core.tls import generate_self_signed_cert, get_cert_fingerprint
 from jibe.handlers.battery import forget_battery, get_all_batteries, handle_battery
 from jibe.handlers.clipboard import ClipboardMonitor, handle_clipboard_sync
+from jibe.handlers.device_features import handle_device_features
 from jibe.handlers.ring import send_ring
 from jibe.handlers.remote import handle_remote_key
 from jibe.handlers.notifications import handle_notification
@@ -232,6 +233,7 @@ class JibeServer:
         self._router.register(MessageType.FILE_DONE, handle_transfer_done)
         self._router.register(MessageType.NOTIFICATION, handle_notify)
         self._router.register(MessageType.DEVICE_BATTERY, handle_battery)
+        self._router.register(MessageType.DEVICE_FEATURES, handle_device_features)
         self._router.register(MessageType.REMOTE_KEY, handle_remote_key)
 
     def _setup_routes(self) -> None:
@@ -431,6 +433,11 @@ class JibeServer:
                 conn.device_name = result.get(
                     "device_name", jibe_msg.payload.get("device_name")
                 )
+                payload = jibe_msg.payload
+                if "feat_find_phone" in payload:
+                    conn.feat_find_phone = bool(payload["feat_find_phone"])
+                else:
+                    conn.feat_find_phone = True
                 await self._db.start_session(conn.id, conn.device_id)
                 if hasattr(conn, "_auth_timeout_task"):
                     conn._auth_timeout_task.cancel()
@@ -684,6 +691,10 @@ class JibeServer:
         conn = self._registry.get_by_device_id(device_id)
         if conn is None:
             raise web.HTTPNotFound(text=json.dumps({"error": "device not connected"}))
+        if not getattr(conn, "feat_find_phone", True):
+            raise web.HTTPConflict(
+                text=json.dumps({"error": "find_my_phone_disabled"})
+            )
         await send_ring(conn, event_log=self._event_log)
         return web.json_response({"ok": True})
 
@@ -705,8 +716,11 @@ class JibeServer:
         devices = await self._db.list_devices()
         enriched = []
         for d in devices:
-            online = self._registry.get_by_device_id(d["id"]) is not None
-            enriched.append({**d, "online": online})
+            conn = self._registry.get_by_device_id(d["id"])
+            row = {**d, "online": conn is not None}
+            if conn is not None:
+                row["feat_find_phone"] = getattr(conn, "feat_find_phone", True)
+            enriched.append(row)
         return web.json_response({"devices": enriched})
 
     async def handle_api_device_one(self, request: web.Request) -> web.Response:
@@ -716,8 +730,11 @@ class JibeServer:
         row = await self._db.get_device_by_id(device_id)
         if row is None:
             raise web.HTTPNotFound(text=json.dumps({"error": "not found"}))
-        online = self._registry.get_by_device_id(device_id) is not None
-        return web.json_response({**row, "online": online})
+        conn = self._registry.get_by_device_id(device_id)
+        out = {**row, "online": conn is not None}
+        if conn is not None:
+            out["feat_find_phone"] = getattr(conn, "feat_find_phone", True)
+        return web.json_response(out)
 
     async def handle_api_patch_device(self, request: web.Request) -> web.Response:
         """PATCH /api/devices/{device_id} — rename (admin)."""

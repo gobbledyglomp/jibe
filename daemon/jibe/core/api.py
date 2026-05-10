@@ -34,6 +34,7 @@ class MessageType(str, Enum):
     ERROR = "error"
     DEVICE_BATTERY = "device.battery"
     DEVICE_RING = "device.ring"
+    DEVICE_FEATURES = "device.features"
     REMOTE_KEY = "remote.key"
 
 

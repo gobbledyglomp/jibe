@@ -69,6 +69,7 @@ class JibeConnection:
         self.device_id: str | None = None
         self.device_name: str | None = None
         self.client_ip: str = client_ip
+        self.feat_find_phone: bool = True
 
     @property
     def is_authenticated(self) -> bool:
