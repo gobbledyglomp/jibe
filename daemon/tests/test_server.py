@@ -182,8 +182,11 @@ async def test_multiple_messages_after_auth(aiohttp_client, jibe_app, jibe_serve
     assert pong["type"] == "pong"
 
     await ws.send_json({"type": "pong"})
-    not_impl = await ws.receive_json()
-    assert not_impl["code"] == "not_implemented"
+    # Client pong without ``probe`` is handled silently (no reply — used for RTT probes).
+
+    await ws.send_json({"type": "does.not.exist"})
+    unknown = await ws.receive_json()
+    assert unknown["code"] == "unknown_type"
 
     await ws.send_str("broken")
     resp = await ws.receive_json()

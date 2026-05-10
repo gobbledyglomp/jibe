@@ -73,8 +73,11 @@ async def test_tls_authenticated_message_flow(
     assert pong["type"] == "pong"
 
     await ws.send_json({"type": "pong"})
-    not_impl = await ws.receive_json()
-    assert not_impl["code"] == "not_implemented"
+    # Client pong without ``probe`` is handled silently (no reply).
+
+    await ws.send_json({"type": "does.not.exist"})
+    unknown = await ws.receive_json()
+    assert unknown["code"] == "unknown_type"
 
     await ws.send_str("not json")
     resp = await ws.receive_json()
