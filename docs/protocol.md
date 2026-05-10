@@ -1,6 +1,6 @@
 # Jibe WebSocket Protocol Specification
 
-> Version: 0.5.0-beta · Status: Draft
+> Version: 0.5.1-beta · Status: Draft
 
 ## Design Philosophy
 
