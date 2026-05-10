@@ -483,8 +483,14 @@ class JibeServer:
 
     def _parse_list_params(self, request: web.Request) -> tuple[int, int, dict[str, str | None]]:
         q = request.rel_url.query
-        page = max(1, int(q.get("page", "1")))
-        per_page = max(1, min(100, int(q.get("per_page", "25"))))
+        try:
+            page = max(1, int(q.get("page", "1")))
+        except (ValueError, TypeError):
+            page = 1
+        try:
+            per_page = max(1, min(100, int(q.get("per_page", "25"))))
+        except (ValueError, TypeError):
+            per_page = 25
         filters = {
             "device_id": q.get("device_id"),
             "status": q.get("status"),
