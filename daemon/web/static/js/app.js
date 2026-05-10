@@ -755,13 +755,18 @@
   async function renderSettings(root, role) {
     stopPollDevices();
     const admin = role === 'admin';
-    let panelInner =
-      '<div class="settings-section-title">' +
+
+    let appearance =
+      '<section class="panel settings-card">' +
+      '<h2 class="settings-card-title">' +
       esc(T('settings.appearance')) +
-      '</div>' +
-      '<div class="field"><label class="small">' +
+      '</h2>' +
+      '<div class="settings-card-body">' +
+      '<div class="settings-field-row">' +
+      '<label class="small" for="set-theme">' +
       esc(T('settings.theme')) +
-      '</label><select id="set-theme">' +
+      '</label>' +
+      '<select id="set-theme">' +
       '<option value="dark">' +
       esc(T('settings.themeDark')) +
       '</option>' +
@@ -769,73 +774,102 @@
       esc(T('settings.themeLight')) +
       '</option>' +
       '</select></div>' +
-      '<div class="field" style="margin-top:0.65rem;"><label class="small">' +
+      '<div class="settings-field-row">' +
+      '<label class="small" for="set-lang">' +
       esc(T('settings.language')) +
-      '</label><select id="set-lang">' +
+      '</label>' +
+      '<select id="set-lang">' +
       '<option value="en">' +
       esc(T('settings.langEn')) +
       '</option>' +
       '<option value="es">' +
       esc(T('settings.langEs')) +
       '</option>' +
-      '</select></div>' +
-      '<div class="settings-section-title">' +
+      '</select></div></div></section>';
+
+    let account =
+      '<section class="panel settings-card">' +
+      '<h2 class="settings-card-title">' +
       esc(T('settings.account')) +
-      '</div>' +
-      '<div class="field"><label class="small">' +
+      '</h2>' +
+      '<div class="settings-card-body">' +
+      '<div class="settings-field-row">' +
+      '<label class="small" for="pw-cur">' +
       esc(T('settings.currentPassword')) +
-      '</label><input id="pw-cur" type="password" autocomplete="current-password" style="width:100%;max-width:320px;" /></div>' +
-      '<div class="field" style="margin-top:0.5rem;"><label class="small">' +
+      '</label>' +
+      '<input id="pw-cur" type="password" autocomplete="current-password" />' +
+      '</div>' +
+      '<div class="settings-field-row">' +
+      '<label class="small" for="pw-new">' +
       esc(T('settings.newPassword')) +
-      '</label><input id="pw-new" type="password" autocomplete="new-password" style="width:100%;max-width:320px;" /></div>' +
-      '<button type="button" class="btn btn-primary btn-sm" style="margin-top:0.65rem;" id="pw-btn">' +
+      '</label>' +
+      '<input id="pw-new" type="password" autocomplete="new-password" />' +
+      '</div>' +
+      '<button type="button" class="btn btn-primary btn-sm" id="pw-btn">' +
       esc(T('settings.changePassword')) +
       '</button>' +
-      '<div id="pw-msg" style="margin-top:0.5rem;font-size:0.85rem;"></div>';
+      '<div id="pw-msg" style="margin-top:0.45rem;font-size:0.85rem;"></div>' +
+      '</div></section>';
 
+    let adminBlocks = '';
     if (admin) {
-      panelInner +=
-        '<div class="settings-section-title">' +
+      adminBlocks =
+        '<section class="panel settings-card">' +
+        '<h2 class="settings-card-title">' +
         esc(T('settings.data')) +
-        '</div>' +
-        '<p style="font-size:0.8rem;color:var(--muted);margin:0 0 0.5rem;">' +
+        '</h2>' +
+        '<p class="settings-help" style="margin-bottom:0.65rem;">' +
         esc(T('settings.adminOnly')) +
         '</p>' +
+        '<div class="settings-actions">' +
         '<button type="button" class="btn btn-danger btn-sm" id="btn-clear-hist">' +
         esc(T('settings.clearHistory')) +
         '</button>' +
-        '<p style="font-size:0.72rem;color:var(--muted);margin:0.35rem 0 0.65rem;">' +
-        esc(T('settings.clearHistoryHelp')) +
-        '</p>' +
         '<button type="button" class="btn btn-danger btn-sm" id="btn-clear-stats">' +
         esc(T('settings.clearStats')) +
         '</button>' +
-        '<p style="font-size:0.72rem;color:var(--muted);margin:0.35rem 0 0.65rem;">' +
+        '</div>' +
+        '<p class="settings-help" style="margin-top:0.5rem;">' +
+        esc(T('settings.clearHistoryHelp')) +
+        '</p>' +
+        '<p class="settings-help" style="margin-top:0.35rem;">' +
         esc(T('settings.clearStatsHelp')) +
         '</p>' +
-        '<div class="settings-section-title">' +
+        '</section>' +
+        '<details class="settings-advanced">' +
+        '<summary>' +
         esc(T('settings.advanced')) +
-        '</div>' +
-        '<div class="checkbox-row">' +
+        '</summary>' +
+        '<div class="settings-advanced-body">' +
+        '<div class="checkbox-row" style="margin-top:0;">' +
         '<input type="checkbox" id="set-ping-card" />' +
         '<label for="set-ping-card">' +
         esc(T('settings.devPingCard')) +
-        '<br/><span style="font-size:0.72rem;color:var(--muted);">' +
+        '<br/><span class="settings-help" style="display:inline-block;margin-top:0.25rem;">' +
         esc(T('settings.devPingHelp')) +
         '</span></label></div>' +
-        '<div style="margin-top:0.85rem;">' +
+        '<hr class="settings-divider" />' +
+        '<div class="settings-actions">' +
         '<button type="button" class="btn btn-sm" id="btn-recovery-rotate">' +
         esc(T('settings.recoveryRotate')) +
         '</button>' +
-        '<p style="font-size:0.72rem;color:var(--muted);margin:0.35rem 0 0;">' +
+        '</div>' +
+        '<p class="settings-help" style="margin-top:0.45rem;">' +
         esc(T('settings.recoveryRotateHelp')) +
         '</p>' +
         '<pre id="recovery-out" style="display:none;margin-top:0.5rem;font-size:0.75rem;white-space:pre-wrap;"></pre>' +
-        '</div>';
+        '</div></details>';
     }
 
     root.innerHTML =
-      '<h1>' + esc(T('settings.title')) + '</h1><div class="panel">' + panelInner + '</div>';
+      '<h1 class="settings-page-title">' +
+      esc(T('settings.title')) +
+      '</h1>' +
+      '<div class="settings-stack">' +
+      appearance +
+      account +
+      adminBlocks +
+      '</div>';
 
     const selTh = root.querySelector('#set-theme');
     const selLg = root.querySelector('#set-lang');
