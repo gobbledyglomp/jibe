@@ -112,11 +112,17 @@ class ClipboardMonitor:
 
     async def run(self) -> None:
         """Poll forever until cancelled."""
+        baseline_ready = False
         try:
             while True:
                 await asyncio.sleep(CLIPBOARD_POLL_INTERVAL_SECONDS)
                 current = await asyncio.to_thread(snapshot_plain_text_clipboard)
                 if current is None:
+                    continue
+
+                if not baseline_ready:
+                    self._last_clipboard = current
+                    baseline_ready = True
                     continue
 
                 if current == self._last_clipboard:

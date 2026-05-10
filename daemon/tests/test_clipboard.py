@@ -41,9 +41,15 @@ async def test_clipboard_monitor_broadcasts_when_clipboard_changes(mock_ws):
     registry.add(conn)
 
     monitor = ClipboardMonitor(registry)
-    monitor._last_clipboard = "old"
+
+    paste_calls = 0
 
     def fake_paste() -> str:
+        nonlocal paste_calls
+        paste_calls += 1
+        # First poll seeds baseline; second is unchanged; third is a real Linux-side edit.
+        if paste_calls <= 2:
+            return "seed-text"
         return "new-text"
 
     sleep_calls = 0
@@ -51,7 +57,7 @@ async def test_clipboard_monitor_broadcasts_when_clipboard_changes(mock_ws):
     async def fake_sleep(_seconds: float) -> None:
         nonlocal sleep_calls
         sleep_calls += 1
-        if sleep_calls >= 2:
+        if sleep_calls >= 4:
             raise asyncio.CancelledError()
 
     with patch(
@@ -78,7 +84,6 @@ async def test_clipboard_monitor_skips_when_unchanged(mock_ws):
     registry.add(conn)
 
     monitor = ClipboardMonitor(registry)
-    monitor._last_clipboard = "same"
 
     def fake_paste() -> str:
         return "same"
@@ -88,7 +93,7 @@ async def test_clipboard_monitor_skips_when_unchanged(mock_ws):
     async def fake_sleep(_seconds: float) -> None:
         nonlocal sleep_calls
         sleep_calls += 1
-        if sleep_calls >= 2:
+        if sleep_calls >= 3:
             raise asyncio.CancelledError()
 
     with patch(
