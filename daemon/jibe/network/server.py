@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import secrets
 import shutil
 import ssl
 import time
@@ -43,6 +44,7 @@ from jibe.core.tls import generate_self_signed_cert, get_cert_fingerprint
 from jibe.handlers.clipboard import ClipboardMonitor, handle_clipboard_sync
 from jibe.handlers.notifications import handle_notification
 from jibe.handlers.ping import handle_ping
+from jibe.handlers.pong import handle_pong
 from jibe.handlers.router import MessageRouter
 from jibe.handlers.transfer import (
     abort_transfers_for_connection,
@@ -52,6 +54,7 @@ from jibe.handlers.transfer import (
     handle_file_start,
 )
 from jibe.network.connection import ConnectionRegistry, ConnectionState, JibeConnection
+from jibe.network.ping_activity import PingActivityLog, PingProbeTracker
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +89,12 @@ def _jwt_auth_middleware(jwt_auth: JWTAuth) -> Callable[..., Awaitable[web.Strea
         if path == "/" or path == "/health" or path.startswith("/ws"):
             return await handler(request)
         if path.startswith("/api/"):
-            if path in ("/api/auth/login", "/api/auth/logout"):
+            if path in (
+                "/api/auth/login",
+                "/api/auth/logout",
+                "/api/auth/recovery-status",
+                "/api/auth/recovery-reset",
+            ):
                 return await handler(request)
             auth_header = request.headers.get("Authorization", "")
             if not auth_header.startswith("Bearer "):
@@ -125,6 +133,8 @@ class JibeServer:
         self._clipboard_monitor = ClipboardMonitor(self._registry, db=db)
         self._router = MessageRouter()
         self._jwt_auth = JWTAuth(db)
+        self._ping_log = PingActivityLog()
+        self._probe_tracker = PingProbeTracker()
         self._register_handlers()
         self._started_at_monotonic: float | None = None
         self._app = web.Application(
@@ -174,7 +184,17 @@ class JibeServer:
         async def handle_notify(conn: JibeConnection, msg: JibeMessage) -> None:
             await handle_notification(conn, msg, db=db)
 
-        self._router.register(MessageType.PING, handle_ping)
+        ping_log = self._ping_log
+        tracker = self._probe_tracker
+
+        async def _ping_route(conn: JibeConnection, msg: JibeMessage) -> None:
+            await handle_ping(conn, msg, activity_log=ping_log)
+
+        async def _pong_route(conn: JibeConnection, msg: JibeMessage) -> None:
+            await handle_pong(conn, msg, probe_tracker=tracker, activity_log=ping_log)
+
+        self._router.register(MessageType.PING, _ping_route)
+        self._router.register(MessageType.PONG, _pong_route)
         self._router.register(MessageType.CLIPBOARD_SYNC, handle_clipboard)
         self._router.register(MessageType.FILE_START, handle_transfer_start)
         self._router.register(MessageType.FILE_CANCEL, handle_transfer_cancel)
@@ -191,6 +211,19 @@ class JibeServer:
 
         app.router.add_post("/api/auth/login", self.handle_api_login)
         app.router.add_post("/api/auth/logout", self.handle_api_logout)
+        app.router.add_get("/api/auth/recovery-status", self.handle_api_auth_recovery_status)
+        app.router.add_post("/api/auth/recovery-reset", self.handle_api_auth_recovery_reset)
+        app.router.add_post("/api/auth/change-password", self.handle_api_auth_change_password)
+
+        app.router.add_post("/api/settings/data/clear-history", self.handle_api_settings_clear_history)
+        app.router.add_post(
+            "/api/settings/data/clear-statistics",
+            self.handle_api_settings_clear_statistics,
+        )
+        app.router.add_post(
+            "/api/settings/recovery/regenerate",
+            self.handle_api_settings_recovery_regenerate,
+        )
 
         app.router.add_get("/api/status", self.handle_api_status)
         app.router.add_get("/api/devices", self.handle_api_devices)
@@ -229,6 +262,8 @@ class JibeServer:
         app.router.add_post("/api/daemon/pairing/stop", self.handle_api_daemon_pairing_stop)
         app.router.add_get("/api/daemon/pairing/status", self.handle_api_daemon_pairing_status)
         app.router.add_post("/api/daemon/certs/regen", self.handle_api_daemon_certs_regen)
+        app.router.add_get("/api/daemon/ping-activity", self.handle_api_daemon_ping_activity)
+        app.router.add_post("/api/daemon/ping-send", self.handle_api_daemon_ping_send)
 
     async def handle_root_redirect(self, request: web.Request) -> web.Response:
         """Redirect browser root to the login page."""
@@ -417,6 +452,112 @@ class JibeServer:
     async def handle_api_logout(self, request: web.Request) -> web.Response:
         """POST /api/auth/logout — stateless OK."""
         return web.json_response({"ok": True})
+
+    async def handle_api_auth_recovery_status(self, request: web.Request) -> web.Response:
+        """GET /api/auth/recovery-status — whether a recovery token file exists."""
+        return web.json_response({"recovery_enabled": self._db.recovery_key_configured()})
+
+    async def handle_api_auth_recovery_reset(self, request: web.Request) -> web.Response:
+        """POST /api/auth/recovery-reset — set oldest admin password using recovery token."""
+        try:
+            body = await request.json()
+        except json.JSONDecodeError:
+            raise web.HTTPBadRequest(text=json.dumps({"error": "invalid json"}))
+
+        token = body.get("recovery_token")
+        new_password = body.get("new_password")
+        if not isinstance(token, str) or not isinstance(new_password, str):
+            raise web.HTTPBadRequest(text=json.dumps({"error": "recovery_token and new_password required"}))
+        if len(new_password) < 10:
+            raise web.HTTPBadRequest(
+                text=json.dumps({"error": "new_password must be at least 10 characters"})
+            )
+
+        stored = self._db.read_recovery_key_secret()
+        if not stored:
+            raise web.HTTPBadRequest(text=json.dumps({"error": "recovery is not configured"}))
+
+        if not secrets.compare_digest(stored, token.strip()):
+            raise web.HTTPUnauthorized(text=json.dumps({"error": "invalid recovery token"}))
+
+        admin_id = await self._db.first_admin_user_id()
+        if admin_id is None:
+            raise web.HTTPBadRequest(text=json.dumps({"error": "no admin user"}))
+
+        await self._db.update_user_password(admin_id, new_password)
+        logger.warning("Dashboard admin password reset via recovery token (localhost)")
+        return web.json_response({"ok": True})
+
+    async def handle_api_auth_change_password(self, request: web.Request) -> web.Response:
+        """POST /api/auth/change-password — JWT user supplies current password."""
+        jwt_user = self._require_user(request)
+        try:
+            body = await request.json()
+        except json.JSONDecodeError:
+            raise web.HTTPBadRequest(text=json.dumps({"error": "invalid json"}))
+
+        current_password = body.get("current_password")
+        new_password = body.get("new_password")
+        if not isinstance(current_password, str) or not isinstance(new_password, str):
+            raise web.HTTPBadRequest(
+                text=json.dumps({"error": "current_password and new_password required"})
+            )
+        if len(new_password) < 10:
+            raise web.HTTPBadRequest(
+                text=json.dumps({"error": "new_password must be at least 10 characters"})
+            )
+
+        row = await self._db.get_user_by_username(jwt_user["username"])
+        if row is None:
+            raise web.HTTPUnauthorized(text=json.dumps({"error": "invalid credentials"}))
+
+        if not bcrypt.checkpw(current_password.encode(), row["password_hash"].encode()):
+            raise web.HTTPUnauthorized(text=json.dumps({"error": "current password incorrect"}))
+
+        await self._db.update_user_password(row["id"], new_password)
+        return web.json_response({"ok": True})
+
+    async def handle_api_settings_clear_history(self, request: web.Request) -> web.Response:
+        """POST — wipe transfer, clipboard, and notification logs (admin)."""
+        user = self._require_user(request)
+        self._require_admin(user)
+        await self._db.clear_transfer_history()
+        await self._db.clear_clipboard_history()
+        await self._db.clear_notification_log()
+        return web.json_response({"ok": True})
+
+    async def handle_api_settings_clear_statistics(self, request: web.Request) -> web.Response:
+        """POST — wipe session records (admin); summary charts use activity tables."""
+        user = self._require_user(request)
+        self._require_admin(user)
+        n = await self._db.clear_sessions()
+        return web.json_response({"ok": True, "sessions_removed": n})
+
+    async def handle_api_settings_recovery_regenerate(self, request: web.Request) -> web.Response:
+        """POST — issue a new recovery token; returned once (admin)."""
+        user = self._require_user(request)
+        self._require_admin(user)
+        token = secrets.token_urlsafe(32)
+        self._db.write_recovery_key_secret(token)
+        logger.warning("Dashboard recovery token regenerated (localhost)")
+        return web.json_response({"recovery_token": token})
+
+    async def handle_api_daemon_ping_activity(self, request: web.Request) -> web.Response:
+        user = self._require_user(request)
+        self._require_admin(user)
+        return web.json_response({"items": self._ping_log.list_dicts()})
+
+    async def handle_api_daemon_ping_send(self, request: web.Request) -> web.Response:
+        """Broadcast an application ping with a probe id so ``pong`` can measure RTT."""
+        user = self._require_user(request)
+        self._require_admin(user)
+        probe = self._probe_tracker.start_probe()
+        payload = json.dumps({"type": MessageType.PING.value, "probe": probe})
+        n = 0
+        for conn in self._registry.get_authenticated():
+            await conn.send(payload)
+            n += 1
+        return web.json_response({"sent": n, "probe": probe})
 
     async def handle_api_status(self, request: web.Request) -> web.Response:
         """GET /api/status."""
