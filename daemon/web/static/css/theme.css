@@ -104,6 +104,7 @@ select {
   border-radius: 6px;
   padding: 0.4rem 0.55rem;
   font-size: 0.875rem;
+  line-height: 1.4;
 }
 
 label.small {
@@ -251,9 +252,9 @@ table.data th {
 }
 
 .toolbar .btn-toolbar-apply {
-  padding: 0.4rem 1rem;
+  padding: 0.4rem 1.1rem;
   font-size: 0.875rem;
-  min-height: 2.35rem;
+  line-height: 1.4;
   align-self: flex-end;
 }
 
