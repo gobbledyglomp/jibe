@@ -16,6 +16,7 @@ SERVICE_NAME = "Jibe"
 _xdg_data_home = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
 DATABASE_DIR = _xdg_data_home / "jibe"
 DATABASE_NAME = "jibe.db"
+DASHBOARD_RECOVERY_KEY_FILE = "dashboard_recovery.key"
 SCHEMA_VERSION = 2
 
 JWT_SECRET_META_KEY = "jwt_secret"
