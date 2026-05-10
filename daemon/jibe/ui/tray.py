@@ -7,9 +7,15 @@ import, Icon construction, and ``run()`` entirely inside a dedicated *tray*
 thread so nothing initialises GTK on the asyncio thread.
 
 Backend selection order on Linux:
-  1. AppIndicator (D-Bus / SNI) — KDE Plasma 6 and GNOME
-  2. GTK StatusIcon — legacy fallback
-  3. XOrg XEmbed — last resort
+  1. AppIndicator (D-Bus / SNI) — KDE Plasma 6 and GNOME (requires gi)
+  2. GTK StatusIcon — legacy X11 fallback (requires gi)
+  3. XOrg XEmbed — only on X11, never on Wayland
+
+``gi`` (PyGObject) ships as a system package and is intentionally excluded
+from virtualenvs.  ``_ensure_gi_importable()`` adds the system site-packages
+directory to ``sys.path`` once, inside the tray thread, so the AppIndicator
+and GTK backends can load without recreating the venv with
+``--system-site-packages``.
 """
 
 from __future__ import annotations
@@ -17,6 +23,8 @@ from __future__ import annotations
 import asyncio
 import importlib
 import logging
+import os
+import sys
 import threading
 import webbrowser
 from pathlib import Path
@@ -31,22 +39,26 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 _DEFAULT_ICON = _REPO_ROOT / "branding" / "logos" / "jibe-icon-filled-512.png"
 
 _TRAY_ICON_SIZE = 64
-"""RGBA PNG size written for StatusNotifier / Gtk (px)."""
+"""RGBA PNG size passed to StatusNotifier / Gtk (px)."""
 
 _BG_LUM_THRESHOLD = 80
-"""Pixels darker than this (0–255) become fully transparent."""
+"""Pixels darker than this (0–255 luminance) become fully transparent."""
 
 _STOP_JOIN_TIMEOUT_SEC = 12.0
 
 
+# ---------------------------------------------------------------------------
+# Icon image helpers
+# ---------------------------------------------------------------------------
+
 def _make_tray_image(path: Path) -> Image.Image:
     """Return a white-on-transparent PNG-ready image for the tray.
 
-    The source asset is white strokes on a dark background.  We binarise by
-    luminance so the panel background shows through, and we store **black**
-    RGB with alpha 0 for transparent pixels.  Some compositors ignore alpha and
-    only paint RGB — white RGB there becomes a solid square; (0, 0, 0, 0)
-    avoids that artefact.
+    The source asset is white strokes on a dark background.  We threshold by
+    luminance: dark pixels → ``(0, 0, 0, 0)`` (fully transparent), bright
+    pixels → opaque white.  Using black RGB with zero alpha for background
+    pixels avoids a common compositor artifact where the compositor ignores
+    alpha and paints a solid white square.
     """
     if path.exists():
         src = Image.open(path).convert("RGBA")
@@ -68,12 +80,62 @@ def _make_tray_image(path: Path) -> Image.Image:
     return Image.new("RGBA", (_TRAY_ICON_SIZE, _TRAY_ICON_SIZE), (0, 0, 0, 0))
 
 
-def _best_icon_class():  # type: ignore[return]
-    """Return the pystray Icon implementation for this OS session.
+# ---------------------------------------------------------------------------
+# Backend selection helpers
+# ---------------------------------------------------------------------------
 
-    Must be invoked from the **tray** thread before GTK is initialised on any
-    other thread.
+def _ensure_gi_importable() -> None:
+    """Inject the system gi (PyGObject) path when running inside a venv.
+
+    PyGObject is a compiled C extension delivered as an OS package.  It is
+    intentionally absent from virtualenvs created without
+    ``--system-site-packages``.  We probe the standard system site-packages
+    directory for the running Python version and prepend it to ``sys.path``
+    exactly once so pystray's GTK / AppIndicator backends can import ``gi``.
     """
+    try:
+        import gi as _gi  # noqa: F401
+        return  # already importable
+    except ImportError:
+        pass
+
+    ver = sys.version_info
+    candidates = [
+        f"/usr/lib/python{ver.major}.{ver.minor}/site-packages",
+        f"/usr/local/lib/python{ver.major}.{ver.minor}/site-packages",
+        "/usr/lib/python3/dist-packages",
+        "/usr/local/lib/python3/dist-packages",
+    ]
+    for path in candidates:
+        if path in sys.path:
+            continue
+        sys.path.insert(0, path)
+        try:
+            import gi as _gi  # noqa: F401
+            logger.debug("gi found via system path: %s", path)
+            return
+        except ImportError:
+            sys.path.remove(path)
+
+    logger.warning(
+        "gi (PyGObject) not found — install python-gobject system package "
+        "for a fully functional tray icon."
+    )
+
+
+def _on_wayland() -> bool:
+    return bool(os.environ.get("WAYLAND_DISPLAY"))
+
+
+def _best_icon_class():
+    """Return the pystray Icon class best suited to the current session.
+
+    Must be called from the tray thread (GTK must initialise there).
+    Returns ``None`` when no suitable backend is available (Wayland without
+    gi, or headless environment) — callers must handle that case.
+    """
+    _ensure_gi_importable()
+
     for backend in ("_appindicator", "_gtk"):
         try:
             mod = importlib.import_module(f"pystray.{backend}")
@@ -82,11 +144,23 @@ def _best_icon_class():  # type: ignore[return]
             return cls
         except Exception:
             pass
-    import pystray
 
+    if _on_wayland():
+        logger.error(
+            "No AppIndicator/GTK backend available on Wayland — "
+            "tray icon disabled.  Install the 'python-gobject' system package "
+            "and ensure libayatana-appindicator3 or libappindicator3 is present."
+        )
+        return None
+
+    import pystray
     logger.debug("pystray backend: default (xorg)")
     return pystray.Icon
 
+
+# ---------------------------------------------------------------------------
+# JibeTray
+# ---------------------------------------------------------------------------
 
 class JibeTray:
     """pystray icon: open dashboard, pairing controls, quit."""
@@ -121,8 +195,7 @@ class JibeTray:
         self._loop.call_soon_threadsafe(self._auth.stop_pairing)
 
     def start(self) -> None:
-        """Load the icon and run the tray (blocking GLib loop) on its own thread."""
-
+        """Load the icon and run the GLib/tray event loop on a dedicated thread."""
         if self._thread is not None:
             return
 
@@ -130,10 +203,15 @@ class JibeTray:
         shutdown_event = self._shutdown_event
 
         def tray_worker() -> None:
-            import pystray  # noqa: PLC0415 — must run on tray thread (GTK init)
+            # All gi / pystray imports happen here — GTK must never be
+            # initialised on the asyncio thread.
+            import pystray  # noqa: PLC0415
+
+            IconClass = _best_icon_class()
+            if IconClass is None:
+                return  # backend unavailable; exit silently (already logged)
 
             img = _make_tray_image(self._icon_path)
-            IconClass = _best_icon_class()
 
             def on_quit(icon: pystray.Icon, _item: pystray.MenuItem) -> None:
                 loop.call_soon_threadsafe(shutdown_event.set)
@@ -169,7 +247,7 @@ class JibeTray:
         self._thread.start()
 
     def stop(self) -> None:
-        """Stop the tray icon if running."""
+        """Stop the tray icon and join the tray thread."""
         icon = self._icon
         if icon is not None:
             try:
