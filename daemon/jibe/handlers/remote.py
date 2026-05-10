@@ -94,15 +94,17 @@ async def _dispatch_key(logical_key: str) -> None:
         proc = await asyncio.create_subprocess_exec(
             *args,
             stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.PIPE,
         )
-        await proc.wait()
+        _, stderr_bytes = await proc.communicate()
         if proc.returncode != 0:
+            detail = stderr_bytes.decode(errors="replace").strip() if stderr_bytes else ""
             logger.warning(
-                "%s exited %d dispatching logical key %s",
+                "%s exited %d dispatching logical key %s%s",
                 tool,
                 proc.returncode,
                 logical_key,
+                f": {detail}" if detail else "",
             )
     except FileNotFoundError:
         logger.exception("%s not found — cannot dispatch key event", tool)
