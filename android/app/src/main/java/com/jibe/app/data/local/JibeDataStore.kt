@@ -29,6 +29,7 @@ data class AppSettings(
         val featPresentation: Boolean = true,
         val featFindPhone: Boolean = true,
         val featPing: Boolean = false,
+        val featureOrder: List<FeatureId> = FeatureId.DEFAULT_ORDER,
 )
 
 private const val FALLBACK_LANGUAGE = "en"
@@ -57,6 +58,7 @@ class JibeDataStore(private val context: Context) {
         private val KEY_FEAT_PRESENTATION_REMOTE = booleanPreferencesKey("feat_presentation_remote")
         private val KEY_FEAT_FIND_PHONE = booleanPreferencesKey("feat_find_phone")
         private val KEY_FEAT_PING = booleanPreferencesKey("feat_ping")
+        private val KEY_FEATURE_ORDER = stringPreferencesKey("feature_order")
     }
 
     val credentials: Flow<DeviceCredentials?> =
@@ -103,6 +105,11 @@ class JibeDataStore(private val context: Context) {
                         featPresentation = prefs[KEY_FEAT_PRESENTATION_REMOTE] ?: true,
                         featFindPhone = prefs[KEY_FEAT_FIND_PHONE] ?: true,
                         featPing = prefs[KEY_FEAT_PING] ?: false,
+                        featureOrder = run {
+                            val raw = prefs[KEY_FEATURE_ORDER]
+                            if (raw != null) FeatureId.parseOrder(raw)
+                            else FeatureId.DEFAULT_ORDER
+                        },
                 )
             }
 
@@ -174,5 +181,11 @@ class JibeDataStore(private val context: Context) {
 
     suspend fun setFeatPing(on: Boolean) {
         context.dataStore.edit { prefs -> prefs[KEY_FEAT_PING] = on }
+    }
+
+    suspend fun setFeatureOrder(order: List<FeatureId>) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_FEATURE_ORDER] = FeatureId.serializeOrder(order)
+        }
     }
 }
