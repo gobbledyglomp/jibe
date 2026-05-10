@@ -7,36 +7,161 @@
   <link rel="stylesheet" href="/web/css/theme.css" />
 </head>
 <body style="display:flex;align-items:center;justify-content:center;padding:2rem;">
-  <div class="panel" style="width:100%;max-width:380px;">
-    <h1 style="margin:0 0 0.25rem;font-size:1.35rem;">Jibe</h1>
-    <p style="margin:0 0 1.25rem;color:var(--muted);font-size:0.875rem;">Dashboard login (localhost only)</p>
+  <div class="panel" style="width:100%;max-width:420px;">
+    <h1 style="margin:0 0 0.25rem;font-size:1.35rem;" id="login-title"></h1>
+    <p style="margin:0 0 1rem;color:var(--muted);font-size:0.875rem;" id="login-sub"></p>
+    <div id="recovery-banner" class="banner-warn" style="display:none;margin-bottom:1rem;font-size:0.8rem;"></div>
     <div id="login-error" class="error-banner" style="display:none;"></div>
     <form id="login-form">
-      <label class="small" for="user">Username</label>
+      <label class="small" for="user" id="lbl-user"></label>
       <input id="user" name="username" autocomplete="username" style="width:100%;margin-bottom:0.75rem;" />
-      <label class="small" for="pass">Password</label>
-      <input id="pass" type="password" name="password" autocomplete="current-password" style="width:100%;margin-bottom:1rem;" />
-      <button type="submit" class="btn btn-primary" style="width:100%;">Sign in</button>
+      <label class="small" for="pass" id="lbl-pass"></label>
+      <input id="pass" type="password" name="password" autocomplete="current-password" style="width:100%;margin-bottom:0.75rem;" />
+      <button type="submit" class="btn btn-primary" style="width:100%;" id="btn-signin"></button>
     </form>
+    <p style="margin-top:1rem;font-size:0.85rem;">
+      <a href="#" id="link-forgot"></a>
+    </p>
   </div>
+
+  <div id="recovery-modal-bg" class="modal-bg" style="display:none;">
+    <div class="modal">
+      <h2 style="margin:0 0 0.75rem;font-size:1.05rem;" id="recovery-modal-title"></h2>
+      <div id="recovery-err" class="error-banner" style="display:none;margin-bottom:0.75rem;"></div>
+      <label class="small" for="rec-token" id="lbl-rec-token"></label>
+      <input id="rec-token" class="mono" style="width:100%;margin-bottom:0.65rem;" autocomplete="off" />
+      <label class="small" for="rec-pass" id="lbl-rec-pass"></label>
+      <input id="rec-pass" type="password" style="width:100%;margin-bottom:1rem;" autocomplete="new-password" />
+      <div style="display:flex;gap:0.5rem;justify-content:flex-end;">
+        <button type="button" class="btn btn-sm" id="recovery-cancel"></button>
+        <button type="button" class="btn btn-primary btn-sm" id="recovery-submit"></button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/web/js/i18n.js"></script>
   <script src="/web/js/auth.js"></script>
   <script>
+    function L(k) { return window.JibeI18n.t(k); }
+
+    function paintLoginChrome() {
+      document.documentElement.lang = window.JibeI18n.lang() === 'es' ? 'es' : 'en';
+      document.title = L('login.pageTitle');
+      document.getElementById('login-title').textContent = L('login.title');
+      document.getElementById('login-sub').textContent = L('login.subtitle');
+      document.getElementById('lbl-user').textContent = L('login.username');
+      document.getElementById('lbl-pass').textContent = L('login.password');
+      document.getElementById('btn-signin').textContent = L('login.signIn');
+      document.getElementById('link-forgot').textContent = L('login.forgotLink');
+      document.getElementById('recovery-modal-title').textContent = L('login.recoveryModalTitle');
+      document.getElementById('lbl-rec-token').textContent = L('login.recoveryToken');
+      document.getElementById('lbl-rec-pass').textContent = L('login.newPassword');
+      document.getElementById('recovery-cancel').textContent = L('login.close');
+      document.getElementById('recovery-submit').textContent = L('login.resetSubmit');
+    }
+
+    async function refreshRecoveryBanner() {
+      const banner = document.getElementById('recovery-banner');
+      try {
+        const r = await fetch('/api/auth/recovery-status');
+        const d = await r.json().catch(() => ({}));
+        if (d.recovery_enabled) {
+          banner.className = 'banner-warn';
+          banner.style.fontSize = '';
+          banner.style.color = '';
+          banner.textContent = L('login.recoveryBanner');
+          banner.style.display = 'block';
+        } else {
+          banner.className = '';
+          banner.style.display = 'block';
+          banner.style.fontSize = '0.75rem';
+          banner.style.color = 'var(--muted)';
+          banner.style.border = 'none';
+          banner.style.background = 'transparent';
+          banner.style.padding = '0';
+          banner.textContent = L('login.noRecoveryFile');
+        }
+      } catch {
+        banner.style.display = 'none';
+      }
+    }
+
     if (window.JibeAuth && window.JibeAuth.tokenPresent()) {
       window.location.href = '/web/dashboard.html';
     }
-    document.getElementById('login-form').addEventListener('submit', async (e) => {
+
+    paintLoginChrome();
+    refreshRecoveryBanner();
+    window.addEventListener('jibe-locale', function () {
+      paintLoginChrome();
+      refreshRecoveryBanner();
+    });
+
+    var modalBg = document.getElementById('recovery-modal-bg');
+
+    document.getElementById('link-forgot').addEventListener('click', function (e) {
       e.preventDefault();
-      const err = document.getElementById('login-error');
+      document.getElementById('recovery-err').style.display = 'none';
+      document.getElementById('rec-token').value = '';
+      document.getElementById('rec-pass').value = '';
+      modalBg.style.display = 'flex';
+    });
+
+    document.getElementById('recovery-cancel').onclick = function () {
+      modalBg.style.display = 'none';
+    };
+
+    modalBg.addEventListener('click', function (e) {
+      if (e.target === modalBg) modalBg.style.display = 'none';
+    });
+
+    document.getElementById('recovery-submit').onclick = async function () {
+      var err = document.getElementById('recovery-err');
       err.style.display = 'none';
-      const username = document.getElementById('user').value;
-      const password = document.getElementById('pass').value;
+      var token = document.getElementById('rec-token').value.trim();
+      var np = document.getElementById('rec-pass').value;
       try {
-        const r = await fetch('/api/auth/login', {
+        var r = await fetch('/api/auth/recovery-reset', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, password }),
+          body: JSON.stringify({ recovery_token: token, new_password: np }),
         });
-        const data = await r.json().catch(() => ({}));
+        var data = await r.json().catch(function () { return {}; });
+        if (!r.ok) {
+          err.textContent = data.error || ('HTTP ' + r.status);
+          err.style.display = 'block';
+          return;
+        }
+        modalBg.style.display = 'none';
+        document.getElementById('pass').value = '';
+        var banner = document.getElementById('login-error');
+        banner.style.display = 'block';
+        banner.style.background = 'rgba(63, 185, 80, 0.12)';
+        banner.style.borderColor = 'var(--success)';
+        banner.style.color = 'var(--success)';
+        banner.textContent = L('settings.passwordChanged');
+      } catch {
+        err.textContent = 'Network error';
+        err.style.display = 'block';
+      }
+    };
+
+    document.getElementById('login-form').addEventListener('submit', async function (e) {
+      e.preventDefault();
+      var err = document.getElementById('login-error');
+      err.style.display = 'none';
+      err.style.background = '';
+      err.style.borderColor = '';
+      err.style.color = '';
+      var username = document.getElementById('user').value;
+      var password = document.getElementById('pass').value;
+      try {
+        var r = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: username, password: password }),
+        });
+        var data = await r.json().catch(function () { return {}; });
         if (!r.ok) {
           err.textContent = data.error || 'Login failed';
           err.style.display = 'block';
