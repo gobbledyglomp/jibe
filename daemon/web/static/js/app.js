@@ -699,8 +699,17 @@
     }
 
     root.querySelector('#pair-start').onclick = async () => {
-      await window.JibeApi.json('/api/daemon/pairing/start', { method: 'POST', body: '{}' });
-      await refreshPairing();
+      const res = await window.JibeApi.json('/api/daemon/pairing/start', {
+        method: 'POST',
+        body: '{}',
+      });
+      root._pairSnap = {
+        active: true,
+        pin: res.pin,
+        expires_at: res.expires_at,
+        failed_attempts: root._pairSnap ? (root._pairSnap.failed_attempts || 0) : 0,
+      };
+      paintPairingUi();
       await refreshInfo();
     };
     root.querySelector('#pair-stop').onclick = async () => {
