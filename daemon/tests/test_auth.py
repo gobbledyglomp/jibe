@@ -186,15 +186,14 @@ async def test_missing_pin_not_counted_as_failure(auth_pairing):
     assert auth_pairing._failed_attempts.get("client-1", 0) == 0
 
 
-async def test_no_pairing_mode_auto_starts_on_unknown_device(auth):
-    """Probe (no PIN, no fingerprint) when pairing is inactive must auto-start pairing
-    WITHOUT consuming an attempt."""
+async def test_probe_without_pairing_rejected(auth):
+    """Probe (no PIN, no fingerprint) when pairing is inactive must not auto-open pairing."""
     payload = {"device_name": "Pixel 8"}
     response = await auth.handle_auth_request(payload, "client-1")
 
     assert response["accepted"] is False
-    assert "Pairing started" in response["reason"]
-    assert auth.is_pairing_active
+    assert "not active" in response["reason"].lower()
+    assert not auth.is_pairing_active
     assert auth._failed_attempts.get("client-1", 0) == 0
 
 

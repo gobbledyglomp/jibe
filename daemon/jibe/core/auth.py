@@ -189,13 +189,13 @@ class AuthManager:
 
         if not self.is_pairing_active:
             if not fingerprint:
-                self.start_pairing()
                 return self._reject_response(
-                    "Pairing started — check daemon terminal for PIN."
+                    "Pairing mode is not active. Start pairing on the daemon (--pair or SIGUSR1), "
+                    "then enter the PIN shown in the daemon logs."
                 )
             self._record_failure(client_id)
             return self._reject_response(
-                "Pairing mode is not active. Start pairing on the daemon first."
+                "Pairing mode is not active. Unknown fingerprint — start pairing on the daemon first."
             )
 
         if not pin:

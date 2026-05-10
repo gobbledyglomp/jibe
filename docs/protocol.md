@@ -39,9 +39,9 @@ sequenceDiagram
 
 2. **WebSocket handshake** - The app opens a WebSocket connection to `ws://<host>:<port>/ws`. This is a standard HTTP upgrade - no custom headers required.
 
-3. **Authentication** - The app sends an `auth.request` message containing a PIN displayed on the daemon. On first connection, the user must manually approve the device. On subsequent connections, the daemon recognises trusted devices.
+3. **Authentication** - The app sends an `auth.request`. **Pairing mode must already be active on the daemon** (`--pair` flag, `SIGUSR1`, or your launcher UI) so a PIN is shown before the client connects. The request includes that PIN and the device name for first-time pairing. Trusted devices reconnect with their stored fingerprint only (no PIN). If pairing is not active, the daemon rejects the probe until the user starts pairing.
 
-4. **Auth response** - The daemon responds with `auth.response`. If `accepted` is `true`, the session is live. If `false`, the daemon closes the connection after sending the response.
+4. **Auth response** - The daemon responds with `auth.response`. If `accepted` is `true`, the session is live. If `false`, the WebSocket usually stays open so the client can adjust (unless the daemon closes it for rate limiting).
 
 5. **Active session** - Both sides exchange messages freely. Keepalive is maintained via `ping`/`pong`. Any side can send `clipboard.sync` or `notification` messages at any time.
 
@@ -201,9 +201,12 @@ No additional fields.
 {
   "type": "notification",
   "app": "com.whatsapp",
+  "app_name": "WhatsApp",
   "title": "Alice",
   "body": "Hey, are you coming tonight?",
-  "timestamp": 1710892800
+  "timestamp": 1710892800,
+  "icon": "<optional base64 PNG>",
+  "image": "<optional base64 PNG>"
 }
 ```
 
@@ -211,9 +214,14 @@ No additional fields.
 | ----------- | --------- | --------------------------------------------------------------------- |
 | `type`      | `string`  | Always `"notification"`                                               |
 | `app`       | `string`  | Android package name of the source app                                |
+| `app_name`  | `string`  | Human-readable app label (shown as the desktop notification application name) |
 | `title`     | `string`  | Notification title                                                    |
 | `body`      | `string`  | Notification body text                                                |
 | `timestamp` | `integer` | Unix timestamp (seconds) when the notification was created on Android |
+| `icon`      | `string`  | Optional PNG as Base64 — small app icon (`notify-send --icon`)        |
+| `image`     | `string`  | Optional PNG as Base64 — inline picture (`image-path` hint)           |
+
+When both `icon` and `image` are present, the daemon may merge them into a single horizontal PNG for `image-path` so desktops that only show one thumbnail still display both the app glyph and the attachment.
 
 ---
 
