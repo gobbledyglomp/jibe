@@ -72,35 +72,30 @@ class JibeTray:
         else:
             img = Image.open(path).convert("RGBA").resize((64, 64), Image.Resampling.LANCZOS)
 
-        icon_ref: list = []
-
-        def on_quit(*_args: object) -> None:
-            ic = icon_ref[0]
+        def on_quit(icon: pystray.Icon, _item: pystray.MenuItem) -> None:
             self._loop.call_soon_threadsafe(self._shutdown_event.set)
-            ic.stop()
+            icon.stop()
 
-        def build_menu():
-            return pystray.Menu(
-                pystray.MenuItem(
-                    "Open Dashboard",
-                    lambda *args: self._open_dashboard(),
-                    default=True,
-                ),
-                pystray.Menu.SEPARATOR,
-                pystray.MenuItem(
-                    "Start Pairing",
-                    lambda *args: self._pairing_start(),
-                ),
-                pystray.MenuItem(
-                    "Stop Pairing",
-                    lambda *args: self._pairing_stop(),
-                ),
-                pystray.Menu.SEPARATOR,
-                pystray.MenuItem("Quit", on_quit),
-            )
+        menu = pystray.Menu(
+            pystray.MenuItem(
+                "Open Dashboard",
+                lambda _icon, _item: self._open_dashboard(),
+                default=True,
+            ),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem(
+                "Start Pairing",
+                lambda _icon, _item: self._pairing_start(),
+            ),
+            pystray.MenuItem(
+                "Stop Pairing",
+                lambda _icon, _item: self._pairing_stop(),
+            ),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem("Quit", on_quit),
+        )
 
-        icon = pystray.Icon("jibe", img, "Jibe", menu=build_menu)
-        icon_ref.append(icon)
+        icon = pystray.Icon("jibe", img, "Jibe", menu=menu)
         self._icon = icon
 
         self._thread = threading.Thread(target=icon.run, name="jibe-tray", daemon=True)
