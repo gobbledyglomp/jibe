@@ -3,6 +3,7 @@ package com.jibe.app.ui.screens
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -24,6 +25,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -109,13 +113,19 @@ fun HomeScreen(repository: ConnectionRepository, onDeviceForgotten: () -> Unit) 
                 if (state !is ConnectionState.Connected) pingInFlight = false
         }
 
+        val scrollState = rememberScrollState()
+        val configuration = LocalConfiguration.current
+        val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
         Scaffold(containerColor = MaterialTheme.colorScheme.surface) { innerPadding ->
                 Column(
                         modifier =
                                 Modifier.fillMaxSize()
+                                        .verticalScroll(scrollState)
                                         .padding(innerPadding)
-                                        .padding(horizontal = 24.dp)
-                                        .padding(top = 48.dp),
+                                        .padding(horizontal = if (isLandscape) 40.dp else 24.dp)
+                                        .padding(top = if (isLandscape) 20.dp else 48.dp)
+                                        .padding(bottom = 32.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                         Text(
@@ -129,11 +139,11 @@ fun HomeScreen(repository: ConnectionRepository, onDeviceForgotten: () -> Unit) 
                                 color = JibePrimary
                         )
 
-                        Spacer(modifier = Modifier.height(32.dp))
+                        Spacer(modifier = Modifier.height(if (isLandscape) 16.dp else 32.dp))
 
                         ConnectionStatusCard(state = state)
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
 
                         PingCard(
                                 isConnected = state is ConnectionState.Connected,
@@ -147,28 +157,26 @@ fun HomeScreen(repository: ConnectionRepository, onDeviceForgotten: () -> Unit) 
                                 }
                         )
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
 
                         ClipboardCard(
                                 isConnected = state is ConnectionState.Connected,
                                 repository = repository
                         )
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
 
                         FileTransferCard(
                                 isConnected = state is ConnectionState.Connected,
                                 transferProgress = transferProgress,
-                                onPickClick = {
-                                        pickDocument.launch(arrayOf("*/*"))
-                                }
+                                onPickClick = { pickDocument.launch(arrayOf("*/*")) }
                         )
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
 
                         NotificationPermissionCard()
 
-                        Spacer(modifier = Modifier.weight(1f))
+                        Spacer(modifier = Modifier.height(24.dp))
 
                         if (showForgetConfirm) {
                                 ForgetConfirmation(
@@ -187,8 +195,6 @@ fun HomeScreen(repository: ConnectionRepository, onDeviceForgotten: () -> Unit) 
                                         )
                                 }
                         }
-
-                        Spacer(modifier = Modifier.height(32.dp))
                 }
         }
 }
