@@ -1,13 +1,105 @@
 <resources>
     <string name="app_name">Jibe</string>
+    <string name="app_brand">jibe</string>
+
+    <!-- Accessibility -->
     <string name="accessibility_pin_slot_empty">PIN entry position %1$d of 6, blank</string>
     <string name="accessibility_pin_slot_filled">PIN entry position %1$d of 6: %2$s</string>
-    <string name="clipboard_sync_sent">Sent</string>
-    <string name="clipboard_sync_empty">Clipboard empty</string>
-    <string name="clipboard_sync_not_connected">Not connected</string>
-    <string name="clipboard_sync_not_ready">Connection not ready</string>
+
+    <!-- Connection states -->
+    <string name="state_connected">Connected</string>
+    <string name="state_connecting">Connecting…</string>
+    <string name="state_authenticating">Authenticating…</string>
+    <string name="state_discovering">Discovering…</string>
+    <string name="state_pairing_failed">Pairing failed</string>
+    <string name="state_pairing_unavailable">Pairing unavailable</string>
+    <string name="state_failed">Failed</string>
+    <string name="state_disconnected">Disconnected</string>
+
+    <!-- Common actions -->
+    <string name="action_send">Send</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_retry">Retry</string>
+    <string name="action_back">Back</string>
+
+    <!-- Labels -->
+    <string name="label_host">Host</string>
+    <string name="label_device">Device</string>
+
+    <!-- Pairing screen -->
+    <string name="pairing_tagline">Android ↔ Linux</string>
+    <string name="pairing_searching">Searching for daemon…</string>
+    <string name="pairing_run_hint">Run: python main.py --pair</string>
+    <string name="pairing_enter_pin">Enter the PIN shown on your daemon</string>
+    <string name="pairing_pair">Pair</string>
+    <string name="pairing_pin_rejected">PIN rejected</string>
     <string name="pairing_unavailable_title">Can\'t pair yet</string>
     <string name="pairing_unavailable_body">Turn on pairing on your Linux machine, then tap Retry.</string>
     <string name="pairing_unavailable_message_label">Details</string>
     <string name="pairing_unavailable_retry">Retry</string>
+
+    <!-- Clipboard -->
+    <string name="clipboard_title">Clipboard</string>
+    <string name="clipboard_subtitle">Send current clipboard text to the daemon</string>
+    <string name="clipboard_sync_action">Sync</string>
+    <string name="clipboard_sync_sent">Sent</string>
+    <string name="clipboard_sync_empty">Clipboard empty</string>
+    <string name="clipboard_sync_not_connected">Not connected</string>
+    <string name="clipboard_sync_not_ready">Connection not ready</string>
+
+    <!-- File transfer -->
+    <string name="file_title">Send file</string>
+    <string name="file_subtitle">Chunked upload to ~/Downloads on the daemon</string>
+    <string name="file_pick">Pick</string>
+    <string name="transfer_cancelled">Cancelled</string>
+    <string name="transfer_saved">Saved on daemon ✓</string>
+    <string name="transfer_verifying">Verifying…</string>
+
+    <!-- Ping -->
+    <string name="ping_title">Ping</string>
+
+    <!-- Present -->
+    <string name="present_title">Present</string>
+    <string name="present_subtitle">Control slides from your phone</string>
+    <string name="present_open">Open</string>
+    <string name="present_not_connected">Not connected</string>
+    <string name="present_prev">Previous slide</string>
+    <string name="present_stop">Stop presentation</string>
+    <string name="present_next">Next slide</string>
+
+    <!-- Notifications -->
+    <string name="notif_title">Notification mirroring</string>
+    <string name="notif_body">Forward Android notifications to the Linux desktop. Grant notification access for Jibe.</string>
+    <string name="notif_open_settings">Open notification settings</string>
+
+    <!-- Forget device -->
+    <string name="home_forget_device">Forget device</string>
+    <string name="forget_title">Forget this device?</string>
+    <string name="forget_body">This removes the saved certificate and returns Jibe to pairing mode.</string>
+    <string name="forget_confirm">Forget</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_appearance">Appearance</string>
+    <string name="settings_dark_theme">Dark theme</string>
+    <string name="settings_dark_theme_desc">When off, uses light surfaces</string>
+    <string name="settings_language">Language</string>
+    <string name="settings_features">Features</string>
+    <string name="settings_feat_clipboard">Clipboard sync</string>
+    <string name="settings_feat_clipboard_desc">Send and receive clipboard text</string>
+    <string name="settings_feat_notifications">Notification mirror</string>
+    <string name="settings_feat_notifications_desc">Forward notifications to Linux</string>
+    <string name="settings_feat_file_transfer">File transfer</string>
+    <string name="settings_feat_file_transfer_desc">Upload files to the daemon</string>
+    <string name="settings_feat_presentation">Presentation remote</string>
+    <string name="settings_feat_presentation_desc">Slide controls from Present screen</string>
+    <string name="settings_feat_find_phone">Find my phone</string>
+    <string name="settings_feat_find_phone_desc">Allow daemon ring commands</string>
+    <string name="settings_feat_ping">Ping (diagnostic)</string>
+    <string name="settings_feat_ping_desc">Application ping/pong latency button</string>
+
+    <!-- Ring alert -->
+    <string name="ring_title">Find device</string>
+    <string name="ring_subtitle">Ringing…</string>
+    <string name="ring_stop">Stop</string>
 </resources>
