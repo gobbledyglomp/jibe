@@ -46,7 +46,7 @@ from jibe.core.config import (
 logger = logging.getLogger(__name__)
 
 
-def _get_cert_fingerprint(cert_path: Path) -> str:
+def get_cert_fingerprint(cert_path: Path) -> str:
     """Compute the SHA-256 fingerprint of a PEM certificate.
 
     This is the same format browsers display ("SHA-256: AB:CD:EF:...")
@@ -91,7 +91,7 @@ def generate_self_signed_cert(
     key_path = certs_dir / key_name
 
     if cert_path.exists() and key_path.exists():
-        fingerprint = _get_cert_fingerprint(cert_path)
+        fingerprint = get_cert_fingerprint(cert_path)
         logger.debug("Using existing TLS certificate (fingerprint: %s)", fingerprint)
         return cert_path, key_path
 
@@ -144,7 +144,7 @@ def generate_self_signed_cert(
 
     cert_path.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
 
-    fingerprint = _get_cert_fingerprint(cert_path)
+    fingerprint = get_cert_fingerprint(cert_path)
     logger.info("TLS certificate generated (fingerprint: %s)", fingerprint)
 
     return cert_path, key_path

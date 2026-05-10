@@ -5,7 +5,7 @@ import ssl
 from cryptography import x509
 from cryptography.x509.oid import NameOID
 from jibe.core.tls import (
-    _get_cert_fingerprint,
+    get_cert_fingerprint,
     create_ssl_context,
     generate_self_signed_cert,
 )
@@ -64,7 +64,7 @@ def test_certificate_properties(certs_dir):
 def test_get_cert_fingerprint(certs_dir):
     """Fingerprint should be a valid SHA-256 hex string."""
     cert_path, _ = generate_self_signed_cert(certs_dir=certs_dir)
-    fingerprint = _get_cert_fingerprint(cert_path)
+    fingerprint = get_cert_fingerprint(cert_path)
 
     assert len(fingerprint) == 95
     assert ":" in fingerprint
