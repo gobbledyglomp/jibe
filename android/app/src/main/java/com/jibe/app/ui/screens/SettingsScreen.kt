@@ -1,7 +1,5 @@
 package com.jibe.app.ui.screens
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -10,19 +8,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Slideshow
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.UploadFile
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -39,7 +37,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -52,24 +52,26 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jibe.app.R
 import com.jibe.app.data.local.AppSettings
+import com.jibe.app.data.local.FeatureId
 import com.jibe.app.data.local.JibeDataStore
+import com.jibe.app.ui.components.dragHandle
+import com.jibe.app.ui.components.rememberReorderState
+import com.jibe.app.ui.components.reorderableItem
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.layout.Box
 
-/**
- * Preferences screen: appearance (theme, language) and per-feature toggles.
- * All values are loaded as a single snapshot to avoid toggle flicker on entry.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(dataStore: JibeDataStore, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
-    val scroll = rememberScrollState()
 
     var settings by remember { mutableStateOf<AppSettings?>(null) }
 
     LaunchedEffect(Unit) {
         dataStore.allSettings.collect { settings = it }
     }
+
+    val s = settings
 
     Scaffold(
             modifier = Modifier.fillMaxSize(),
@@ -98,90 +100,180 @@ fun SettingsScreen(dataStore: JibeDataStore, onBack: () -> Unit) {
                 )
             }
     ) { inner ->
-        val s = settings
         if (s == null) {
             Box(modifier = Modifier.fillMaxSize().padding(inner))
             return@Scaffold
         }
 
-        Column(
+        val featureOrder = remember { mutableStateListOf<FeatureId>() }
+
+        LaunchedEffect(s.featureOrder) {
+            if (featureOrder.toList() != s.featureOrder) {
+                featureOrder.clear()
+                featureOrder.addAll(s.featureOrder)
+            }
+        }
+
+        val listState = rememberLazyListState()
+        val reorderableKeys by remember {
+            derivedStateOf { featureOrder.map { it.key } }
+        }
+        val reorderState = rememberReorderState(
+                lazyListState = listState,
+                reorderableKeys = { reorderableKeys },
+                onSwap = { from, to ->
+                    featureOrder.add(to, featureOrder.removeAt(from))
+                },
+                onDone = {
+                    scope.launch { dataStore.setFeatureOrder(featureOrder.toList()) }
+                },
+        )
+
+        LazyColumn(
+                state = listState,
                 modifier =
                         Modifier.padding(inner)
-                                .verticalScroll(scroll)
-                                .padding(horizontal = 20.dp, vertical = 8.dp)
+                                .padding(horizontal = 20.dp)
                                 .fillMaxWidth()
         ) {
-            SectionTitle(stringResource(R.string.settings_appearance))
+            item(key = "appearance_header") {
+                Spacer(modifier = Modifier.height(8.dp))
+                SectionTitle(stringResource(R.string.settings_appearance))
+            }
 
-            ToggleRow(
-                    title = stringResource(R.string.settings_dark_theme),
-                    subtitle = stringResource(R.string.settings_dark_theme_desc),
-                    checked = s.theme == "dark",
-                    onCheckedChange = { dark ->
-                        scope.launch { dataStore.setTheme(if (dark) "dark" else "light") }
-                    }
-            )
+            item(key = "theme_toggle") {
+                ToggleRow(
+                        title = stringResource(R.string.settings_dark_theme),
+                        subtitle = stringResource(R.string.settings_dark_theme_desc),
+                        checked = s.theme == "dark",
+                        onCheckedChange = { dark ->
+                            scope.launch { dataStore.setTheme(if (dark) "dark" else "light") }
+                        }
+                )
+            }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            item(key = "language_spacer") {
+                Spacer(modifier = Modifier.height(16.dp))
+            }
 
-            LanguageDropdown(
-                    selected = s.language,
-                    onSelect = { lang -> scope.launch { dataStore.setLanguage(lang) } }
-            )
+            item(key = "language_dropdown") {
+                LanguageDropdown(
+                        selected = s.language,
+                        onSelect = { lang -> scope.launch { dataStore.setLanguage(lang) } }
+                )
+            }
 
-            HorizontalDivider(
-                    modifier = Modifier.padding(vertical = 20.dp),
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
-            )
+            item(key = "features_divider") {
+                HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 20.dp),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                )
+                SectionTitle(stringResource(R.string.settings_features))
+            }
 
-            SectionTitle(stringResource(R.string.settings_features))
+            items(
+                    items = featureOrder,
+                    key = { it.key }
+            ) { featureId ->
+                val isDragged = reorderState.isDragged(featureId.key)
+                Column(
+                        modifier = Modifier
+                                .reorderableItem(reorderState, featureId.key)
+                                .then(if (!isDragged) Modifier.animateItem() else Modifier)
+                ) {
+                    FeatureToggleRow(
+                            featureId = featureId,
+                            settings = s,
+                            dataStore = dataStore,
+                            scope = scope,
+                            dragModifier = Modifier.dragHandle(reorderState, featureId.key),
+                    )
+                }
+            }
 
-            ToggleRow(
-                    title = stringResource(R.string.settings_feat_clipboard),
-                    subtitle = stringResource(R.string.settings_feat_clipboard_desc),
-                    checked = s.featClipboard,
-                    onCheckedChange = { v -> scope.launch { dataStore.setFeatClipboard(v) } },
-                    icon = Icons.Default.ContentCopy,
-            )
-            ToggleRow(
-                    title = stringResource(R.string.settings_feat_notifications),
-                    subtitle = stringResource(R.string.settings_feat_notifications_desc),
-                    checked = s.featNotifications,
-                    onCheckedChange = { v -> scope.launch { dataStore.setFeatNotifications(v) } },
-                    icon = Icons.Default.Notifications,
-            )
-            ToggleRow(
-                    title = stringResource(R.string.settings_feat_file_transfer),
-                    subtitle = stringResource(R.string.settings_feat_file_transfer_desc),
-                    checked = s.featFileTransfer,
-                    onCheckedChange = { v -> scope.launch { dataStore.setFeatFileTransfer(v) } },
-                    icon = Icons.Default.UploadFile,
-            )
-            ToggleRow(
-                    title = stringResource(R.string.settings_feat_presentation),
-                    subtitle = stringResource(R.string.settings_feat_presentation_desc),
-                    checked = s.featPresentation,
-                    onCheckedChange = { v -> scope.launch { dataStore.setFeatPresentationRemote(v) } },
-                    icon = Icons.Default.Slideshow,
-            )
-            ToggleRow(
-                    title = stringResource(R.string.settings_feat_find_phone),
-                    subtitle = stringResource(R.string.settings_feat_find_phone_desc),
-                    checked = s.featFindPhone,
-                    onCheckedChange = { v -> scope.launch { dataStore.setFeatFindPhone(v) } },
-                    icon = Icons.Default.PhoneAndroid,
-            )
-            ToggleRow(
-                    title = stringResource(R.string.settings_feat_ping),
-                    subtitle = stringResource(R.string.settings_feat_ping_desc),
-                    checked = s.featPing,
-                    onCheckedChange = { v -> scope.launch { dataStore.setFeatPing(v) } },
-                    icon = Icons.Default.Speed,
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
+            item(key = "bottom_spacer") {
+                Spacer(modifier = Modifier.height(24.dp))
+            }
         }
     }
+}
+
+@Composable
+private fun FeatureToggleRow(
+        featureId: FeatureId,
+        settings: AppSettings,
+        dataStore: JibeDataStore,
+        scope: kotlinx.coroutines.CoroutineScope,
+        dragModifier: Modifier = Modifier,
+) {
+    val (title, subtitle, icon, checked, onCheckedChange) = featureToggleProps(featureId, settings, dataStore, scope)
+    ToggleRow(
+            title = title,
+            subtitle = subtitle,
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            icon = icon,
+            dragModifier = dragModifier,
+    )
+}
+
+private data class FeatureToggleProps(
+        val title: String,
+        val subtitle: String,
+        val icon: ImageVector,
+        val checked: Boolean,
+        val onCheckedChange: (Boolean) -> Unit,
+)
+
+@Composable
+private fun featureToggleProps(
+        featureId: FeatureId,
+        s: AppSettings,
+        dataStore: JibeDataStore,
+        scope: kotlinx.coroutines.CoroutineScope,
+): FeatureToggleProps = when (featureId) {
+    FeatureId.CLIPBOARD -> FeatureToggleProps(
+            title = stringResource(R.string.settings_feat_clipboard),
+            subtitle = stringResource(R.string.settings_feat_clipboard_desc),
+            icon = Icons.Default.ContentCopy,
+            checked = s.featClipboard,
+            onCheckedChange = { v -> scope.launch { dataStore.setFeatClipboard(v) } },
+    )
+    FeatureId.NOTIFICATIONS -> FeatureToggleProps(
+            title = stringResource(R.string.settings_feat_notifications),
+            subtitle = stringResource(R.string.settings_feat_notifications_desc),
+            icon = Icons.Default.Notifications,
+            checked = s.featNotifications,
+            onCheckedChange = { v -> scope.launch { dataStore.setFeatNotifications(v) } },
+    )
+    FeatureId.FILE_TRANSFER -> FeatureToggleProps(
+            title = stringResource(R.string.settings_feat_file_transfer),
+            subtitle = stringResource(R.string.settings_feat_file_transfer_desc),
+            icon = Icons.Default.UploadFile,
+            checked = s.featFileTransfer,
+            onCheckedChange = { v -> scope.launch { dataStore.setFeatFileTransfer(v) } },
+    )
+    FeatureId.PRESENTATION -> FeatureToggleProps(
+            title = stringResource(R.string.settings_feat_presentation),
+            subtitle = stringResource(R.string.settings_feat_presentation_desc),
+            icon = Icons.Default.Slideshow,
+            checked = s.featPresentation,
+            onCheckedChange = { v -> scope.launch { dataStore.setFeatPresentationRemote(v) } },
+    )
+    FeatureId.FIND_PHONE -> FeatureToggleProps(
+            title = stringResource(R.string.settings_feat_find_phone),
+            subtitle = stringResource(R.string.settings_feat_find_phone_desc),
+            icon = Icons.Default.PhoneAndroid,
+            checked = s.featFindPhone,
+            onCheckedChange = { v -> scope.launch { dataStore.setFeatFindPhone(v) } },
+    )
+    FeatureId.PING -> FeatureToggleProps(
+            title = stringResource(R.string.settings_feat_ping),
+            subtitle = stringResource(R.string.settings_feat_ping_desc),
+            icon = Icons.Default.Speed,
+            checked = s.featPing,
+            onCheckedChange = { v -> scope.launch { dataStore.setFeatPing(v) } },
+    )
 }
 
 @Composable
@@ -202,6 +294,7 @@ private fun ToggleRow(
         checked: Boolean,
         onCheckedChange: (Boolean) -> Unit,
         icon: ImageVector? = null,
+        dragModifier: Modifier? = null,
 ) {
     Row(
             modifier =
@@ -209,6 +302,15 @@ private fun ToggleRow(
                             .padding(vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
     ) {
+        if (dragModifier != null) {
+            Icon(
+                    imageVector = Icons.Default.DragHandle,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                    modifier = dragModifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.size(10.dp))
+        }
         if (icon != null) {
             Icon(
                     imageVector = icon,
