@@ -1,6 +1,8 @@
 package com.jibe.app.data.repository
 
 import android.content.ContentResolver
+import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.util.Log
 import com.jibe.app.data.local.DeviceCredentials
@@ -10,9 +12,11 @@ import com.jibe.app.data.model.AuthResponse
 import com.jibe.app.data.model.ClipboardSyncMessage
 import com.jibe.app.data.model.ErrorMessage
 import com.jibe.app.data.model.FileAckMessage
+import com.jibe.app.data.model.DeviceBatteryMessage
 import com.jibe.app.data.model.FileChunkAckMessage
 import com.jibe.app.data.model.MessageType
 import com.jibe.app.data.model.NotificationMessage
+import com.jibe.app.data.model.RemoteKeyMessage
 import com.jibe.app.data.model.PingMessage
 import com.jibe.app.network.DaemonTlsSocketFactory
 import com.jibe.app.network.DiscoveryState
@@ -21,6 +25,7 @@ import com.jibe.app.network.JibeTrustManager
 import com.jibe.app.network.JibeWebSocketHandle
 import com.jibe.app.network.MessageParser
 import com.jibe.app.network.WebSocketEvent
+import com.jibe.app.service.RingAlertActivity
 import kotlin.math.min
 import kotlin.math.pow
 import kotlinx.coroutines.CoroutineDispatcher
@@ -87,6 +92,7 @@ const val WRONG_PAIRING_PIN_HINT_PREFIX = "Wrong PIN"
  * Reconnection is two-phase: fast direct reconnect (limited attempts), then NSD re-discovery.
  */
 class ConnectionRepository(
+        private val appContext: Context,
         private val dataStore: JibeDataStore,
         private val discovery: JibeDiscovery,
         private val scope: CoroutineScope,
@@ -157,6 +163,39 @@ class ConnectionRepository(
 
     private var lastPairingFailureReason: String = ""
     private var lastPairingFailureGuidance: String = PAIRING_FAILURE_GUIDANCE
+
+    private val _featClipboard = MutableStateFlow(true)
+    private val _featNotifications = MutableStateFlow(true)
+    private val _featFileTransfer = MutableStateFlow(true)
+    private val _featPresentationRemote = MutableStateFlow(true)
+    private val _featFindPhone = MutableStateFlow(true)
+    private val _featPing = MutableStateFlow(false)
+
+    val featClipboardSync: StateFlow<Boolean> = _featClipboard.asStateFlow()
+    val featFileTransferEnabled: StateFlow<Boolean> = _featFileTransfer.asStateFlow()
+    val featPresentationRemote: StateFlow<Boolean> = _featPresentationRemote.asStateFlow()
+    val featPingEnabled: StateFlow<Boolean> = _featPing.asStateFlow()
+
+    init {
+        scope.launch {
+            dataStore.featClipboard.collect { _featClipboard.value = it }
+        }
+        scope.launch {
+            dataStore.featNotifications.collect { _featNotifications.value = it }
+        }
+        scope.launch {
+            dataStore.featFileTransfer.collect { _featFileTransfer.value = it }
+        }
+        scope.launch {
+            dataStore.featPresentationRemote.collect { _featPresentationRemote.value = it }
+        }
+        scope.launch {
+            dataStore.featFindPhone.collect { _featFindPhone.value = it }
+        }
+        scope.launch {
+            dataStore.featPing.collect { _featPing.value = it }
+        }
+    }
 
     /**
      * After lockout, user may tap Retry before restarting the daemon; the next pairing attempt then
@@ -288,20 +327,20 @@ class ConnectionRepository(
      */
     fun sendClipboardSync(content: String): Boolean {
         val client = wsClient ?: return false
-        if (_state.value !is ConnectionState.Connected) return false
+        if (_state.value !is ConnectionState.Connected || !_featClipboard.value) return false
         return client.send(MessageParser.toJson(ClipboardSyncMessage(content = content)))
     }
 
     /** Forward a mirrored notification payload to the daemon. */
     fun sendNotification(msg: NotificationMessage) {
         val client = wsClient ?: return
-        if (_state.value !is ConnectionState.Connected) return
+        if (_state.value !is ConnectionState.Connected || !_featNotifications.value) return
         client.send(MessageParser.toJson(msg))
     }
 
     /** Upload a content URI to the daemon into ``~/Downloads`` (requires connected). */
     fun sendFile(uri: Uri, contentResolver: ContentResolver) {
-        if (_state.value !is ConnectionState.Connected) return
+        if (_state.value !is ConnectionState.Connected || !_featFileTransfer.value) return
         fileTransfers.sendFile(uri, contentResolver)
     }
 
@@ -310,6 +349,7 @@ class ConnectionRepository(
 
     fun sendPing() {
         val client = wsClient ?: return
+        if (_state.value !is ConnectionState.Connected || !_featPing.value) return
         pingTimeoutJob?.cancel()
         pingSentAt = System.currentTimeMillis()
         client.send(MessageParser.toJson(PingMessage()))
@@ -363,6 +403,31 @@ class ConnectionRepository(
         pairingRetryCount = 0
         fileTransfers.reset()
         _state.value = ConnectionState.Disconnected
+    }
+
+    /** Push current battery telemetry (requires authenticated WebSocket). */
+    fun sendBatteryLevel(level: Int, charging: Boolean) {
+        val client = wsClient ?: return
+        if (_state.value !is ConnectionState.Connected) return
+        val pct = level.coerceIn(0, 100)
+        client.send(
+                MessageParser.toJson(DeviceBatteryMessage(level = pct, charging = charging))
+        )
+    }
+
+    /** Presentation remote key (see protocol ``remote.key``). */
+    fun sendRemoteKey(key: String) {
+        val client = wsClient ?: return
+        if (_state.value !is ConnectionState.Connected || !_featPresentationRemote.value) return
+        client.send(MessageParser.toJson(RemoteKeyMessage(key = key)))
+    }
+
+    private fun triggerRingAlert() {
+        val intent =
+                Intent(appContext, RingAlertActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                }
+        appContext.startActivity(intent)
     }
 
     /**
@@ -464,8 +529,13 @@ class ConnectionRepository(
                 _pingResults.emit(PingResult(latency))
             }
             MessageType.CLIPBOARD_SYNC -> {
+                if (!_featClipboard.value) return
                 val sync = MessageParser.payloadAs<ClipboardSyncMessage>(message)
                 clipboardWriter.setPlainText(sync.content)
+            }
+            MessageType.DEVICE_RING -> {
+                if (!_featFindPhone.value) return
+                triggerRingAlert()
             }
             MessageType.FILE_ACK -> {
                 val ack = MessageParser.payloadAs<FileAckMessage>(message)
