@@ -1,6 +1,16 @@
 (function () {
   const POLL_MS = 5000;
 
+  function fmtBytes(n) {
+    if (n == null || n === '') return '—';
+    const v = Number(n);
+    if (!Number.isFinite(v)) return String(n);
+    if (v < 1024) return v + ' B';
+    if (v < 1024 * 1024) return (v / 1024).toFixed(1) + ' KB';
+    if (v < 1024 * 1024 * 1024) return (v / (1024 * 1024)).toFixed(2) + ' MB';
+    return (v / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+  }
+
   async function loadVersion() {
     try {
       const r = await fetch('/health');
@@ -100,10 +110,14 @@
           btn.textContent = 'Revoke';
           btn.addEventListener('click', async () => {
             if (!confirm('Revoke pairing for ' + d.name + '?')) return;
-            await window.JibeApi.request('/api/devices/' + encodeURIComponent(d.id), {
-              method: 'DELETE',
-            });
-            refresh();
+            try {
+              await window.JibeApi.request('/api/devices/' + encodeURIComponent(d.id), {
+                method: 'DELETE',
+              });
+              await refresh();
+            } catch (e) {
+              alert('Revoke failed: ' + (e.message || e));
+            }
           });
           td.appendChild(btn);
           tr.appendChild(td);
@@ -210,8 +224,8 @@
             rows.length +
             '"><td class="mono">' +
             esc(it.filename) +
-            '</td><td>' +
-            it.size +
+            '</td><td class="mono">' +
+            fmtBytes(it.size) +
             '</td><td>' +
             esc(it.status) +
             '</td><td>' +
@@ -287,12 +301,19 @@
         '<button type="button" class="btn btn-sm" id="hp-next">Next</button>';
       pager.querySelector('#hp-prev').onclick = () => {
         page = Math.max(1, page - 1);
-        load();
+        loadAndCatch();
       };
       pager.querySelector('#hp-next').onclick = () => {
         page = Math.min(data.pages, page + 1);
-        load();
+        loadAndCatch();
       };
+    }
+
+    function loadAndCatch() {
+      load().catch((e) => {
+        root.querySelector('#hist-table-wrap').innerHTML =
+          '<div class="error-banner">' + esc(String(e.message || e)) + '</div>';
+      });
     }
 
     root.querySelectorAll('#hist-tabs button').forEach((b) => {
@@ -302,12 +323,12 @@
         );
         tab = b.dataset.t;
         page = 1;
-        load();
+        loadAndCatch();
       });
     });
     root.querySelector('#hf-go').onclick = () => {
       page = 1;
-      load();
+      loadAndCatch();
     };
     await load();
   }
