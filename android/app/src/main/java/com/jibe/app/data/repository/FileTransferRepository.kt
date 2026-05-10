@@ -31,7 +31,11 @@ data class TransferProgress(
         val bytesSent: Long,
         val totalBytes: Long,
         val isComplete: Boolean = false,
-        val error: String? = null
+        val error: String? = null,
+        /** Current upload speed in bytes/second (rolling average since transfer start). */
+        val speedBps: Long = 0L,
+        /** Estimated seconds until completion; null when speed is unknown or transfer is done. */
+        val etaSeconds: Long? = null
 )
 
 /**
@@ -172,6 +176,7 @@ class FileTransferRepository(
 
         val digest = MessageDigest.getInstance("SHA-256")
         val buffer = ByteArray(CHUNK_SIZE_BYTES)
+        val transferStartMs = System.currentTimeMillis()
 
         contentResolver.openInputStream(uri)?.use { input ->
             var sent = 0L
@@ -199,13 +204,21 @@ class FileTransferRepository(
 
                 sent = chunkAck.bytesReceived
                 index++
+
+                val elapsedMs = (System.currentTimeMillis() - transferStartMs).coerceAtLeast(1L)
+                val speedBps = sent * 1000L / elapsedMs
+                val etaSeconds =
+                        if (speedBps > 0L) (totalBytes - sent) / speedBps else null
+
                 _progress.value =
                         TransferProgress(
                                 filename = filename,
                                 bytesSent = sent,
                                 totalBytes = totalBytes,
                                 isComplete = false,
-                                error = null
+                                error = null,
+                                speedBps = speedBps,
+                                etaSeconds = etaSeconds
                         )
             }
         }
