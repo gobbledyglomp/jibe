@@ -21,11 +21,11 @@
       color: var(--muted);
       margin-bottom: 0.15rem;
     }
-    aside nav a:hover { background: #21262d; color: var(--text); }
-    aside nav a.active { background: #21262d; color: var(--accent); }
+    aside nav a:hover { background: var(--nav-hover-bg); color: var(--text); }
+    aside nav a.active { background: var(--nav-hover-bg); color: var(--accent); }
     main { padding: 1.25rem 1.5rem; overflow: auto; }
     main h1 { margin: 0 0 1rem; font-size: 1.25rem; }
-    .row-detail { background: #0d1117; padding: 0.5rem 0.65rem; border-radius: 6px; margin-top: 0.35rem; font-size: 0.8rem; white-space: pre-wrap; max-height: 200px; overflow: auto; }
+    .row-detail { padding: 0.5rem 0.65rem; border-radius: 6px; margin-top: 0.35rem; font-size: 0.8rem; white-space: pre-wrap; max-height: 200px; overflow: auto; }
   </style>
 </head>
 <body>
@@ -41,6 +41,7 @@
       <div id="view-root"></div>
     </main>
   </div>
+  <script src="/web/js/i18n.js"></script>
   <script src="/web/js/auth.js"></script>
   <script>
     window.JibeAuth.redirectIfUnauthorized();
