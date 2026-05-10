@@ -38,7 +38,7 @@ from jibe.network.discovery import JibeDiscovery
 from jibe.network.server import JibeServer
 from jibe.ui.tray import JibeTray
 
-_QUIET_LOGGERS = ("aiosqlite", "asyncio", "zeroconf")
+_QUIET_LOGGERS = ("aiosqlite", "asyncio", "zeroconf", "aiohttp.access")
 
 logger = logging.getLogger("jibe.main")
 
