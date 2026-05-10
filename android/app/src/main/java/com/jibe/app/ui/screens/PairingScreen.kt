@@ -103,7 +103,8 @@ private fun pairingMotionTarget(
                         if (lockoutProbeUi) PairingMotionTarget.Searching
                         else PairingMotionTarget.Connecting(state.host)
                 is ConnectionState.Authenticating ->
-                        PairingMotionTarget.PinEntry(state.host, state.hint)
+                        if (state.hint == null) PairingMotionTarget.Connecting(state.host)
+                        else PairingMotionTarget.PinEntry(state.host, state.hint)
                 is ConnectionState.Connected -> PairingMotionTarget.ConnectedFlash
                 is ConnectionState.Failed -> PairingMotionTarget.FailedCard(state.reason)
                 is ConnectionState.PairingFailed ->
@@ -132,19 +133,24 @@ fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
                 val current = state
                 when {
                         current is ConnectionState.Authenticating -> {
-                                val hostChanged = current.host != lastPairingHost
-                                if (hostChanged) {
-                                        lastPairingHost = current.host
-                                }
-                                if (hostChanged ||
-                                                current.hint?.startsWith(
-                                                        WRONG_PAIRING_PIN_HINT_PREFIX
-                                                ) == true
-                                ) {
+                                if (current.hint != null) {
+                                        val hostChanged = current.host != lastPairingHost
+                                        if (hostChanged) {
+                                                lastPairingHost = current.host
+                                        }
+                                        if (hostChanged ||
+                                                        current.hint.startsWith(
+                                                                WRONG_PAIRING_PIN_HINT_PREFIX
+                                                        )
+                                        ) {
+                                                pinValue = TextFieldValue("")
+                                        }
+                                        focusRequester.requestFocus()
+                                        keyboardController?.show()
+                                } else {
                                         pinValue = TextFieldValue("")
+                                        keyboardController?.hide()
                                 }
-                                focusRequester.requestFocus()
-                                keyboardController?.show()
                         }
                         current is ConnectionState.PairingUnavailable -> {
                                 pinValue = TextFieldValue("")
