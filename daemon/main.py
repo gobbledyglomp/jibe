@@ -215,7 +215,7 @@ def main() -> None:
                 enable_tray=enable_tray,
             )
         )
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, asyncio.CancelledError):
         logger.info("Jibe daemon stopped cleanly.")
 
 

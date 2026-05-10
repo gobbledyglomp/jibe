@@ -228,8 +228,9 @@ class JibeDatabase:
         )
         await self._conn.commit()
         logger.warning(
-            "\n%s\n  Jibe dashboard: created default user 'admin' with password:\n  %s\n  "
-            "Log in at http://127.0.0.1:<port>/web/ — change this password after first login.\n%s",
+            "\n%s\n  Jibe dashboard: created default admin user.\n"
+            "  Username: admin  Password: %s\n"
+            "  Change this password after first login.\n%s",
             "=" * 72,
             password,
             "=" * 72,

@@ -749,4 +749,5 @@ class JibeServer:
             await self._runner.cleanup()
             self._runner = None
             self._site = None
+            self._dashboard_site = None
         logger.info("Server stopped")

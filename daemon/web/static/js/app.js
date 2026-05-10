@@ -145,7 +145,7 @@
     }
 
     await refresh();
-    pollDevicesTimer = setInterval(refresh, POLL_MS);
+    pollDevicesTimer = setInterval(() => refresh().catch(() => {}), POLL_MS);
   }
 
   async function renderHistory(root) {
@@ -492,8 +492,7 @@
       await refreshInfo();
     };
 
-    const vr = document.getElementById('view-root');
-    vr._daemonTimer = setInterval(() => {
+    root._daemonTimer = setInterval(() => {
       refreshPairing().catch(() => {});
     }, 1000);
 
