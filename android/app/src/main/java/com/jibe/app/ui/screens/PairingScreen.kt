@@ -55,6 +55,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -88,8 +89,7 @@ private sealed class PairingMotionTarget {
 
     data class PairingFailedCard(val reason: String, val guidance: String) : PairingMotionTarget()
 
-    data class PairingUnavailableCard(val reason: String, val guidance: String) :
-            PairingMotionTarget()
+    data class PairingUnavailableCard(val reason: String) : PairingMotionTarget()
 }
 
 private fun pairingMotionTarget(
@@ -110,7 +110,7 @@ private fun pairingMotionTarget(
                 is ConnectionState.PairingFailed ->
                         PairingMotionTarget.PairingFailedCard(state.reason, state.guidance)
                 is ConnectionState.PairingUnavailable ->
-                        PairingMotionTarget.PairingUnavailableCard(state.reason, state.guidance)
+                        PairingMotionTarget.PairingUnavailableCard(state.reason)
         }
 
 /**
@@ -289,7 +289,6 @@ fun PairingScreen(repository: ConnectionRepository, onPaired: () -> Unit) {
                                                 is PairingMotionTarget.PairingUnavailableCard -> {
                                                         PairingUnavailableIndicator(
                                                                 reason = motion.reason,
-                                                                guidance = motion.guidance,
                                                                 onRetry = {
                                                                         pinValue =
                                                                                 TextFieldValue("")
@@ -606,22 +605,18 @@ private fun PairingFailedIndicator(reason: String, guidance: String, onRetry: ()
 }
 
 @Composable
-private fun PairingUnavailableIndicator(
-        reason: String,
-        guidance: String,
-        onRetry: () -> Unit
-) {
+private fun PairingUnavailableIndicator(reason: String, onRetry: () -> Unit) {
         Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = JibeSurfaceContainerHigh),
                 shape = RoundedCornerShape(16.dp)
         ) {
                 Column(
-                        modifier = Modifier.padding(20.dp).fillMaxWidth(),
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp).fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                         Text(
-                                text = "Pairing mode is not active",
+                                text = stringResource(R.string.pairing_unavailable_title),
                                 style = MaterialTheme.typography.titleMedium,
                                 color = JibeOnSurface,
                                 textAlign = TextAlign.Center,
@@ -631,24 +626,41 @@ private fun PairingUnavailableIndicator(
                         Spacer(modifier = Modifier.height(8.dp))
 
                         Text(
-                                text = reason,
+                                text = stringResource(R.string.pairing_unavailable_body),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = JibeOnSurfaceVariant,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.fillMaxWidth()
                         )
 
-                        Spacer(modifier = Modifier.height(8.dp))
+                        if (reason.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(14.dp))
 
-                        Text(
-                                text = guidance,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = JibeOnSurfaceVariant.copy(alpha = 0.8f),
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth()
-                        )
+                                Text(
+                                        text = stringResource(R.string.pairing_unavailable_message_label),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = JibeOnSurfaceVariant.copy(alpha = 0.6f),
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.fillMaxWidth()
+                                )
 
-                        Spacer(modifier = Modifier.height(20.dp))
+                                Spacer(modifier = Modifier.height(4.dp))
+
+                                Text(
+                                        text = reason,
+                                        style =
+                                                MaterialTheme.typography.labelSmall.copy(
+                                                        fontFamily = RobotoMono
+                                                ),
+                                        color = JibeOnSurfaceVariant.copy(alpha = 0.82f),
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 3,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.fillMaxWidth()
+                                )
+                        }
+
+                        Spacer(modifier = Modifier.height(18.dp))
 
                         Button(
                                 onClick = onRetry,
@@ -660,7 +672,7 @@ private fun PairingUnavailableIndicator(
                                 shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier.fillMaxWidth()
                         ) {
-                                Text("Retry")
+                                Text(stringResource(R.string.pairing_unavailable_retry))
                         }
                 }
         }

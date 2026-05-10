@@ -6,4 +6,8 @@
     <string name="clipboard_sync_empty">Clipboard empty</string>
     <string name="clipboard_sync_not_connected">Not connected</string>
     <string name="clipboard_sync_not_ready">Connection not ready</string>
+    <string name="pairing_unavailable_title">Can\'t pair yet</string>
+    <string name="pairing_unavailable_body">Turn on pairing on your Linux machine, then tap Retry.</string>
+    <string name="pairing_unavailable_message_label">Details</string>
+    <string name="pairing_unavailable_retry">Retry</string>
 </resources>
