@@ -30,5 +30,12 @@ async def handle_pong(
     rtt_ms = probe_tracker.finish_probe(probe)
     if rtt_ms is None:
         return
-    activity_log.record_outbound(conn.device_name or "device", conn.device_id, rtt_ms)
+    activity_log.record(
+        "ping",
+        f"Pong RTT {rtt_ms:.1f} ms ({conn.device_name or 'device'})",
+        direction="out",
+        device_name=conn.device_name,
+        device_id=conn.device_id,
+        rtt_ms=round(rtt_ms, 2),
+    )
     logger.debug("pong probe %s rtt=%.2fms (%s)", probe[:8], rtt_ms, conn.device_name)

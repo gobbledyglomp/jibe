@@ -1,4 +1,4 @@
-"""REST: recovery, password change, data wipes, ping endpoints."""
+"""REST: recovery, password change, data wipes, daemon event log."""
 
 import pytest
 
@@ -118,22 +118,46 @@ async def test_clear_statistics_sessions_admin(aiohttp_client, jibe_app, dashboa
 
 
 @pytest.mark.asyncio
-async def test_ping_activity_and_send_requires_admin(aiohttp_client, jibe_app, viewer_user):
+async def test_event_log_and_ping_send_requires_admin(aiohttp_client, jibe_app, viewer_user):
     client = await aiohttp_client(jibe_app)
     vr = await client.post("/api/auth/login", json={"username": "v1", "password": "viewerpass"})
     vh = {"Authorization": f"Bearer {(await vr.json())['token']}"}
 
-    r = await client.get("/api/daemon/ping-activity", headers=vh)
+    r = await client.get("/api/daemon/event-log", headers=vh)
     assert r.status == 403
+
+    r_legacy = await client.get("/api/daemon/ping-activity", headers=vh)
+    assert r_legacy.status == 403
 
     r2 = await client.post("/api/daemon/ping-send", headers=vh, json={})
     assert r2.status == 403
 
 
 @pytest.mark.asyncio
-async def test_ping_activity_empty_admin(aiohttp_client, jibe_app, dashboard_admin):
+async def test_event_log_empty_admin(aiohttp_client, jibe_app, dashboard_admin):
     client = await aiohttp_client(jibe_app)
     h = await _admin_headers(client)
-    r = await client.get("/api/daemon/ping-activity", headers=h)
+    r = await client.get("/api/daemon/event-log", headers=h)
     assert r.status == 200
     assert (await r.json())["items"] == []
+
+    r2 = await client.get("/api/daemon/ping-activity", headers=h)
+    assert r2.status == 200
+    assert (await r2.json())["items"] == []
+
+
+@pytest.mark.asyncio
+async def test_ping_send_records_event_log(aiohttp_client, jibe_app, dashboard_admin):
+    client = await aiohttp_client(jibe_app)
+    h = await _admin_headers(client)
+    send = await client.post("/api/daemon/ping-send", headers=h, json={})
+    assert send.status == 200
+    body = await send.json()
+    assert "probe" in body
+
+    log_r = await client.get("/api/daemon/event-log", headers=h)
+    assert log_r.status == 200
+    items = (await log_r.json())["items"]
+    assert len(items) >= 1
+    assert items[-1]["category"] == "ping"
+    assert "Broadcast application ping" in items[-1]["message"]

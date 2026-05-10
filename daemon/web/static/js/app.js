@@ -1,7 +1,17 @@
 (function () {
   const POLL_MS = 5000;
-  const STORAGE_PING_CARD = 'jibe_show_ping_card';
-  const PING_ACTIVITY_DISPLAY_MAX = 10;
+  const STORAGE_DAEMON_EVENT_LOG = 'jibe_daemon_browser_log';
+  const EVENT_LOG_DISPLAY_MAX = 25;
+
+  function daemonEventLogEnabled() {
+    if (localStorage.getItem(STORAGE_DAEMON_EVENT_LOG) === '1') return true;
+    return localStorage.getItem('jibe_show_ping_card') === '1';
+  }
+
+  function setDaemonEventLogEnabled(on) {
+    localStorage.setItem(STORAGE_DAEMON_EVENT_LOG, on ? '1' : '0');
+    localStorage.removeItem('jibe_show_ping_card');
+  }
 
   function T(key) {
     return window.JibeI18n ? window.JibeI18n.t(key) : key;
@@ -79,9 +89,9 @@
       clearInterval(root._daemonUiTimer);
       root._daemonUiTimer = null;
     }
-    if (root._pingPollTimer) {
-      clearInterval(root._pingPollTimer);
-      root._pingPollTimer = null;
+    if (root._eventLogPollTimer) {
+      clearInterval(root._eventLogPollTimer);
+      root._eventLogPollTimer = null;
     }
   }
 
@@ -644,17 +654,17 @@
       '</button>' +
       '<div id="tls-note" style="margin-top:0.5rem;display:none;" class="banner-warn"></div>' +
       '</div>' +
-      '<div class="panel" id="ping-panel" style="margin-bottom:1rem;display:none;">' +
+      '<div class="panel" id="event-log-panel" style="margin-bottom:1rem;display:none;">' +
       '<strong>' +
-      esc(T('daemon.pingActivity')) +
+      esc(T('daemon.eventLogTitle')) +
       '</strong>' +
       '<p style="font-size:0.8rem;color:var(--muted);margin:0.35rem 0 0.65rem;">' +
-      esc(T('daemon.pingHint')) +
+      esc(T('daemon.eventLogHint')) +
       '</p>' +
       '<button type="button" class="btn btn-sm" id="ping-send">' +
       esc(T('daemon.sendPing')) +
       '</button>' +
-      '<div id="ping-list" style="margin-top:0.75rem;font-size:0.8rem;" class="mono"></div>' +
+      '<div id="event-log-list" style="margin-top:0.75rem;font-size:0.8rem;" class="mono"></div>' +
       '</div>';
 
     root._pairSnap = { active: false, pin: null, expires_at: null, failed_attempts: 0 };
@@ -709,24 +719,27 @@
       paintPairingUi();
     }
 
-    async function refreshPingList() {
-      const box = root.querySelector('#ping-list');
-      if (!box || root.querySelector('#ping-panel').style.display === 'none') return;
+    async function refreshEventLog() {
+      const box = root.querySelector('#event-log-list');
+      if (!box || root.querySelector('#event-log-panel').style.display === 'none') return;
       try {
-        const data = await window.JibeApi.json('/api/daemon/ping-activity');
+        const data = await window.JibeApi.json('/api/daemon/event-log');
         if (!data.items || data.items.length === 0) {
-          box.textContent = T('daemon.noPings');
+          box.textContent = T('daemon.noEvents');
           return;
         }
-        const tail = data.items.slice(-PING_ACTIVITY_DISPLAY_MAX).reverse();
+        const tail = data.items.slice(-EVENT_LOG_DISPLAY_MAX).reverse();
         box.innerHTML = tail
           .map(function (it) {
-            const dir =
-              it.direction === 'out' ? T('daemon.directionOut') : T('daemon.directionIn');
             let line =
-              esc(it.at) + ' · ' + esc(it.device_name || '') + ' · ' + esc(dir);
-            if (it.rtt_ms != null)
-              line += ' · ' + esc(T('daemon.rtt')) + ' ' + esc(String(it.rtt_ms)) + ' ms';
+              esc(it.at) +
+              ' · ' +
+              esc(it.category) +
+              ' · ' +
+              esc(it.message);
+            if (it.detail && Object.keys(it.detail).length > 0) {
+              line += ' · ' + esc(JSON.stringify(it.detail));
+            }
             return line;
           })
           .join('<br/>');
@@ -735,11 +748,11 @@
       }
     }
 
-    const pingPanel = root.querySelector('#ping-panel');
-    if (localStorage.getItem(STORAGE_PING_CARD) === '1') {
-      pingPanel.style.display = '';
-      root._pingPollTimer = setInterval(() => refreshPingList().catch(() => {}), 2000);
-      refreshPingList().catch(() => {});
+    const eventLogPanel = root.querySelector('#event-log-panel');
+    if (daemonEventLogEnabled()) {
+      eventLogPanel.style.display = '';
+      root._eventLogPollTimer = setInterval(() => refreshEventLog().catch(() => {}), 2000);
+      refreshEventLog().catch(() => {});
     }
 
     root.querySelector('#pair-start').onclick = async () => {
@@ -778,7 +791,7 @@
       pingBtn.onclick = async () => {
         try {
           await window.JibeApi.json('/api/daemon/ping-send', { method: 'POST', body: '{}' });
-          await refreshPingList();
+          await refreshEventLog();
         } catch (e) {
           alert(String(e.message || e));
         }
@@ -884,11 +897,11 @@
         '</summary>' +
         '<div class="settings-advanced-body">' +
         '<div class="checkbox-row" style="margin-top:0;">' +
-        '<input type="checkbox" id="set-ping-card" />' +
-        '<label for="set-ping-card">' +
-        esc(T('settings.devPingCard')) +
+        '<input type="checkbox" id="set-daemon-event-log" />' +
+        '<label for="set-daemon-event-log">' +
+        esc(T('settings.devEventLog')) +
         '<br/><span class="settings-help" style="display:inline-block;margin-top:0.25rem;">' +
-        esc(T('settings.devPingHelp')) +
+        esc(T('settings.devEventLogHelp')) +
         '</span></label></div>' +
         '<hr class="settings-divider" />' +
         '<div class="settings-actions">' +
@@ -946,10 +959,9 @@
     };
 
     if (admin) {
-      root.querySelector('#set-ping-card').checked =
-        localStorage.getItem(STORAGE_PING_CARD) === '1';
-      root.querySelector('#set-ping-card').onchange = (e) => {
-        localStorage.setItem(STORAGE_PING_CARD, e.target.checked ? '1' : '0');
+      root.querySelector('#set-daemon-event-log').checked = daemonEventLogEnabled();
+      root.querySelector('#set-daemon-event-log').onchange = (e) => {
+        setDaemonEventLogEnabled(e.target.checked);
       };
 
       root.querySelector('#btn-clear-hist').onclick = async () => {

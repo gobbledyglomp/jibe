@@ -110,14 +110,11 @@
         tlsSection: 'TLS',
         regenCert: 'Regenerate certificate',
         regenConfirm: 'Delete TLS certs and generate new ones? Restart daemon to load them.',
-        pingActivity: 'Ping activity',
-        pingHint:
-          'Shows application-layer pings from devices and round-trip when clients echo the probe in pong.',
+        eventLogTitle: 'Event log',
+        eventLogHint:
+          'Live tail of notable daemon activity (devices, pairing, transfers, pings, dashboard actions). Localhost only.',
         sendPing: 'Send ping to connected devices',
-        noPings: 'No ping events yet.',
-        directionIn: 'from device',
-        directionOut: 'round-trip',
-        rtt: 'RTT',
+        noEvents: 'No events recorded yet.',
       },
       settings: {
         title: 'Settings',
@@ -145,9 +142,9 @@
           'Removes connection session rows from the database. History lists are unchanged.',
         clearStatsConfirm: 'Delete all stored session records?',
         advanced: 'Advanced',
-        devPingCard: 'Show ping activity on Daemon page',
-        devPingHelp:
-          'Polls ping events and allows sending a probe ping (clients must echo probe in pong for RTT).',
+        devEventLog: 'Show daemon event log on Daemon page',
+        devEventLogHelp:
+          'Streams notable events to the browser and still lets you broadcast an application ping for RTT.',
         recoveryRotate: 'Generate new recovery token',
         recoveryRotateHelp:
           'Invalidates the old token file. Copy the new token immediately — it is shown only once.',
@@ -265,14 +262,11 @@
         regenCert: 'Regenerar certificado',
         regenConfirm:
           '¿Eliminar certificados TLS y generar otros nuevos? Reinicia el demonio para cargarlos.',
-        pingActivity: 'Actividad de ping',
-        pingHint:
-          'Muestra pings en capa de aplicación desde los dispositivos y la ida y vuelta si el cliente devuelve la sonda en pong.',
+        eventLogTitle: 'Registro de eventos',
+        eventLogHint:
+          'Actividad destacada del demonio en vivo (dispositivos, emparejamiento, transferencias, pings, acciones del panel). Solo localhost.',
         sendPing: 'Enviar ping a dispositivos conectados',
-        noPings: 'Aún no hay eventos de ping.',
-        directionIn: 'desde dispositivo',
-        directionOut: 'ida y vuelta',
-        rtt: 'RTT',
+        noEvents: 'Aún no hay eventos registrados.',
       },
       settings: {
         title: 'Ajustes',
@@ -300,9 +294,9 @@
           'Elimina las filas de sesiones de conexión en la base de datos. Las listas del historial no cambian.',
         clearStatsConfirm: '¿Eliminar todos los registros de sesión?',
         advanced: 'Avanzado',
-        devPingCard: 'Mostrar actividad de ping en la página Demonio',
-        devPingHelp:
-          'Consulta eventos de ping y permite enviar un ping de prueba (los clientes deben devolver la sonda en pong para ver RTT).',
+        devEventLog: 'Mostrar registro de eventos del demonio en la página Demonio',
+        devEventLogHelp:
+          'Transmite eventos destacados al navegador y sigue permitiendo un ping de aplicación para medir RTT.',
         recoveryRotate: 'Generar nuevo token de recuperación',
         recoveryRotateHelp:
           'Invalida el token anterior. Copia el nuevo al instante — solo se muestra una vez.',

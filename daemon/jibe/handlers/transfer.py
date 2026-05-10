@@ -462,6 +462,7 @@ async def handle_file_done(
     conn: JibeConnection,
     msg: JibeMessage,
     db: JibeDatabase | None = None,
+    event_log: Any | None = None,
 ) -> None:
     """Verify integrity, move file into Downloads, and acknowledge."""
     payload = msg.payload
@@ -550,4 +551,13 @@ async def handle_file_done(
         logger.exception("Failed removing temp dir for completed transfer %s", transfer_id)
 
     await _try_finish_transfer_history(db, transfer_id, "completed")
+    if event_log is not None:
+        event_log.record(
+            "transfer",
+            f"File received: {transfer.filename}",
+            filename=transfer.filename,
+            size_bytes=transfer.size,
+            device_name=conn.device_name,
+            device_id=conn.device_id,
+        )
     await _send_ack(conn, transfer_id, True)

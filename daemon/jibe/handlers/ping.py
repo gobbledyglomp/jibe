@@ -49,5 +49,11 @@ async def handle_ping(
 
     await conn.send(json.dumps(body))
     if activity_log is not None and conn.is_authenticated:
-        activity_log.record_incoming(conn.device_name or "device", conn.device_id)
+        activity_log.record(
+            "ping",
+            f"Ping from {conn.device_name or 'device'}",
+            direction="in",
+            device_name=conn.device_name,
+            device_id=conn.device_id,
+        )
     logger.debug("Sent pong to %s", conn.id)

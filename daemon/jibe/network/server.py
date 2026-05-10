@@ -54,7 +54,8 @@ from jibe.handlers.transfer import (
     handle_file_start,
 )
 from jibe.network.connection import ConnectionRegistry, ConnectionState, JibeConnection
-from jibe.network.ping_activity import PingActivityLog, PingProbeTracker
+from jibe.network.dashboard_event_log import DashboardEventLog
+from jibe.network.ping_probe import PingProbeTracker
 
 logger = logging.getLogger(__name__)
 
@@ -153,7 +154,7 @@ class JibeServer:
         self._clipboard_monitor = ClipboardMonitor(self._registry, db=db)
         self._router = MessageRouter()
         self._jwt_auth = JWTAuth(db)
-        self._ping_log = PingActivityLog()
+        self._event_log = DashboardEventLog()
         self._probe_tracker = PingProbeTracker()
         self._register_handlers()
         self._started_at_monotonic: float | None = None
@@ -199,20 +200,21 @@ class JibeServer:
         async def handle_transfer_cancel(conn: JibeConnection, msg: JibeMessage) -> None:
             await handle_file_cancel(conn, msg, db=db)
 
+        event_log = self._event_log
+
         async def handle_transfer_done(conn: JibeConnection, msg: JibeMessage) -> None:
-            await handle_file_done(conn, msg, db=db)
+            await handle_file_done(conn, msg, db=db, event_log=event_log)
 
         async def handle_notify(conn: JibeConnection, msg: JibeMessage) -> None:
             await handle_notification(conn, msg, db=db)
 
-        ping_log = self._ping_log
         tracker = self._probe_tracker
 
         async def _ping_route(conn: JibeConnection, msg: JibeMessage) -> None:
-            await handle_ping(conn, msg, activity_log=ping_log)
+            await handle_ping(conn, msg, activity_log=event_log)
 
         async def _pong_route(conn: JibeConnection, msg: JibeMessage) -> None:
-            await handle_pong(conn, msg, probe_tracker=tracker, activity_log=ping_log)
+            await handle_pong(conn, msg, probe_tracker=tracker, activity_log=event_log)
 
         self._router.register(MessageType.PING, _ping_route)
         self._router.register(MessageType.PONG, _pong_route)
@@ -283,7 +285,8 @@ class JibeServer:
         app.router.add_post("/api/daemon/pairing/stop", self.handle_api_daemon_pairing_stop)
         app.router.add_get("/api/daemon/pairing/status", self.handle_api_daemon_pairing_status)
         app.router.add_post("/api/daemon/certs/regen", self.handle_api_daemon_certs_regen)
-        app.router.add_get("/api/daemon/ping-activity", self.handle_api_daemon_ping_activity)
+        app.router.add_get("/api/daemon/event-log", self.handle_api_daemon_event_log)
+        app.router.add_get("/api/daemon/ping-activity", self.handle_api_daemon_event_log)
         app.router.add_post("/api/daemon/ping-send", self.handle_api_daemon_ping_send)
 
     async def handle_root_redirect(self, request: web.Request) -> web.Response:
@@ -319,6 +322,13 @@ class JibeServer:
             await asyncio.sleep(AUTH_TIMEOUT_SECONDS)
             if not conn.is_authenticated:
                 logger.warning("Connection %s timed out waiting for auth", conn.id)
+                self._event_log.record(
+                    "auth",
+                    "WebSocket closed: authentication timeout",
+                    level="warn",
+                    client_ip=client_ip,
+                    connection_id=conn.id,
+                )
                 await conn.close()
 
         timeout_task = asyncio.create_task(auth_timeout())
@@ -341,6 +351,12 @@ class JibeServer:
             self._registry.remove(conn)
             await abort_transfers_for_connection(conn.id, db=self._db)
             if conn.is_authenticated and conn.device_id:
+                self._event_log.record(
+                    "device",
+                    f"Device disconnected: {conn.device_name or conn.device_id}",
+                    device_id=conn.device_id,
+                    connection_id=conn.id,
+                )
                 try:
                     await self._db.end_session(conn.id)
                 except Exception:
@@ -360,6 +376,13 @@ class JibeServer:
             jibe_msg = parse_message(raw)
         except InvalidMessageError as e:
             logger.warning("Invalid message from %s: %s", conn.id, e)
+            self._event_log.record(
+                "protocol",
+                f"Invalid message: {e.code}",
+                level="warn",
+                connection_id=conn.id,
+                device_name=conn.device_name if conn.is_authenticated else None,
+            )
             await conn.send(format_error(e.code, str(e)))
             return
 
@@ -378,6 +401,12 @@ class JibeServer:
                     jibe_msg.payload, conn.client_ip
                 )
             except AuthError as e:
+                self._event_log.record(
+                    "auth",
+                    str(e),
+                    level="warn",
+                    client_ip=conn.client_ip,
+                )
                 await conn.send(format_error("auth_rejected", str(e)))
                 await conn.close()
                 return
@@ -391,6 +420,21 @@ class JibeServer:
                 await self._db.start_session(conn.id, conn.device_id)
                 if hasattr(conn, "_auth_timeout_task"):
                     conn._auth_timeout_task.cancel()
+                self._event_log.record(
+                    "device",
+                    f"Device authenticated: {conn.device_name or 'unknown'}",
+                    device_id=conn.device_id,
+                    client_ip=conn.client_ip,
+                )
+            else:
+                reason = str(result.get("reason") or "rejected")
+                self._event_log.record(
+                    "auth",
+                    "Authentication rejected",
+                    level="warn",
+                    reason=reason[:400],
+                    client_ip=conn.client_ip,
+                )
 
             await conn.send(json.dumps(result))
             return
@@ -511,6 +555,11 @@ class JibeServer:
 
         await self._db.update_user_password(admin_id, new_password)
         logger.warning("Dashboard admin password reset via recovery token (localhost)")
+        self._event_log.record(
+            "security",
+            "Admin password reset using recovery token",
+            level="warn",
+        )
         return web.json_response({"ok": True})
 
     async def handle_api_auth_change_password(self, request: web.Request) -> web.Response:
@@ -549,6 +598,10 @@ class JibeServer:
         await self._db.clear_transfer_history()
         await self._db.clear_clipboard_history()
         await self._db.clear_notification_log()
+        self._event_log.record(
+            "dashboard",
+            "Transfer, clipboard, and notification history cleared",
+        )
         return web.json_response({"ok": True})
 
     async def handle_api_settings_clear_statistics(self, request: web.Request) -> web.Response:
@@ -556,6 +609,11 @@ class JibeServer:
         user = self._require_user(request)
         self._require_admin(user)
         n = await self._db.clear_sessions()
+        self._event_log.record(
+            "dashboard",
+            f"Statistics sessions cleared ({n} removed)",
+            sessions_removed=n,
+        )
         return web.json_response({"ok": True, "sessions_removed": n})
 
     async def handle_api_settings_recovery_regenerate(self, request: web.Request) -> web.Response:
@@ -565,12 +623,17 @@ class JibeServer:
         token = secrets.token_urlsafe(32)
         self._db.write_recovery_key_secret(token)
         logger.warning("Dashboard recovery token regenerated (localhost)")
+        self._event_log.record(
+            "security",
+            "Dashboard recovery token regenerated",
+            level="warn",
+        )
         return web.json_response({"recovery_token": token})
 
-    async def handle_api_daemon_ping_activity(self, request: web.Request) -> web.Response:
+    async def handle_api_daemon_event_log(self, request: web.Request) -> web.Response:
         user = self._require_user(request)
         self._require_admin(user)
-        return web.json_response({"items": self._ping_log.list_dicts()})
+        return web.json_response({"items": self._event_log.list_dicts()})
 
     async def handle_api_daemon_ping_send(self, request: web.Request) -> web.Response:
         """Broadcast an application ping with a probe id so ``pong`` can measure RTT."""
@@ -582,6 +645,12 @@ class JibeServer:
         for conn in self._registry.get_authenticated():
             await conn.send(payload)
             n += 1
+        self._event_log.record(
+            "ping",
+            f"Broadcast application ping to {n} device(s)",
+            recipients=n,
+            probe=probe[:12],
+        )
         return web.json_response({"sent": n, "probe": probe})
 
     async def handle_api_status(self, request: web.Request) -> web.Response:
@@ -632,6 +701,11 @@ class JibeServer:
         if not ok:
             raise web.HTTPNotFound(text=json.dumps({"error": "not found"}))
         row = await self._db.get_device_by_id(device_id)
+        self._event_log.record(
+            "device",
+            f"Device renamed: {name.strip()}",
+            device_id=device_id,
+        )
         return web.json_response(row)
 
     async def handle_api_delete_device(self, request: web.Request) -> web.Response:
@@ -645,6 +719,11 @@ class JibeServer:
         removed = await self._db.remove_device(device_id)
         if not removed:
             raise web.HTTPNotFound(text=json.dumps({"error": "not found"}))
+        self._event_log.record(
+            "device",
+            f"Device removed: {device_id}",
+            device_id=device_id,
+        )
         return web.json_response({"removed": device_id})
 
     def _parse_list_params(self, request: web.Request) -> tuple[int, int, dict[str, str | None]]:
@@ -836,12 +915,14 @@ class JibeServer:
         self._require_admin(user)
         pin = self._auth.start_pairing()
         snap = self._auth.pairing_status_snapshot()
+        self._event_log.record("pairing", "Pairing mode started")
         return web.json_response({"pin": pin, "expires_at": snap.get("expires_at")})
 
     async def handle_api_daemon_pairing_stop(self, request: web.Request) -> web.Response:
         user = self._require_user(request)
         self._require_admin(user)
         self._auth.stop_pairing()
+        self._event_log.record("pairing", "Pairing mode stopped")
         return web.json_response({"ok": True})
 
     async def handle_api_daemon_pairing_status(self, request: web.Request) -> web.Response:
@@ -857,6 +938,11 @@ class JibeServer:
         cert_path, _ = generate_self_signed_cert()
         fp = get_cert_fingerprint(cert_path)
         self._cert_path = cert_path
+        self._event_log.record(
+            "tls",
+            "TLS certificate regenerated (daemon restart required)",
+            fingerprint=fp,
+        )
         return web.json_response(
             {"fingerprint": fp, "note": "restart required — reload TLS context"}
         )
