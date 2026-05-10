@@ -1,6 +1,5 @@
 package com.jibe.app.ui.screens
 
-import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
@@ -58,8 +57,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jibe.app.R
 import com.jibe.app.data.repository.ConnectionRepository
 import com.jibe.app.data.repository.ConnectionState
+import com.jibe.app.data.repository.ClipboardTextReader
 import com.jibe.app.data.repository.PingResult
 import com.jibe.app.data.repository.TransferProgress
 import com.jibe.app.ui.components.JibeSpinner
@@ -169,7 +170,8 @@ fun HomeScreen(repository: ConnectionRepository, onDeviceForgotten: () -> Unit) 
                         FileTransferCard(
                                 isConnected = state is ConnectionState.Connected,
                                 transferProgress = transferProgress,
-                                onPickClick = { pickDocument.launch(arrayOf("*/*")) }
+                                onPickClick = { pickDocument.launch(arrayOf("*/*")) },
+                                onCancelClick = { repository.cancelFileTransfer() }
                         )
 
                         Spacer(modifier = Modifier.height(12.dp))
@@ -453,18 +455,36 @@ private fun ClipboardCard(isConnected: Boolean, repository: ConnectionRepository
 
                         Button(
                                 onClick = {
-                                        val cm =
-                                                context.getSystemService(Context.CLIPBOARD_SERVICE) as
-                                                        ClipboardManager
-                                        val clip = cm.primaryClip
-                                        val text =
-                                                clip?.getItemAt(0)?.coerceToText(context)?.toString()
+                                        val text = ClipboardTextReader.readPlainText(context)
                                         if (text.isNullOrBlank()) {
-                                                Toast.makeText(context, "Clipboard empty", Toast.LENGTH_SHORT)
+                                                Toast.makeText(
+                                                                context,
+                                                                context.getString(
+                                                                        R.string.clipboard_sync_empty
+                                                                ),
+                                                                Toast.LENGTH_SHORT
+                                                        )
                                                         .show()
                                         } else {
-                                                repository.sendClipboardSync(text)
-                                                Toast.makeText(context, "Sent", Toast.LENGTH_SHORT).show()
+                                                if (repository.sendClipboardSync(text)) {
+                                                        Toast.makeText(
+                                                                        context,
+                                                                        context.getString(
+                                                                                R.string.clipboard_sync_sent
+                                                                        ),
+                                                                        Toast.LENGTH_SHORT
+                                                                )
+                                                                .show()
+                                                } else {
+                                                        Toast.makeText(
+                                                                        context,
+                                                                        context.getString(
+                                                                                R.string.clipboard_sync_not_connected
+                                                                        ),
+                                                                        Toast.LENGTH_SHORT
+                                                                )
+                                                                .show()
+                                                }
                                         }
                                 },
                                 enabled = isConnected,
@@ -483,10 +503,13 @@ private fun ClipboardCard(isConnected: Boolean, repository: ConnectionRepository
 private fun FileTransferCard(
         isConnected: Boolean,
         transferProgress: TransferProgress?,
-        onPickClick: () -> Unit
+        onPickClick: () -> Unit,
+        onCancelClick: () -> Unit
 ) {
         val busy =
-                transferProgress?.let { !it.isComplete && it.error == null } == true
+                transferProgress?.let {
+                    !it.isComplete && !it.isCancelled && it.error == null
+                } == true
 
         Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -513,16 +536,51 @@ private fun FileTransferCard(
                                         )
                                 }
 
-                                Button(
-                                        onClick = onPickClick,
-                                        enabled = isConnected && !busy,
-                                        shape = RoundedCornerShape(8.dp),
-                                        colors =
-                                                ButtonDefaults.buttonColors(
-                                                        containerColor = JibePrimary.copy(alpha = 0.12f),
-                                                        contentColor = JibePrimary
+                                when {
+                                        transferProgress?.isCancelled == true -> {
+                                                Spacer(modifier = Modifier.width(1.dp))
+                                        }
+                                        busy -> {
+                                        Button(
+                                                onClick = onCancelClick,
+                                                enabled = isConnected,
+                                                shape = RoundedCornerShape(8.dp),
+                                                colors =
+                                                        ButtonDefaults.buttonColors(
+                                                                containerColor =
+                                                                        JibeError.copy(
+                                                                                alpha = 0.14f
+                                                                        ),
+                                                                contentColor = JibeError
+                                                        )
+                                        ) {
+                                                Text(
+                                                        text = "Cancel",
+                                                        style = MaterialTheme.typography.labelLarge
                                                 )
-                                ) { Text(text = "Pick", style = MaterialTheme.typography.labelLarge) }
+                                        }
+                                        }
+                                        else -> {
+                                        Button(
+                                                onClick = onPickClick,
+                                                enabled = isConnected,
+                                                shape = RoundedCornerShape(8.dp),
+                                                colors =
+                                                        ButtonDefaults.buttonColors(
+                                                                containerColor =
+                                                                        JibePrimary.copy(
+                                                                                alpha = 0.12f
+                                                                        ),
+                                                                contentColor = JibePrimary
+                                                        )
+                                        ) {
+                                                Text(
+                                                        text = "Pick",
+                                                        style = MaterialTheme.typography.labelLarge
+                                                )
+                                        }
+                                        }
+                                }
                         }
 
                         if (transferProgress != null) {
@@ -539,6 +597,13 @@ private fun FileTransferCard(
                                                         text = transferProgress.error,
                                                         style = MaterialTheme.typography.bodySmall,
                                                         color = JibeError.copy(alpha = 0.9f)
+                                                )
+                                        }
+                                        transferProgress.isCancelled -> {
+                                                Text(
+                                                        text = "Cancelled",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = JibeOnSurfaceVariant.copy(alpha = 0.9f)
                                                 )
                                         }
                                         transferProgress.isComplete -> {
