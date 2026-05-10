@@ -31,10 +31,19 @@ async def _authenticate(ws, jibe_server):
     return resp
 
 
-async def test_health_returns_status_and_version(aiohttp_client, jibe_app):
-    """GET / should return running status and the current version."""
+async def test_root_redirects_to_dashboard(aiohttp_client, jibe_app):
+    """GET / should redirect to the web login page."""
     client = await aiohttp_client(jibe_app)
-    resp = await client.get("/")
+    resp = await client.get("/", allow_redirects=False)
+
+    assert resp.status == 302
+    assert resp.headers.get("Location") == "/web/index.html"
+
+
+async def test_health_returns_status_and_version(aiohttp_client, jibe_app):
+    """GET /health should return running status and the current version."""
+    client = await aiohttp_client(jibe_app)
+    resp = await client.get("/health")
 
     assert resp.status == 200
 
@@ -44,24 +53,24 @@ async def test_health_returns_status_and_version(aiohttp_client, jibe_app):
 
 
 async def test_health_content_type_is_json(aiohttp_client, jibe_app):
-    """GET / should set the correct Content-Type header."""
+    """GET /health should set the correct Content-Type header."""
     client = await aiohttp_client(jibe_app)
-    resp = await client.get("/")
+    resp = await client.get("/health")
 
     assert "application/json" in resp.headers["Content-Type"]
 
 
 async def test_health_reports_connected_devices(aiohttp_client, jibe_app, jibe_server):
-    """GET / should report the number of authenticated connections."""
+    """GET /health should report the number of authenticated connections."""
     client = await aiohttp_client(jibe_app)
 
-    data = await (await client.get("/")).json()
+    data = await (await client.get("/health")).json()
     assert data["connected_devices"] == 0
 
     ws = await client.ws_connect("/ws")
     await _authenticate(ws, jibe_server)
 
-    data = await (await client.get("/")).json()
+    data = await (await client.get("/health")).json()
     assert data["connected_devices"] == 1
 
     await ws.close()

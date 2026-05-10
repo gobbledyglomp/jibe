@@ -166,7 +166,7 @@ async def test_abort_transfers_for_connection_removes_workspace(mock_ws, monkeyp
     temp_root = workspace.parent
     assert workspace.is_dir()
 
-    abort_transfers_for_connection(conn.id)
+    await abort_transfers_for_connection(conn.id)
 
     assert tid not in transfer_mod._transfers
     assert not workspace.exists()

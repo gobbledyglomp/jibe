@@ -46,6 +46,12 @@ def jibe_app(jibe_server):
 
 
 @pytest.fixture
+async def dashboard_admin(db):
+    """Dashboard login ``admin`` / ``testpass`` with admin role."""
+    await db.add_user("admin", "testpass", "admin")
+
+
+@pytest.fixture
 async def db(tmp_path):
     """Create a JibeDatabase backed by a temp file.
 

@@ -25,9 +25,9 @@ async def _authenticate_tls(ws, jibe_server_tls):
 
 
 async def test_health_over_tls(aiohttp_client, jibe_app_tls):
-    """GET / over TLS should return status and version."""
+    """GET /health over TLS should return status and version."""
     client = await aiohttp_client(jibe_app_tls)
-    resp = await client.get("/")
+    resp = await client.get("/health")
 
     assert resp.status == 200
     data = await resp.json()
