@@ -17,7 +17,12 @@ from typing import Any
 import aiosqlite
 import bcrypt
 
-from jibe.core.config import DATABASE_DIR, DATABASE_NAME, SCHEMA_VERSION
+from jibe.core.config import (
+    DASHBOARD_RECOVERY_KEY_FILE,
+    DATABASE_DIR,
+    DATABASE_NAME,
+    SCHEMA_VERSION,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -227,12 +232,27 @@ class JibeDatabase:
             (user_id, "admin", hashed, now),
         )
         await self._conn.commit()
+        recovery_token = secrets.token_urlsafe(32)
+        recovery_path = self._db_path.parent / DASHBOARD_RECOVERY_KEY_FILE
+        self._db_path.parent.mkdir(parents=True, exist_ok=True)
+        recovery_path.write_text(recovery_token + "\n", encoding="utf8")
+        try:
+            recovery_path.chmod(0o600)
+        except OSError:
+            logger.debug("could not chmod recovery key file", exc_info=True)
         logger.warning(
-            "\n%s\n  Jibe dashboard: created default admin user.\n"
-            "  Username: admin  Password: %s\n"
-            "  Change this password after first login.\n%s",
+            "\n%s\n"
+            "  Jibe dashboard: created default admin user.\n"
+            "  Username: admin\n"
+            "  Password (save now): %s\n"
+            "  Password recovery token file (keep secret — localhost only):\n"
+            "    %s\n"
+            "  If you lose the password, open that file or use \"Forgot password\" "
+            "on the login page with the token inside it.\n"
+            "  Change the password after first login (Dashboard → Settings).\n%s",
             "=" * 72,
             password,
+            recovery_path.resolve(),
             "=" * 72,
         )
         return password
@@ -320,6 +340,77 @@ class JibeDatabase:
         )
         await self._conn.commit()
         return cursor.rowcount > 0
+
+    async def update_user_password(self, user_id: str, password_plain: str) -> bool:
+        """Set a new bcrypt password hash for the user."""
+        hashed = bcrypt.hashpw(password_plain.encode(), bcrypt.gensalt(rounds=12)).decode()
+        cursor = await self._conn.execute(
+            "UPDATE users SET password_hash = ? WHERE id = ?;",
+            (hashed, user_id),
+        )
+        await self._conn.commit()
+        return cursor.rowcount > 0
+
+    def recovery_key_path(self) -> Path:
+        """Filesystem path to the dashboard recovery token file.
+
+        Stored beside the SQLite database file so tests using a temp DB path
+        stay isolated from the user's real data directory.
+        """
+        return self._db_path.parent / DASHBOARD_RECOVERY_KEY_FILE
+
+    def recovery_key_configured(self) -> bool:
+        """Whether a recovery token file exists (bootstrap created or rotated)."""
+        return self.recovery_key_path().is_file()
+
+    async def first_admin_user_id(self) -> str | None:
+        """Oldest admin account by ``created_at`` (bootstrap admin first)."""
+        cursor = await self._conn.execute(
+            """
+            SELECT id FROM users WHERE role = 'admin'
+            ORDER BY created_at ASC LIMIT 1;
+            """
+        )
+        row = await cursor.fetchone()
+        return None if row is None else str(row[0])
+
+    def read_recovery_key_secret(self) -> str | None:
+        """Return stored recovery token, or ``None`` if missing/unreadable."""
+        path = self.recovery_key_path()
+        try:
+            return path.read_text(encoding="utf8").strip()
+        except OSError:
+            return None
+
+    def write_recovery_key_secret(self, token: str) -> None:
+        """Write recovery token to disk with restrictive permissions."""
+        self._db_path.parent.mkdir(parents=True, exist_ok=True)
+        path = self.recovery_key_path()
+        path.write_text(token.strip() + "\n", encoding="utf8")
+        try:
+            path.chmod(0o600)
+        except OSError:
+            logger.debug("could not chmod recovery key file", exc_info=True)
+
+    async def clear_transfer_history(self) -> int:
+        cursor = await self._conn.execute("DELETE FROM transfer_history;")
+        await self._conn.commit()
+        return cursor.rowcount
+
+    async def clear_clipboard_history(self) -> int:
+        cursor = await self._conn.execute("DELETE FROM clipboard_history;")
+        await self._conn.commit()
+        return cursor.rowcount
+
+    async def clear_notification_log(self) -> int:
+        cursor = await self._conn.execute("DELETE FROM notification_log;")
+        await self._conn.commit()
+        return cursor.rowcount
+
+    async def clear_sessions(self) -> int:
+        cursor = await self._conn.execute("DELETE FROM sessions;")
+        await self._conn.commit()
+        return cursor.rowcount
 
     async def get_meta_value(self, key: str) -> str | None:
         """Read a value from the ``meta`` table."""
