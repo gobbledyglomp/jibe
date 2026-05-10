@@ -57,9 +57,12 @@ data class ClipboardSyncMessage(
 data class NotificationMessage(
         @SerializedName("type") val type: String = MessageType.NOTIFICATION.value,
         @SerializedName("app") val app: String,
+        @SerializedName("app_name") val appName: String,
         @SerializedName("title") val title: String,
         @SerializedName("body") val body: String,
-        @SerializedName("timestamp") val timestamp: Long
+        @SerializedName("timestamp") val timestamp: Long,
+        @SerializedName("icon") val icon: String? = null,
+        @SerializedName("image") val image: String? = null
 )
 
 data class FileStartMessage(
