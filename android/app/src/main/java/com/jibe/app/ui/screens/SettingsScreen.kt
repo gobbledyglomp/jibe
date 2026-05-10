@@ -1,6 +1,7 @@
 package com.jibe.app.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -8,30 +9,48 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.jibe.app.R
+import com.jibe.app.data.local.AppSettings
 import com.jibe.app.data.local.JibeDataStore
 import kotlinx.coroutines.launch
 
 /**
- * In-app preferences: appearance, locale, and per-feature toggles respected by the foreground
- * service and message handlers.
+ * Preferences screen: appearance (theme, language) and per-feature toggles.
+ * All values are loaded as a single snapshot to avoid toggle flicker on entry.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,27 +58,45 @@ fun SettingsScreen(dataStore: JibeDataStore, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     val scroll = rememberScrollState()
 
-    val theme by dataStore.theme.collectAsStateWithLifecycle(initialValue = "dark")
-    val language by dataStore.language.collectAsStateWithLifecycle(initialValue = "auto")
+    var settings by remember { mutableStateOf<AppSettings?>(null) }
 
-    val featClipboard by dataStore.featClipboard.collectAsStateWithLifecycle(initialValue = true)
-    val featNotifications by dataStore.featNotifications.collectAsStateWithLifecycle(initialValue = true)
-    val featFileTransfer by dataStore.featFileTransfer.collectAsStateWithLifecycle(initialValue = true)
-    val featPresentation by dataStore.featPresentationRemote.collectAsStateWithLifecycle(initialValue = true)
-    val featFindPhone by dataStore.featFindPhone.collectAsStateWithLifecycle(initialValue = true)
-    val featPing by dataStore.featPing.collectAsStateWithLifecycle(initialValue = false)
+    LaunchedEffect(Unit) {
+        dataStore.allSettings.collect { settings = it }
+    }
 
     Scaffold(
             modifier = Modifier.fillMaxSize(),
+            containerColor = MaterialTheme.colorScheme.surface,
             topBar = {
-                CenterAlignedTopAppBar(
-                        title = { Text("Settings", fontWeight = FontWeight.SemiBold) },
+                TopAppBar(
+                        title = {
+                            Text(
+                                    stringResource(R.string.settings_title),
+                                    fontWeight = FontWeight.SemiBold
+                            )
+                        },
                         navigationIcon = {
-                            TextButton(onClick = onBack) { Text("← Back") }
-                        }
+                            IconButton(onClick = onBack) {
+                                Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                        contentDescription = stringResource(R.string.action_back),
+                                        tint = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                                containerColor = MaterialTheme.colorScheme.surface,
+                                titleContentColor = MaterialTheme.colorScheme.onSurface
+                        )
                 )
             }
     ) { inner ->
+        val s = settings
+        if (s == null) {
+            Box(modifier = Modifier.fillMaxSize().padding(inner))
+            return@Scaffold
+        }
+
         Column(
                 modifier =
                         Modifier.padding(inner)
@@ -67,81 +104,69 @@ fun SettingsScreen(dataStore: JibeDataStore, onBack: () -> Unit) {
                                 .padding(horizontal = 20.dp, vertical = 8.dp)
                                 .fillMaxWidth()
         ) {
-            SectionTitle("Appearance")
+            SectionTitle(stringResource(R.string.settings_appearance))
+
             ToggleRow(
-                    title = "Dark theme",
-                    subtitle = "When off, uses light surfaces",
-                    checked = theme == "dark",
+                    title = stringResource(R.string.settings_dark_theme),
+                    subtitle = stringResource(R.string.settings_dark_theme_desc),
+                    checked = s.theme == "dark",
                     onCheckedChange = { dark ->
                         scope.launch { dataStore.setTheme(if (dark) "dark" else "light") }
                     }
             )
-            Spacer(modifier = Modifier.height(12.dp))
-            Text("Language", style = MaterialTheme.typography.titleSmall)
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                LangChip(
-                        label = "Auto",
-                        selected = language == "auto",
-                        onClick = { scope.launch { dataStore.setLanguage("auto") } }
-                )
-                LangChip(
-                        label = "EN",
-                        selected = language == "en",
-                        onClick = { scope.launch { dataStore.setLanguage("en") } }
-                )
-                LangChip(
-                        label = "ES",
-                        selected = language == "es",
-                        onClick = { scope.launch { dataStore.setLanguage("es") } }
-                )
-            }
-            Text(
-                    text = "Applies UI locale via system APIs where supported.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 8.dp)
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            LanguageDropdown(
+                    selected = s.language,
+                    onSelect = { lang -> scope.launch { dataStore.setLanguage(lang) } }
             )
 
-            HorizontalDivider(modifier = Modifier.padding(vertical = 20.dp))
+            HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 20.dp),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+            )
 
-            SectionTitle("Features")
+            SectionTitle(stringResource(R.string.settings_features))
+
             ToggleRow(
-                    title = "Clipboard sync",
-                    subtitle = "Send and receive clipboard text",
-                    checked = featClipboard,
+                    title = stringResource(R.string.settings_feat_clipboard),
+                    subtitle = stringResource(R.string.settings_feat_clipboard_desc),
+                    checked = s.featClipboard,
                     onCheckedChange = { v -> scope.launch { dataStore.setFeatClipboard(v) } }
             )
             ToggleRow(
-                    title = "Notification mirror",
-                    subtitle = "Forward notifications to Linux",
-                    checked = featNotifications,
+                    title = stringResource(R.string.settings_feat_notifications),
+                    subtitle = stringResource(R.string.settings_feat_notifications_desc),
+                    checked = s.featNotifications,
                     onCheckedChange = { v -> scope.launch { dataStore.setFeatNotifications(v) } }
             )
             ToggleRow(
-                    title = "File transfer",
-                    subtitle = "Upload files to the daemon",
-                    checked = featFileTransfer,
+                    title = stringResource(R.string.settings_feat_file_transfer),
+                    subtitle = stringResource(R.string.settings_feat_file_transfer_desc),
+                    checked = s.featFileTransfer,
                     onCheckedChange = { v -> scope.launch { dataStore.setFeatFileTransfer(v) } }
             )
             ToggleRow(
-                    title = "Presentation remote",
-                    subtitle = "Slide controls from Present screen",
-                    checked = featPresentation,
+                    title = stringResource(R.string.settings_feat_presentation),
+                    subtitle = stringResource(R.string.settings_feat_presentation_desc),
+                    checked = s.featPresentation,
                     onCheckedChange = { v -> scope.launch { dataStore.setFeatPresentationRemote(v) } }
             )
             ToggleRow(
-                    title = "Find my phone",
-                    subtitle = "Allow daemon ring commands",
-                    checked = featFindPhone,
+                    title = stringResource(R.string.settings_feat_find_phone),
+                    subtitle = stringResource(R.string.settings_feat_find_phone_desc),
+                    checked = s.featFindPhone,
                     onCheckedChange = { v -> scope.launch { dataStore.setFeatFindPhone(v) } }
             )
             ToggleRow(
-                    title = "Ping (diagnostic)",
-                    subtitle = "Application ping/pong latency button",
-                    checked = featPing,
+                    title = stringResource(R.string.settings_feat_ping),
+                    subtitle = stringResource(R.string.settings_feat_ping_desc),
+                    checked = s.featPing,
                     onCheckedChange = { v -> scope.launch { dataStore.setFeatPing(v) } }
             )
+
+            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }
@@ -150,8 +175,9 @@ fun SettingsScreen(dataStore: JibeDataStore, onBack: () -> Unit) {
 private fun SectionTitle(text: String) {
     Text(
             text = text,
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.padding(bottom = 12.dp)
     )
 }
@@ -169,27 +195,75 @@ private fun ToggleRow(
                             .padding(vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
+        Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
             Text(
                     subtitle,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                colors = SwitchDefaults.colors(
+                        checkedThumbColor = MaterialTheme.colorScheme.primary,
+                        checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
+                )
+        )
     }
 }
 
+private data class LanguageOption(val code: String, val label: String)
+
+private val LANGUAGE_OPTIONS = listOf(
+        LanguageOption("en", "English"),
+        LanguageOption("es", "Español"),
+)
+
 @Composable
-private fun LangChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    TextButton(onClick = onClick) {
+private fun LanguageDropdown(selected: String, onSelect: (String) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    val selectedLabel = LANGUAGE_OPTIONS.find { it.code == selected }?.label ?: "English"
+
+    Column {
         Text(
-                text = label,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                color =
-                        if (selected) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurface
+                stringResource(R.string.settings_language),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
         )
+        Spacer(modifier = Modifier.height(8.dp))
+        Box {
+            OutlinedButton(
+                    onClick = { expanded = true },
+                    shape = RoundedCornerShape(8.dp),
+            ) {
+                Text(
+                        text = selectedLabel,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+            DropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false }
+            ) {
+                LANGUAGE_OPTIONS.forEach { option ->
+                    DropdownMenuItem(
+                            text = {
+                                Text(
+                                        text = option.label,
+                                        fontWeight = if (option.code == selected) FontWeight.SemiBold else FontWeight.Normal,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                )
+                            },
+                            onClick = {
+                                expanded = false
+                                onSelect(option.code)
+                            }
+                    )
+                }
+            }
+        }
     }
 }
