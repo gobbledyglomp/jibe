@@ -17,6 +17,9 @@ import okhttp3.OkHttpClient
  */
 object OkHttpFactory {
 
+    /** Bound TLS/WebSocket handshake time so a dead daemon cannot leave the UI stuck on “Connecting”. */
+    private const val CONNECT_TIMEOUT_SEC = 15L
+
     /** OkHttp default read timeout is 10s; large ``file.chunk`` streams exceed that before any inbound traffic. */
     private const val SOCKET_TIMEOUT_SEC = 0L
 
@@ -42,6 +45,7 @@ object OkHttpFactory {
                 OkHttpClient.Builder()
                         .sslSocketFactory(sslContext.socketFactory, trustManager)
                         .hostnameVerifier { _, _ -> true }
+                        .connectTimeout(CONNECT_TIMEOUT_SEC, TimeUnit.SECONDS)
                         // Long uploads send many outbound chunks without inbound app messages until
                         // file.done; OkHttp defaults (read timeout 10s) close the socket mid-transfer.
                         .readTimeout(SOCKET_TIMEOUT_SEC, TimeUnit.SECONDS)

@@ -88,7 +88,7 @@ class JibeService : Service() {
                                     Build.MODEL?.takeIf { it.isNotBlank() }
                                             ?: DEFAULT_DEVICE_DISPLAY_NAME
                                 },
-                        socketFactory = OkHttpDaemonTlsSocketFactory(),
+                        socketFactory = OkHttpDaemonTlsSocketFactory(callbackScope = serviceScope),
                         clipboardWriter =
                                 ClipboardWriter { text ->
                                     Handler(Looper.getMainLooper()).post {
