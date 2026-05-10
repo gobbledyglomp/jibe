@@ -26,10 +26,9 @@ sealed class DiscoveryState {
 /**
  * Wraps Android's NsdManager to discover Jibe daemons on the LAN.
  *
- * The daemon registers itself as `_jibe._tcp.local.`; this class resolves discovery results into
- * host/port for the WebSocket connection and publishes them via [state].
- *
- * Call [stopDiscovery] when the hosting component is destroyed to avoid leaking the NSD listener.
+ * ``stopServiceDiscovery`` completes asynchronously; calling ``discoverServices`` again before
+ * [NsdManager.DiscoveryListener.onDiscoveryStopped] fires breaks NSD. A follow-up [startDiscovery]
+ * sets [pendingRestart] so discovery begins from ``onDiscoveryStopped``.
  */
 class JibeDiscovery(context: Context) {
 
@@ -44,7 +43,14 @@ class JibeDiscovery(context: Context) {
     private val _state = MutableStateFlow<DiscoveryState>(DiscoveryState.Idle)
     val state: StateFlow<DiscoveryState> = _state.asStateFlow()
 
+    /** True while ``discoverServices`` is active (until ``onDiscoveryStopped``). */
     private var isDiscovering = false
+
+    /** True after ``stopServiceDiscovery`` until ``onDiscoveryStopped``. */
+    private var stopInFlight = false
+
+    /** [startDiscovery] was requested while a stop was still completing. */
+    private var pendingRestart = false
 
     /** Bumped on every [stopDiscovery] so late [onServiceResolved] callbacks cannot emit stale Found. */
     private var resolveEpoch = 0
@@ -74,36 +80,61 @@ class JibeDiscovery(context: Context) {
 
                 override fun onDiscoveryStopped(serviceType: String) {
                     Log.d(TAG, "Discovery stopped for $serviceType")
+                    stopInFlight = false
                     isDiscovering = false
+                    _state.value = DiscoveryState.Idle
+
+                    if (pendingRestart) {
+                        pendingRestart = false
+                        beginDiscoverServices()
+                    }
                 }
 
                 override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
                     Log.e(TAG, "Discovery start failed: error code $errorCode")
                     _state.value = DiscoveryState.Error("Discovery failed (error $errorCode)")
                     isDiscovering = false
+                    stopInFlight = false
+                    pendingRestart = false
                 }
 
                 override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) {
                     Log.e(TAG, "Discovery stop failed: error code $errorCode")
+                    stopInFlight = false
+                    isDiscovering = false
+                    _state.value = DiscoveryState.Idle
+                    if (pendingRestart) {
+                        pendingRestart = false
+                        beginDiscoverServices()
+                    }
                 }
             }
 
-    /**
-     * Start scanning for Jibe daemons on the local network.
-     *
-     * Results arrive asynchronously via the [state] flow. Call [stopDiscovery] when done (e.g.
-     * after successful pairing).
-     */
+    /** Start scanning for Jibe daemons on the local network. */
     fun startDiscovery() {
+        if (stopInFlight) {
+            pendingRestart = true
+            Log.d(TAG, "Discovery stop in flight — scheduling restart when stopped")
+            return
+        }
         if (isDiscovering) {
             Log.d(TAG, "Discovery already running, skipping")
             return
         }
+        beginDiscoverServices()
+    }
 
-        isDiscovering = true
-        _state.value = DiscoveryState.Searching
-
-        nsdManager.discoverServices(SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, discoveryListener)
+    private fun beginDiscoverServices() {
+        try {
+            nsdManager.discoverServices(SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, discoveryListener)
+            isDiscovering = true
+            stopInFlight = false
+            _state.value = DiscoveryState.Searching
+        } catch (e: IllegalArgumentException) {
+            Log.e(TAG, "discoverServices failed: ${e.message}")
+            isDiscovering = false
+            _state.value = DiscoveryState.Error(e.message ?: "Discovery failed")
+        }
     }
 
     /**
@@ -112,26 +143,24 @@ class JibeDiscovery(context: Context) {
      */
     fun stopDiscovery() {
         resolveEpoch++
+        pendingRestart = false
+
         if (!isDiscovering) {
             _state.value = DiscoveryState.Idle
             return
         }
 
+        stopInFlight = true
         try {
             nsdManager.stopServiceDiscovery(discoveryListener)
         } catch (e: IllegalArgumentException) {
             Log.w(TAG, "stopDiscovery called but listener not registered: ${e.message}")
+            stopInFlight = false
+            isDiscovering = false
+            _state.value = DiscoveryState.Idle
         }
-        isDiscovering = false
-        _state.value = DiscoveryState.Idle
     }
 
-    /**
-     * Resolve a discovered service to get its IP and port.
-     *
-     * NsdManager.resolveService is also callback-based. On success, we update the state flow with a
-     * DiscoveredDaemon containing the resolved host and port.
-     */
     private fun resolveService(serviceInfo: NsdServiceInfo) {
         val epochAtResolve = resolveEpoch
         nsdManager.resolveService(

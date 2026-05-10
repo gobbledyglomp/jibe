@@ -651,7 +651,7 @@ class ConnectionRepositoryTest {
                 }
 
         @Test
-        fun `retry after pairing lockout restores pairing failed on disconnect before new pin`() =
+        fun `retry after pairing lockout direct reconnects on disconnect instead of snap back to pairing failed`() =
                 testScope.runTest {
                         repository.startDiscovery()
                         discoveryStateFlow.value =
@@ -717,7 +717,14 @@ class ConnectionRepositoryTest {
                         recordingSocket.emit(WebSocketEvent.Disconnected(1000, "daemon closed"))
                         advanceUntilIdle()
 
-                        assertEquals(failure, repository.state.value)
+                        advanceTimeBy(1_500)
+                        advanceUntilIdle()
+
+                        assertTrue(repository.state.value !is ConnectionState.PairingFailed)
+                        assertEquals(
+                                ConnectionState.Connecting("10.0.0.5", 8765),
+                                repository.state.value
+                        )
                 }
 
         @Test

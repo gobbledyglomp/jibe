@@ -275,11 +275,15 @@ class ConnectionRepository(
      *
      * The result arrives asynchronously via [pingResults] flow when the pong response comes back.
      */
-    /** Push plain text to the daemon clipboard sync channel (requires [ConnectionState.Connected]). */
-    fun sendClipboardSync(content: String) {
-        val client = wsClient ?: return
-        if (_state.value !is ConnectionState.Connected) return
-        client.send(MessageParser.toJson(ClipboardSyncMessage(content = content)))
+    /**
+     * Push plain text to the daemon clipboard sync channel (requires [ConnectionState.Connected]).
+     *
+     * @return ``true`` if the message was queued on the socket.
+     */
+    fun sendClipboardSync(content: String): Boolean {
+        val client = wsClient ?: return false
+        if (_state.value !is ConnectionState.Connected) return false
+        return client.send(MessageParser.toJson(ClipboardSyncMessage(content = content)))
     }
 
     /** Forward a mirrored notification payload to the daemon. */
@@ -588,35 +592,6 @@ class ConnectionRepository(
         reconnectJob =
                 scope.launch {
                     val credentials = dataStore.credentials.first()
-
-                    if (credentials == null &&
-                                    expectPairingFailureOnEarlyDisconnect &&
-                                    !pairingPinSubmitted &&
-                                    (stateAtDisconnect is ConnectionState.Authenticating ||
-                                            stateAtDisconnect is ConnectionState.Connecting)
-                    ) {
-                        expectPairingFailureOnEarlyDisconnect = false
-                        pairingRetryCount = 0
-                        discoveryJob?.cancel()
-                        discoveryJob = null
-                        pingTimeoutJob?.cancel()
-                        pingTimeoutJob = null
-                        eventCollectorJob?.cancel()
-                        eventCollectorJob = null
-
-                        discovery.stopDiscovery()
-
-                        skipNextDisconnectedHandling = true
-                        wsClient?.disconnect()
-                        wsClient = null
-                        trustManager = null
-
-                        transitionToPairingFailed(
-                                reason = lastPairingFailureReason,
-                                guidance = lastPairingFailureGuidance
-                        )
-                        return@launch
-                    }
 
                     if (credentials == null) {
                         fastReconnectAttempts = 0
