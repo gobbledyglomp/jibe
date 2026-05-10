@@ -10,7 +10,7 @@
   <div class="panel" style="width:100%;max-width:420px;">
     <h1 style="margin:0 0 0.25rem;font-size:1.35rem;" id="login-title"></h1>
     <p style="margin:0 0 1rem;color:var(--muted);font-size:0.875rem;" id="login-sub"></p>
-    <div id="recovery-banner" class="banner-warn" style="display:none;margin-bottom:1rem;font-size:0.8rem;"></div>
+    <div id="recovery-banner" class="banner-warn login-recovery-banner" style="display:none;font-size:0.8rem;"></div>
     <div id="login-error" class="error-banner" style="display:none;"></div>
     <form id="login-form">
       <label class="small" for="user" id="lbl-user"></label>
@@ -60,29 +60,39 @@
       document.getElementById('recovery-submit').textContent = L('login.resetSubmit');
     }
 
+    function appendPathWithSoftBreaks(container, path) {
+      var parts = String(path).split('/');
+      parts.forEach(function (part, i) {
+        if (i > 0) {
+          container.appendChild(document.createElement('wbr'));
+          container.appendChild(document.createTextNode('/'));
+        }
+        container.appendChild(document.createTextNode(part));
+      });
+    }
+
     async function refreshRecoveryBanner() {
       var banner = document.getElementById('recovery-banner');
       try {
         var r = await fetch('/api/auth/recovery-status');
         var d = await r.json().catch(function () { return {}; });
         if (d.recovery_enabled) {
-          banner.className = 'banner-warn';
+          banner.className = 'banner-warn login-recovery-banner';
           banner.style.cssText = '';
           banner.innerHTML = '';
           var msg = document.createElement('span');
           msg.textContent = L('login.recoveryBanner').replace('{path}', '');
           banner.appendChild(msg);
           if (d.recovery_file_path) {
-            banner.appendChild(document.createElement('br'));
             var code = document.createElement('code');
-            code.style.cssText = 'display:block;margin-top:0.35rem;font-size:0.8rem;word-break:break-all;opacity:0.85;';
-            code.textContent = d.recovery_file_path;
+            code.className = 'login-recovery-path';
+            appendPathWithSoftBreaks(code, d.recovery_file_path);
             banner.appendChild(code);
           }
           banner.style.display = 'block';
         } else {
-          banner.className = '';
-          banner.style.cssText = 'font-size:0.75rem;color:var(--muted);';
+          banner.className = 'login-recovery-banner';
+          banner.style.cssText = 'font-size:0.75rem;color:var(--muted);margin-bottom:1.35rem;';
           banner.textContent = L('login.noRecoveryFile');
           banner.style.display = 'block';
         }

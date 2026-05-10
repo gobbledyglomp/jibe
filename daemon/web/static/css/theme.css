@@ -400,3 +400,20 @@ table.data th {
 .checkbox-row input {
   margin-top: 0.2rem;
 }
+
+.login-recovery-banner {
+  padding: 0.65rem 0.85rem;
+  margin-bottom: 1.35rem;
+  border-radius: 6px;
+  line-height: 1.45;
+}
+
+.login-recovery-path {
+  display: block;
+  margin-top: 0.45rem;
+  font-family: ui-monospace, monospace;
+  font-size: 0.76rem;
+  line-height: 1.5;
+  opacity: 0.88;
+  overflow-wrap: anywhere;
+}
