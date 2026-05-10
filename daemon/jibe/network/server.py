@@ -80,6 +80,26 @@ def _localhost_only_middleware() -> Callable[..., Awaitable[web.StreamResponse]]
     return _mw
 
 
+def _no_cache_middleware() -> Callable[..., Awaitable[web.StreamResponse]]:
+    """Force revalidation of every static dashboard file.
+
+    Without this a browser may serve a stale ``app.js`` after a daemon
+    upgrade, making new features invisible without a hard-refresh.
+    ``no-cache`` (not ``no-store``) is used so the browser still sends an
+    ``If-None-Match`` / ``If-Modified-Since`` conditional GET — meaning
+    304 Not Modified responses when nothing changed, keeping it efficient.
+    """
+
+    @web.middleware
+    async def _mw(request: web.Request, handler: Handler) -> web.StreamResponse:
+        response = await handler(request)
+        if request.path.startswith("/web/"):
+            response.headers["Cache-Control"] = "no-cache, must-revalidate"
+        return response
+
+    return _mw
+
+
 def _jwt_auth_middleware(jwt_auth: JWTAuth) -> Callable[..., Awaitable[web.StreamResponse]]:
     @web.middleware
     async def _mw(request: web.Request, handler: Handler) -> web.StreamResponse:
@@ -140,6 +160,7 @@ class JibeServer:
         self._app = web.Application(
             middlewares=[
                 _localhost_only_middleware(),
+                _no_cache_middleware(),
                 _jwt_auth_middleware(self._jwt_auth),
             ]
         )
