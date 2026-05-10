@@ -172,7 +172,10 @@ class JibeService : Service() {
                 )
 
         val isTransferring =
-                transfer != null && !transfer.isComplete && transfer.error == null
+                transfer != null &&
+                        !transfer.isComplete &&
+                        !transfer.isCancelled &&
+                        transfer.error == null
 
         val (title, text) =
                 when {

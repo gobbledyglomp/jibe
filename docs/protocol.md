@@ -1,6 +1,6 @@
 # Jibe WebSocket Protocol Specification
 
-> Version: 0.4.0-beta · Status: Draft
+> Version: 0.5.0-beta · Status: Draft
 
 ## Design Philosophy
 
@@ -27,7 +27,7 @@ sequenceDiagram
     Note over Android,Daemon: 5. Session established
     Android->>Daemon: ping
     Daemon-->>Android: pong
-    Android->>Daemon: clipboard.sync / notification / file.start…
+    Android->>Daemon: clipboard.sync / notification / file.start / file.cancel…
     Daemon-->>Android: clipboard.sync
 
     Android->>Daemon: 6. close frame
@@ -325,6 +325,29 @@ daemons; clients must use binary frames.
 
 ---
 
+### `file.cancel`
+
+| Field         | Value                                                                  |
+| ------------- | ---------------------------------------------------------------------- |
+| **Direction** | Android → Linux                                                        |
+| **Purpose**   | Abort the current in-flight upload for a transfer id without closing the session |
+
+```json
+{
+  "type": "file.cancel",
+  "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+}
+```
+
+| Field  | Type     | Description                                                 |
+| ------ | -------- | ----------------------------------------------------------- |
+| `type` | `string` | Always `"file.cancel"`                                      |
+| `id`   | `string` | Transfer ID from the corresponding `file.start` message     |
+
+The daemon removes partial data for that transfer and responds with [`file.ack`](#fileack) where `ok` is `false` and `reason` is `"Cancelled"`. Other connections cannot cancel a transfer they did not start.
+
+---
+
 ### `file.done`
 
 | Field         | Value                                                                    |
@@ -353,7 +376,7 @@ daemons; clients must use binary frames.
 | Field         | Value                                                                      |
 | ------------- | -------------------------------------------------------------------------- |
 | **Direction** | Linux → Android                                                            |
-| **Purpose**   | Acknowledge a completed file transfer (success or failure after `file.done`) |
+| **Purpose**   | Final outcome for a transfer: success after `file.done`, failure after `file.done`, or cancellation after `file.cancel` |
 
 ```json
 {
@@ -372,10 +395,19 @@ daemons; clients must use binary frames.
 }
 ```
 
+```json
+{
+  "type": "file.ack",
+  "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "ok": false,
+  "reason": "Cancelled"
+}
+```
+
 | Field    | Type      | Description                                                        |
 | -------- | --------- | ------------------------------------------------------------------ |
 | `type`   | `string`  | Always `"file.ack"`                                                |
-| `id`     | `string`  | Transfer ID matching the `file.start` / `file.done` messages       |
+| `id`     | `string`  | Transfer ID matching the `file.start` / `file.done` / `file.cancel` messages |
 | `ok`     | `boolean` | `true` if the file was verified and saved under `~/Downloads`       |
 | `reason` | `string`  | Present when `ok` is `false` — human-readable failure explanation |
 

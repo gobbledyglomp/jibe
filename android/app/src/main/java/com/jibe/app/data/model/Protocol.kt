@@ -13,6 +13,7 @@ enum class MessageType(val value: String) {
         @SerializedName("file.start")      FILE_START("file.start"),
         @SerializedName("file.chunk")      FILE_CHUNK("file.chunk"),
         @SerializedName("file.chunk.ack")  FILE_CHUNK_ACK("file.chunk.ack"),
+        @SerializedName("file.cancel")   FILE_CANCEL("file.cancel"),
         @SerializedName("file.done")       FILE_DONE("file.done"),
         @SerializedName("file.ack")        FILE_ACK("file.ack"),
         @SerializedName("error")           ERROR("error");
@@ -86,6 +87,11 @@ data class FileChunkAckMessage(
         @SerializedName("ok") val ok: Boolean,
         @SerializedName("bytes_received") val bytesReceived: Long = 0,
         @SerializedName("reason") val reason: String? = null
+)
+
+data class FileCancelMessage(
+        @SerializedName("type") val type: String = MessageType.FILE_CANCEL.value,
+        @SerializedName("id") val id: String
 )
 
 data class FileDoneMessage(

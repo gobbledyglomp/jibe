@@ -305,6 +305,9 @@ class ConnectionRepository(
         fileTransfers.sendFile(uri, contentResolver)
     }
 
+    /** Cancel the active file transfer without disconnecting the daemon session. */
+    fun cancelFileTransfer(): Boolean = fileTransfers.cancelActiveTransfer()
+
     fun sendPing() {
         val client = wsClient ?: return
         pingTimeoutJob?.cancel()

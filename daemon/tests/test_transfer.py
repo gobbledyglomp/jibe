@@ -9,6 +9,7 @@ from jibe.core.api import JibeMessage, MessageType
 from jibe.handlers import transfer as transfer_mod
 from jibe.handlers.transfer import (
     abort_transfers_for_connection,
+    handle_file_cancel,
     handle_file_chunk_binary,
     handle_file_done,
     handle_file_start,
@@ -171,3 +172,34 @@ async def test_abort_transfers_for_connection_removes_workspace(mock_ws, monkeyp
     assert not workspace.exists()
     assert not temp_root.exists()
     assert not (tmp_path / "Downloads" / ".jibe-tmp").exists()
+
+
+@pytest.mark.asyncio
+async def test_file_cancel_sends_ack_without_closing(mock_ws, monkeypatch, tmp_path):
+    """Client abort via file.cancel should ack with Cancelled and keep the socket open."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    conn = JibeConnection(mock_ws, "127.0.0.1")
+    tid = "550e8400-e29b-41d4-a716-4466554400aa"
+
+    await handle_file_start(
+        conn,
+        _msg(
+            MessageType.FILE_START,
+            id=tid,
+            filename="cancel-me.bin",
+            size=100,
+            total_chunks=1,
+        ),
+    )
+
+    await handle_file_cancel(conn, _msg(MessageType.FILE_CANCEL, id=tid))
+
+    sends = [c[0][0] for c in conn.ws.send_str.await_args_list]
+    acks = [json.loads(s) for s in sends if '"type": "file.ack"' in s or '"file.ack"' in s]
+    assert acks, "expected a file.ack frame"
+    assert acks[-1]["ok"] is False
+    assert acks[-1]["reason"] == "Cancelled"
+    assert tid not in transfer_mod._transfers
+
+    mock_ws.close.assert_not_called()

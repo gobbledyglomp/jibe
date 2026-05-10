@@ -380,6 +380,33 @@ async def handle_file_chunk_binary(conn: JibeConnection, frame: bytes) -> None:
     )
 
 
+async def handle_file_cancel(conn: JibeConnection, msg: JibeMessage) -> None:
+    """Abort an active transfer without closing the connection."""
+    payload = msg.payload
+    transfer_id = payload.get("id")
+
+    if not isinstance(transfer_id, str) or not transfer_id:
+        await conn.send(format_error("malformed_payload", "file.cancel requires a non-empty string id"))
+        return
+    if transfer_id not in _transfers:
+        await conn.send(format_error("unknown_transfer", "No active transfer for this id"))
+        return
+
+    transfer = _transfers[transfer_id]
+    if transfer.owner_connection_id != conn.id:
+        logger.warning(
+            "file.cancel id=%s sent from wrong connection (owner=%s, got=%s)",
+            transfer_id,
+            transfer.owner_connection_id,
+            conn.id,
+        )
+        await conn.send(format_error("forbidden", "Transfer belongs to another connection"))
+        return
+
+    _abort_transfer(transfer_id)
+    await _send_ack(conn, transfer_id, False, "Cancelled")
+
+
 async def handle_file_done(conn: JibeConnection, msg: JibeMessage) -> None:
     """Verify integrity, move file into Downloads, and acknowledge."""
     payload = msg.payload

@@ -34,6 +34,7 @@ from jibe.handlers.ping import handle_ping
 from jibe.handlers.router import MessageRouter
 from jibe.handlers.transfer import (
     abort_transfers_for_connection,
+    handle_file_cancel,
     handle_file_chunk_binary,
     handle_file_done,
     handle_file_start,
@@ -102,6 +103,7 @@ class JibeServer:
         self._router.register(MessageType.PING, handle_ping)
         self._router.register(MessageType.CLIPBOARD_SYNC, handle_clipboard)
         self._router.register(MessageType.FILE_START, handle_file_start)
+        self._router.register(MessageType.FILE_CANCEL, handle_file_cancel)
         self._router.register(MessageType.FILE_DONE, handle_file_done)
         self._router.register(MessageType.NOTIFICATION, handle_notification)
 

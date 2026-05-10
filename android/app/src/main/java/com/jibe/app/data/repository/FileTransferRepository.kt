@@ -5,6 +5,7 @@ import android.database.Cursor
 import android.net.Uri
 import android.provider.OpenableColumns
 import com.jibe.app.data.model.FileAckMessage
+import com.jibe.app.data.model.FileCancelMessage
 import com.jibe.app.data.model.FileChunkAckMessage
 import com.jibe.app.data.model.FileDoneMessage
 import com.jibe.app.data.model.FileStartMessage
@@ -12,15 +13,19 @@ import com.jibe.app.network.MessageParser
 import java.io.IOException
 import java.security.MessageDigest
 import java.util.UUID
+import kotlin.coroutines.coroutineContext
 import kotlin.math.min
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -32,6 +37,7 @@ data class TransferProgress(
         val totalBytes: Long,
         val isComplete: Boolean = false,
         val error: String? = null,
+        val isCancelled: Boolean = false,
         /** Current upload speed in bytes/second (rolling average since transfer start). */
         val speedBps: Long = 0L,
         /** Estimated seconds until completion; null when speed is unknown or transfer is done. */
@@ -56,6 +62,7 @@ class FileTransferRepository(
 
         private const val CHUNK_ACK_TIMEOUT_MS = 60_000L
         private const val RESULT_VISIBLE_MS = 3_000L
+        private const val CANCEL_VISIBLE_MS = 2_000L
     }
 
     private data class PendingChunkAck(
@@ -69,12 +76,15 @@ class FileTransferRepository(
 
     private var pendingTransferId: String? = null
     private var pendingChunkAck: PendingChunkAck? = null
+    private var transferJob: Job? = null
 
     /** Clears in-flight transfer UI state when the socket tears down. */
     fun reset() {
         pendingChunkAck?.ack?.cancel()
         pendingChunkAck = null
         pendingTransferId = null
+        transferJob?.cancel()
+        transferJob = null
         _progress.value = null
     }
 
@@ -113,28 +123,68 @@ class FileTransferRepository(
         }
     }
 
-    /** Start uploading ``uri`` over the active WebSocket (caller ensures connected). */
-    fun sendFile(uri: Uri, contentResolver: ContentResolver) {
+    /** Cancels the current upload without disconnecting the socket. */
+    fun cancelActiveTransfer(): Boolean {
+        val progress = _progress.value ?: return false
+        val transferId = pendingTransferId ?: return false
+
+        pendingTransferId = null
+        pendingChunkAck?.ack?.cancel()
+        pendingChunkAck = null
+        transferJob?.cancel()
+
+        val cancelledProgress =
+                progress.copy(
+                        isComplete = true,
+                        isCancelled = true,
+                        error = null,
+                        etaSeconds = null
+                )
+        _progress.value = cancelledProgress
+
         scope.launch {
-            withContext(ioDispatcher) {
-                try {
-                    sendFileBlocking(uri, contentResolver)
-                } catch (e: Exception) {
-                    pendingChunkAck = null
-                    _progress.update {
-                        it?.copy(isComplete = true, error = e.message ?: "Transfer failed")
-                                ?: TransferProgress(
-                                        filename = displayName(contentResolver, uri),
-                                        bytesSent = 0,
-                                        totalBytes = 0,
-                                        isComplete = true,
-                                        error = e.message ?: "Transfer failed"
-                                )
-                    }
-                    pendingTransferId = null
-                }
+            delay(CANCEL_VISIBLE_MS)
+            if (_progress.value?.isCancelled == true) {
+                _progress.value = null
             }
         }
+
+        sendJson(MessageParser.toJson(FileCancelMessage(id = transferId)))
+        return true
+    }
+
+    /** Start uploading ``uri`` over the active WebSocket (caller ensures connected). */
+    fun sendFile(uri: Uri, contentResolver: ContentResolver) {
+        if (transferJob?.isActive == true) return
+        val job =
+                scope.launch {
+                    val activeJob = coroutineContext[Job]
+                    withContext(ioDispatcher) {
+                        try {
+                            sendFileBlocking(uri, contentResolver)
+                        } catch (_: CancellationException) {
+                            // User cancel / socket teardown: progress is cleared elsewhere or marked cancelled.
+                        } catch (e: Exception) {
+                            pendingChunkAck = null
+                            _progress.update {
+                                it?.copy(isComplete = true, error = e.message ?: "Transfer failed")
+                                        ?: TransferProgress(
+                                                filename = displayName(contentResolver, uri),
+                                                bytesSent = 0,
+                                                totalBytes = 0,
+                                                isComplete = true,
+                                                error = e.message ?: "Transfer failed"
+                                        )
+                            }
+                            pendingTransferId = null
+                        } finally {
+                            if (transferJob === activeJob) {
+                                transferJob = null
+                            }
+                        }
+                    }
+                }
+        transferJob = job
     }
 
     private suspend fun sendFileBlocking(uri: Uri, contentResolver: ContentResolver) {
@@ -156,7 +206,8 @@ class FileTransferRepository(
                         bytesSent = 0,
                         totalBytes = totalBytes,
                         isComplete = false,
-                        error = null
+                        error = null,
+                        isCancelled = false
                 )
 
         if (
@@ -182,6 +233,7 @@ class FileTransferRepository(
             var sent = 0L
             var index = 0
             while (sent < totalBytes) {
+                coroutineContext.ensureActive()
                 val toRead = min(CHUNK_SIZE_BYTES.toLong(), totalBytes - sent).toInt()
                 val read = input.read(buffer, 0, toRead)
                 if (read <= 0) throw IOException("Unexpected end of file")
@@ -217,6 +269,7 @@ class FileTransferRepository(
                                 totalBytes = totalBytes,
                                 isComplete = false,
                                 error = null,
+                                isCancelled = false,
                                 speedBps = speedBps,
                                 etaSeconds = etaSeconds
                         )
