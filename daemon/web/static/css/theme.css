@@ -328,6 +328,11 @@ table.data th {
   max-width: 22rem;
 }
 
+.settings-card-body #pw-btn {
+  width: 100%;
+  max-width: 22rem;
+}
+
 .settings-help {
   font-size: 0.78rem;
   color: var(--muted);
@@ -382,7 +387,7 @@ table.data th {
 }
 
 .settings-advanced-body {
-  padding: 0 1rem 1rem;
+  padding: 0.8rem 1rem 1rem;
   border-top: 1px solid var(--border);
 }
 
