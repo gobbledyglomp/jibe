@@ -23,6 +23,10 @@ async def test_schema_created_on_first_open(db):
     assert "meta" in tables
     assert "devices" in tables
     assert "sessions" in tables
+    assert "users" in tables
+    assert "transfer_history" in tables
+    assert "clipboard_history" in tables
+    assert "notification_log" in tables
 
 
 async def test_schema_version_stored(db):

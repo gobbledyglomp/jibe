@@ -16,7 +16,10 @@ SERVICE_NAME = "Jibe"
 _xdg_data_home = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
 DATABASE_DIR = _xdg_data_home / "jibe"
 DATABASE_NAME = "jibe.db"
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+
+JWT_SECRET_META_KEY = "jwt_secret"
+JWT_EXPIRY_SECONDS = 86400
 
 PIN_LENGTH = 6
 PIN_EXPIRY_SECONDS = 120
