@@ -1,5 +1,6 @@
 package com.jibe.app.data.repository
 
+import android.content.Context
 import android.util.Log
 import app.cash.turbine.test
 import com.jibe.app.data.local.DeviceCredentials
@@ -28,6 +29,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -110,6 +112,13 @@ class ConnectionRepositoryTest {
                 credentialsFlow = MutableStateFlow(null)
                 every { dataStore.credentials } returns credentialsFlow
 
+                every { dataStore.featClipboard } returns flowOf(true)
+                every { dataStore.featNotifications } returns flowOf(true)
+                every { dataStore.featFileTransfer } returns flowOf(true)
+                every { dataStore.featPresentationRemote } returns flowOf(true)
+                every { dataStore.featFindPhone } returns flowOf(true)
+                every { dataStore.featPing } returns flowOf(true)
+
                 trustManager = mockk(relaxed = true)
                 every { trustManager.lastSeenFingerprint } returns "test_cert_fp"
 
@@ -118,8 +127,10 @@ class ConnectionRepositoryTest {
 
                 repoScope =
                         kotlinx.coroutines.CoroutineScope(testDispatcher + kotlinx.coroutines.Job())
+                val appCtx = mockk<Context>(relaxed = true)
                 repository =
                         ConnectionRepository(
+                                appContext = appCtx,
                                 dataStore = dataStore,
                                 discovery = discovery,
                                 scope = repoScope,
