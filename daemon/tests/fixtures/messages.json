@@ -22,9 +22,11 @@
   "notification": {
     "type": "notification",
     "app": "com.whatsapp",
+    "app_name": "WhatsApp",
     "title": "Alice",
     "body": "Hey, are you coming tonight?",
-    "timestamp": 1710892800
+    "timestamp": 1710892800,
+    "icon": "ZmFrZQ=="
   },
   "file.start": {
     "type": "file.start",

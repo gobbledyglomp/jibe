@@ -52,7 +52,6 @@ class JibeNotificationService : NotificationListenerService() {
 
         val appName = resolveAppLabel(sbn.packageName)
         val iconB64 = extractSmallIcon(sbn)
-        val imageB64 = extractLargeIcon(sbn)
 
         repo.sendNotification(
                 NotificationMessage(
@@ -61,8 +60,7 @@ class JibeNotificationService : NotificationListenerService() {
                         title = title,
                         body = body,
                         timestamp = sbn.postTime / 1000L,
-                        icon = iconB64,
-                        image = imageB64
+                                    icon = iconB64
                 )
         )
     }
@@ -92,14 +90,6 @@ class JibeNotificationService : NotificationListenerService() {
                 null
             }
 
-    private fun extractLargeIcon(sbn: StatusBarNotification): String? =
-            try {
-                val drawable = sbn.notification.getLargeIcon()?.loadDrawable(this) ?: return null
-                bitmapToBase64(drawableToBitmap(drawable, SIZE_IMAGE), MAX_IMAGE_BYTES)
-            } catch (_: Exception) {
-                null
-            }
-
     private fun drawableToBitmap(drawable: Drawable, size: Int): Bitmap {
         val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bmp)
@@ -118,9 +108,7 @@ class JibeNotificationService : NotificationListenerService() {
 
     companion object {
         private const val SIZE_ICON = 48
-        private const val SIZE_IMAGE = 128
         private const val MAX_ICON_BYTES = 32 * 1024
-        private const val MAX_IMAGE_BYTES = 96 * 1024
         private const val DEDUP_WINDOW_MS = 30_000L
     }
 }

@@ -40,12 +40,14 @@ async def test_handle_notification_runs_notify_send(mock_ws, monkeypatch):
 
     monkeypatch.setattr("jibe.handlers.notifications.asyncio.create_subprocess_exec", fake_exec)
 
-    await handle_notification(conn, _notification_msg())
+    await handle_notification(conn, _notification_msg(icon="ZmFrZQ=="))
 
     args = captured["args"]
     assert args[0] == "notify-send"
     assert "--app-name" in args
     assert args[args.index("--app-name") + 1] == "com.example.app"
+    assert "--icon" in args
+    assert "-h" not in args
     assert "Hi" in args and "There" in args
     assert captured["kwargs"]["stdout"] == asyncio.subprocess.DEVNULL
 

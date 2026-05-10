@@ -61,8 +61,7 @@ data class NotificationMessage(
         @SerializedName("title") val title: String,
         @SerializedName("body") val body: String,
         @SerializedName("timestamp") val timestamp: Long,
-        @SerializedName("icon") val icon: String? = null,
-        @SerializedName("image") val image: String? = null
+        @SerializedName("icon") val icon: String? = null
 )
 
 data class FileStartMessage(

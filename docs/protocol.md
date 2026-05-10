@@ -205,8 +205,7 @@ No additional fields.
   "title": "Alice",
   "body": "Hey, are you coming tonight?",
   "timestamp": 1710892800,
-  "icon": "<optional base64 PNG>",
-  "image": "<optional base64 PNG>"
+  "icon": "<optional base64 PNG>"
 }
 ```
 
@@ -219,9 +218,6 @@ No additional fields.
 | `body`      | `string`  | Notification body text                                                |
 | `timestamp` | `integer` | Unix timestamp (seconds) when the notification was created on Android |
 | `icon`      | `string`  | Optional PNG as Base64 — small app icon (`notify-send --icon`)        |
-| `image`     | `string`  | Optional PNG as Base64 — inline picture (`image-path` hint)           |
-
-When both `icon` and `image` are present, the daemon may merge them into a single horizontal PNG for `image-path` so desktops that only show one thumbnail still display both the app glyph and the attachment.
 
 ---
 
