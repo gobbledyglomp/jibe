@@ -1,5 +1,7 @@
 package com.jibe.app.service
 
+import android.app.NotificationManager
+import android.media.AudioManager
 import android.media.Ringtone
 import android.media.RingtoneManager
 import android.os.Build
@@ -15,6 +17,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
@@ -23,17 +27,26 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jibe.app.R
 import com.jibe.app.ui.theme.JibeTheme
 
 /**
- * Full-screen ring alert for ``device.ring`` from the daemon — plays the default ringtone until
- * dismissed.
+ * Full-screen ring alert for ``device.ring`` from the daemon — plays the default ringtone at
+ * maximum volume until dismissed. Designed to work over the lock screen.
  */
 class RingAlertActivity : ComponentActivity() {
 
+    companion object {
+        const val RING_NOTIFICATION_ID = 9001
+    }
+
     private var ringtone: Ringtone? = null
+    private var audioManager: AudioManager? = null
+    private var previousVolume: Int = -1
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -49,9 +62,25 @@ class RingAlertActivity : ComponentActivity() {
             )
         }
 
+        @Suppress("DEPRECATION")
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
+        val am = getSystemService(AUDIO_SERVICE) as AudioManager
+        audioManager = am
+        previousVolume = am.getStreamVolume(AudioManager.STREAM_RING)
+        val maxVolume = am.getStreamMaxVolume(AudioManager.STREAM_RING)
+        am.setStreamVolume(AudioManager.STREAM_RING, maxVolume, 0)
+
+        val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        nm.cancel(RING_NOTIFICATION_ID)
+
         val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
-        ringtone = RingtoneManager.getRingtone(this, uri)
-        ringtone?.play()
+        ringtone = RingtoneManager.getRingtone(this, uri)?.also {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                it.isLooping = true
+            }
+            it.play()
+        }
 
         setContent {
             JibeTheme(isDark = true) {
@@ -63,6 +92,10 @@ class RingAlertActivity : ComponentActivity() {
     override fun onDestroy() {
         ringtone?.stop()
         ringtone = null
+        if (previousVolume >= 0) {
+            audioManager?.setStreamVolume(AudioManager.STREAM_RING, previousVolume, 0)
+        }
+        audioManager = null
         super.onDestroy()
     }
 }
@@ -78,27 +111,29 @@ private fun RingAlertContent(onStop: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-                text = "Find device",
-                style = MaterialTheme.typography.headlineMedium,
+                text = stringResource(R.string.ring_title),
+                style = MaterialTheme.typography.headlineLarge,
+                fontWeight = FontWeight.SemiBold,
                 color = Color.White,
                 modifier = Modifier.padding(bottom = 8.dp)
         )
         Text(
-                text = "Ringing…",
+                text = stringResource(R.string.ring_subtitle),
                 style = MaterialTheme.typography.bodyLarge,
                 color = Color(0xFFB0B0B0),
-                modifier = Modifier.padding(bottom = 32.dp)
+                modifier = Modifier.padding(bottom = 48.dp)
         )
         Button(
                 onClick = onStop,
                 colors =
                         ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                contentColor = MaterialTheme.colorScheme.onPrimary
+                                containerColor = Color.White,
+                                contentColor = Color.Black,
                         ),
-                modifier = Modifier.padding(horizontal = 16.dp)
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.width(200.dp).height(56.dp)
         ) {
-            Text(text = "Stop", fontSize = 18.sp)
+            Text(text = stringResource(R.string.ring_stop), fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
         }
         Spacer(modifier = Modifier.height(48.dp))
     }

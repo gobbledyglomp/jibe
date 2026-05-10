@@ -1,6 +1,10 @@
 package com.jibe.app.data.repository
 
 import android.content.ContentResolver
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -103,6 +107,7 @@ class ConnectionRepository(
 ) {
     companion object {
         private const val TAG = "ConnectionRepo"
+        private const val RING_CHANNEL_ID = "jibe_ring"
         private const val MAX_FAST_RECONNECTS = 4
         private const val RECONNECT_BASE_DELAY_MS = 1_000L
         private const val RECONNECT_MAX_DELAY_MS = 8_000L
@@ -427,7 +432,30 @@ class ConnectionRepository(
                 Intent(appContext, RingAlertActivity::class.java).apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
                 }
-        appContext.startActivity(intent)
+        val ringNotifId = RingAlertActivity.RING_NOTIFICATION_ID
+        val fullScreenPi = PendingIntent.getActivity(
+                appContext, ringNotifId, intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val nm = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        var channel = nm.getNotificationChannel(RING_CHANNEL_ID)
+        if (channel == null) {
+            channel = NotificationChannel(
+                    RING_CHANNEL_ID, "Find my phone",
+                    NotificationManager.IMPORTANCE_HIGH
+            ).apply { setSound(null, null) }
+            nm.createNotificationChannel(channel)
+        }
+
+        val notification = Notification.Builder(appContext, RING_CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+                .setContentTitle("Jibe")
+                .setContentText("Find my phone")
+                .setFullScreenIntent(fullScreenPi, true)
+                .setAutoCancel(true)
+                .build()
+        nm.notify(ringNotifId, notification)
     }
 
     /**
