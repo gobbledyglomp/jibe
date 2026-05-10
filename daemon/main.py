@@ -32,6 +32,8 @@ import sys
 from jibe.core.config import CERTS_DIR, DEFAULT_PORT, LOG_DATE_FORMAT, LOG_FORMAT
 from jibe.core.db import JibeDatabase
 from jibe.core.tls import create_ssl_context, generate_self_signed_cert
+from jibe.handlers.battery import get_all_batteries
+from jibe.handlers.ring import send_ring
 from jibe.network.discovery import JibeDiscovery
 from jibe.network.server import JibeServer
 from jibe.ui.tray import JibeTray
@@ -82,11 +84,24 @@ async def run_daemon(
 
     tray: JibeTray | None = None
     if enable_tray and _have_desktop():
+        def _ring_any_device() -> None:
+            """Ring the first authenticated device, scheduling on the asyncio loop."""
+            conns = server.registry.get_authenticated()
+            if not conns:
+                logger.warning("Ring requested from tray but no device connected")
+                return
+            asyncio.run_coroutine_threadsafe(
+                send_ring(conns[0], event_log=server.event_log),
+                loop,
+            )
+
         tray = JibeTray(
             dashboard_url=f"http://127.0.0.1:{server.dashboard_port}/",
             loop=loop,
             shutdown_event=shutdown_event,
             auth_manager=server.auth,
+            get_battery_fn=get_all_batteries,
+            ring_fn=_ring_any_device,
         )
 
     try:
