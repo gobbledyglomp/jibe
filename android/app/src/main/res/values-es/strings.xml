@@ -33,9 +33,8 @@
     <string name="pairing_enter_pin">Ingresa el PIN que aparece en tu daemon</string>
     <string name="pairing_pair">Vincular</string>
     <string name="pairing_pin_rejected">PIN rechazado</string>
-    <string name="pairing_unavailable_title">Aún no se puede vincular</string>
-    <string name="pairing_unavailable_body">Activa el modo de vinculación en tu equipo Linux y pulsa Reintentar.</string>
-    <string name="pairing_unavailable_message_label">Detalles</string>
+    <string name="pairing_unavailable_title">Vinculación inactiva</string>
+    <string name="pairing_unavailable_body">Inicia la vinculación en Linux y reintenta.</string>
     <string name="pairing_unavailable_retry">Reintentar</string>
 
     <!-- Clipboard -->

@@ -33,9 +33,8 @@
     <string name="pairing_enter_pin">Enter the PIN shown on your daemon</string>
     <string name="pairing_pair">Pair</string>
     <string name="pairing_pin_rejected">PIN rejected</string>
-    <string name="pairing_unavailable_title">Can\'t pair yet</string>
-    <string name="pairing_unavailable_body">Turn on pairing on your Linux machine, then tap Retry.</string>
-    <string name="pairing_unavailable_message_label">Details</string>
+    <string name="pairing_unavailable_title">Pairing inactive</string>
+    <string name="pairing_unavailable_body">Start pairing on your Linux machine, then retry.</string>
     <string name="pairing_unavailable_retry">Retry</string>
 
     <!-- Clipboard -->

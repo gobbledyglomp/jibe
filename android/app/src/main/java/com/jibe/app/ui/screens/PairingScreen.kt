@@ -6,6 +6,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -24,6 +25,7 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
@@ -33,6 +35,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -41,6 +44,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -620,73 +624,70 @@ private fun PairingFailedIndicator(reason: String, guidance: String, onRetry: ()
 
 @Composable
 private fun PairingUnavailableIndicator(reason: String, onRetry: () -> Unit) {
+        val accent = MaterialTheme.colorScheme.primary
         Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-                shape = RoundedCornerShape(16.dp)
+                shape = RoundedCornerShape(12.dp)
         ) {
-                Column(
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp).fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                        Text(
-                                text = stringResource(R.string.pairing_unavailable_title),
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth()
-                        )
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Text(
-                                text = stringResource(R.string.pairing_unavailable_body),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth()
-                        )
-
-                        if (reason.isNotBlank()) {
-                                Spacer(modifier = Modifier.height(14.dp))
-
-                                Text(
-                                        text = stringResource(R.string.pairing_unavailable_message_label),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                                        textAlign = TextAlign.Center,
-                                        modifier = Modifier.fillMaxWidth()
+                Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
+                        Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.Top
+                        ) {
+                                Icon(
+                                        imageVector = Icons.Outlined.Info,
+                                        contentDescription = null,
+                                        modifier = Modifier.padding(top = 2.dp).size(22.dp),
+                                        tint = accent.copy(alpha = 0.9f)
                                 )
-
-                                Spacer(modifier = Modifier.height(4.dp))
-
-                                Text(
-                                        text = reason,
-                                        style =
-                                                MaterialTheme.typography.labelSmall.copy(
-                                                        fontFamily = RobotoMono
-                                                ),
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.82f),
-                                        textAlign = TextAlign.Center,
-                                        maxLines = 3,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.fillMaxWidth()
-                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                                text = stringResource(R.string.pairing_unavailable_title),
+                                                style = MaterialTheme.typography.titleSmall,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                fontWeight = FontWeight.SemiBold
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                                text = stringResource(R.string.pairing_unavailable_body),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                lineHeight = 18.sp
+                                        )
+                                        if (reason.isNotBlank()) {
+                                                Spacer(modifier = Modifier.height(8.dp))
+                                                Text(
+                                                        text = reason,
+                                                        style =
+                                                                MaterialTheme.typography.labelSmall.copy(
+                                                                        fontFamily = RobotoMono,
+                                                                        lineHeight = 16.sp
+                                                                ),
+                                                        color =
+                                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                                                        .copy(alpha = 0.72f),
+                                                        maxLines = 2,
+                                                        overflow = TextOverflow.Ellipsis
+                                                )
+                                        }
+                                }
                         }
 
-                        Spacer(modifier = Modifier.height(18.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
-                        Button(
+                        OutlinedButton(
                                 onClick = onRetry,
-                                colors =
-                                        ButtonDefaults.buttonColors(
-                                                containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
-                                                contentColor = MaterialTheme.colorScheme.primary
-                                        ),
+                                modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.fillMaxWidth()
+                                border = BorderStroke(1.dp, accent.copy(alpha = 0.35f))
                         ) {
-                                Text(stringResource(R.string.pairing_unavailable_retry))
+                                Text(
+                                        stringResource(R.string.pairing_unavailable_retry),
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = accent
+                                )
                         }
                 }
         }
