@@ -52,6 +52,12 @@ async def dashboard_admin(db):
 
 
 @pytest.fixture
+async def viewer_user(db):
+    """Dashboard viewer ``v1`` / ``viewerpass``."""
+    await db.add_user("v1", "viewerpass", "viewer")
+
+
+@pytest.fixture
 async def db(tmp_path):
     """Create a JibeDatabase backed by a temp file.
 

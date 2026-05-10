@@ -13,11 +13,6 @@ async def _login(client, username: str, password: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {data['token']}"}
 
 
-@pytest.fixture
-async def viewer_user(db):
-    await db.add_user("v1", "viewerpass", "viewer")
-
-
 @pytest.mark.asyncio
 async def test_stats_available_to_viewer(aiohttp_client, jibe_app, viewer_user):
     client = await aiohttp_client(jibe_app)
