@@ -186,10 +186,9 @@ fun HomeScreen(
                                 Spacer(modifier = Modifier.height(12.dp))
                         }
 
-                        NotificationPermissionCard()
+                        NotificationPermissionCard(trailingSpacerDp = 12)
 
                         if (featPing) {
-                                Spacer(modifier = Modifier.height(12.dp))
                                 PingCard(
                                         isConnected = isConnected,
                                         pingInFlight = pingInFlight,
@@ -201,9 +200,10 @@ fun HomeScreen(
                                                 }
                                         }
                                 )
+                                Spacer(modifier = Modifier.height(12.dp))
                         }
 
-                        Spacer(modifier = Modifier.height(24.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
 
                         if (showForgetConfirm) {
                                 ForgetConfirmation(
@@ -247,10 +247,10 @@ private fun ConnectionStatusCard(state: ConnectionState) {
 
         Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                shape = RoundedCornerShape(12.dp)
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                shape = RoundedCornerShape(14.dp)
         ) {
-                Column(modifier = Modifier.padding(20.dp)) {
+                Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                                 Box(
                                         modifier =
@@ -761,7 +761,7 @@ private fun FileTransferCard(
 }
 
 @Composable
-private fun NotificationPermissionCard() {
+private fun NotificationPermissionCard(trailingSpacerDp: Int = 0) {
         val context = LocalContext.current
         if (notificationAccessEnabled(context)) return
 
@@ -796,6 +796,9 @@ private fun NotificationPermissionCard() {
                                         )
                         ) { Text(text = stringResource(R.string.notif_open_settings)) }
                 }
+        }
+        if (trailingSpacerDp > 0) {
+                Spacer(modifier = Modifier.height(trailingSpacerDp.dp))
         }
 }
 
