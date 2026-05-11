@@ -63,7 +63,7 @@ from jibe.network.ping_probe import PingProbeTracker
 
 logger = logging.getLogger(__name__)
 
-_PACKAGE_ROOT = Path(__file__).resolve().parent.parent.parent
+_PACKAGE_ROOT = Path(__file__).resolve().parent.parent
 STATIC_WEB_DIR = _PACKAGE_ROOT / "web" / "static"
 
 
