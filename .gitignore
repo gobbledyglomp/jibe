@@ -19,6 +19,11 @@ Thumbs.db
 *.key
 *.p12
 *.jks
+*.keystore
+
+# Docker build artifacts
+*.tar
+*.tar.gz
 
 # Android
 *.apk
