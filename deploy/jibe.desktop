@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Jibe
+GenericName=Android & Linux Bridge
+Comment=Seamless Android and Linux integration over LAN
+Exec=jibe
+Icon=jibe
+Categories=Utility;Network;
+Keywords=android;sync;clipboard;notifications;lan;phone;
+Terminal=false
+StartupNotify=false
