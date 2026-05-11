@@ -1,0 +1,20 @@
+[Unit]
+Description=Jibe daemon — Android/Linux LAN bridge
+Documentation=https://github.com/gobbledyglomp/jibe
+After=graphical-session.target network-online.target
+Wants=graphical-session.target network-online.target
+
+[Service]
+Type=simple
+# pipx install path — adjust if you use a venv instead:
+#   ExecStart=%h/Projects/jibe/daemon/.venv/bin/jibe
+ExecStart=%h/.local/bin/jibe
+Restart=on-failure
+RestartSec=5
+# Let systemd capture logs via journald
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=jibe
+
+[Install]
+WantedBy=default.target
