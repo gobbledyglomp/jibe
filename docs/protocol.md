@@ -1,6 +1,6 @@
 # Jibe WebSocket Protocol Specification
 
-> Version: 0.9.0 · Status: Draft · Track: pre-1.0 stabilization (not a GA release)
+> Version: 0.9.0-pre · Status: Draft · Track: pre-1.0 stabilization (not a GA release)
 
 ## Design Philosophy
 

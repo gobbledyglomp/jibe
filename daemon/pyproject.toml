@@ -1,6 +1,6 @@
 [project]
 name = "jibe"
-version = "0.9.0"
+version = "0.9.0-pre"
 description = "Seamless Android and Linux integration over LAN. No cloud, no cables, no extra clients."
 readme = "README.md"
 license = { file = "../LICENSE" }

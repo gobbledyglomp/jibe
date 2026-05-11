@@ -18,7 +18,7 @@ sequenceDiagram
     Note over Client: User opens Jibe app
     Client->>LAN: Multicast query<br/>"Who provides _jibe._tcp?"
     LAN->>Daemon: (query forwarded)
-    Daemon->>Client: Reply: IP=192.168.1.10, port=8776,<br/>version=0.9.0, platform=linux
+    Daemon->>Client: Reply: IP=192.168.1.10, port=8776,<br/>version=0.9.0-pre, platform=linux
 
     Note over Client: Discovery complete — client has IP + port
     Client->>Daemon: Open WebSocket ws://192.168.1.10:8776/ws
