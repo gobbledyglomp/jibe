@@ -20,7 +20,7 @@ sequenceDiagram
 
     Note over Android,Daemon: 1. Discover via mDNS (_jibe._tcp.local.)
 
-    Android->>Daemon: 2. Open WebSocket (ws://host:8765/ws)
+    Android->>Daemon: 2. Open WebSocket (ws://host:8776/ws)
     Android->>Daemon: 3. auth.request { type, device_name, pin }
     Daemon-->>Android: 4. auth.response { type, accepted, reason }
 

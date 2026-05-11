@@ -14,10 +14,10 @@ class TestBuildParser:
     """Tests for _build_parser()."""
 
     def test_defaults(self):
-        """Default args: TLS on, port 8765, no verbose, no regen, tray on."""
+        """Default args: TLS on, port 8776, no verbose, no regen, tray on."""
         args = _build_parser().parse_args([])
         assert args.no_tls is False
-        assert args.port == 8765
+        assert args.port == 8776
         assert args.verbose is False
         assert args.regen_certs is False
         assert args.no_tray is False

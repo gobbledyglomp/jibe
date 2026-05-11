@@ -171,7 +171,7 @@ class ConnectionRepositoryTest {
                                         "dev_1",
                                         "finger_1",
                                         "192.168.1.10",
-                                        8765,
+                                        8776,
                                         "cert_fp"
                                 )
                         credentialsFlow.value = creds
@@ -183,12 +183,12 @@ class ConnectionRepositoryTest {
                                 advanceUntilIdle()
 
                                 assertEquals(
-                                        ConnectionState.Connecting("192.168.1.10", 8765),
+                                        ConnectionState.Connecting("192.168.1.10", 8776),
                                         awaitItem()
                                 )
                                 verify(exactly = 0) { discovery.startDiscovery() }
                                 assertEquals(
-                                        listOf("192.168.1.10" to 8765),
+                                        listOf("192.168.1.10" to 8776),
                                         recordingSocket.connectCalls
                                 )
                                 cancelAndIgnoreRemainingEvents()
@@ -204,17 +204,17 @@ class ConnectionRepositoryTest {
                                 repository.startDiscovery()
                                 assertEquals(ConnectionState.Discovering, awaitItem())
 
-                                val daemon = DiscoveredDaemon("JibeDaemon", "192.168.1.20", 8765)
+                                val daemon = DiscoveredDaemon("JibeDaemon", "192.168.1.20", 8776)
                                 discoveryStateFlow.value = DiscoveryState.Found(daemon)
                                 advanceUntilIdle()
 
                                 assertEquals(
-                                        ConnectionState.Connecting("192.168.1.20", 8765),
+                                        ConnectionState.Connecting("192.168.1.20", 8776),
                                         awaitItem()
                                 )
                                 verify { discovery.stopDiscovery() }
                                 assertEquals(
-                                        listOf("192.168.1.20" to 8765),
+                                        listOf("192.168.1.20" to 8776),
                                         recordingSocket.connectCalls
                                 )
                                 cancelAndIgnoreRemainingEvents()
@@ -225,13 +225,13 @@ class ConnectionRepositoryTest {
         fun `websocket connected emits Authenticating state`() =
                 testScope.runTest {
                         repository.startDiscovery()
-                        val daemon = DiscoveredDaemon("Jibe", "10.0.0.5", 8765)
+                        val daemon = DiscoveredDaemon("Jibe", "10.0.0.5", 8776)
                         discoveryStateFlow.value = DiscoveryState.Found(daemon)
                         advanceUntilIdle()
 
                         repository.state.test {
                                 assertEquals(
-                                        ConnectionState.Connecting("10.0.0.5", 8765),
+                                        ConnectionState.Connecting("10.0.0.5", 8776),
                                         awaitItem()
                                 )
 
@@ -251,7 +251,7 @@ class ConnectionRepositoryTest {
                 testScope.runTest {
                         repository.startDiscovery()
                         discoveryStateFlow.value =
-                                DiscoveryState.Found(DiscoveredDaemon("Jibe", "10.0.0.5", 8765))
+                                DiscoveryState.Found(DiscoveredDaemon("Jibe", "10.0.0.5", 8776))
                         advanceUntilIdle()
                         recordingSocket.emit(WebSocketEvent.Connected)
                         advanceUntilIdle()
@@ -292,7 +292,7 @@ class ConnectionRepositoryTest {
                 testScope.runTest {
                         repository.startDiscovery()
                         discoveryStateFlow.value =
-                                DiscoveryState.Found(DiscoveredDaemon("Jibe", "10.0.0.5", 8765))
+                                DiscoveryState.Found(DiscoveredDaemon("Jibe", "10.0.0.5", 8776))
                         advanceUntilIdle()
                         recordingSocket.emit(WebSocketEvent.Connected)
                         advanceUntilIdle()
@@ -323,7 +323,7 @@ class ConnectionRepositoryTest {
                                 advanceUntilIdle()
 
                                 assertEquals(
-                                        ConnectionState.Connected("10.0.0.5", 8765, "dev_123"),
+                                        ConnectionState.Connected("10.0.0.5", 8776, "dev_123"),
                                         awaitItem()
                                 )
 
@@ -333,7 +333,7 @@ class ConnectionRepositoryTest {
                                                         "dev_123",
                                                         "fp_abc",
                                                         "10.0.0.5",
-                                                        8765,
+                                                        8776,
                                                         "test_cert_fp"
                                                 )
                                         )
@@ -347,7 +347,7 @@ class ConnectionRepositoryTest {
                 testScope.runTest {
                         repository.startDiscovery()
                         discoveryStateFlow.value =
-                                DiscoveryState.Found(DiscoveredDaemon("Jibe", "10.0.0.5", 8765))
+                                DiscoveryState.Found(DiscoveredDaemon("Jibe", "10.0.0.5", 8776))
                         advanceUntilIdle()
                         recordingSocket.emit(WebSocketEvent.Connected)
                         advanceUntilIdle()
@@ -392,7 +392,7 @@ class ConnectionRepositoryTest {
                 testScope.runTest {
                         repository.startDiscovery()
                         discoveryStateFlow.value =
-                                DiscoveryState.Found(DiscoveredDaemon("Jibe", "10.0.0.5", 8765))
+                                DiscoveryState.Found(DiscoveredDaemon("Jibe", "10.0.0.5", 8776))
                         advanceUntilIdle()
                         recordingSocket.emit(WebSocketEvent.Connected)
                         advanceUntilIdle()
@@ -469,7 +469,7 @@ class ConnectionRepositoryTest {
                 testScope.runTest {
                         repository.startDiscovery()
                         discoveryStateFlow.value =
-                                DiscoveryState.Found(DiscoveredDaemon("Jibe", "10.0.0.5", 8765))
+                                DiscoveryState.Found(DiscoveredDaemon("Jibe", "10.0.0.5", 8776))
                         advanceUntilIdle()
                         recordingSocket.emit(WebSocketEvent.Connected)
                         advanceUntilIdle()
@@ -516,7 +516,7 @@ class ConnectionRepositoryTest {
                 testScope.runTest {
                         repository.startDiscovery()
                         discoveryStateFlow.value =
-                                DiscoveryState.Found(DiscoveredDaemon("Jibe", "10.0.0.5", 8765))
+                                DiscoveryState.Found(DiscoveredDaemon("Jibe", "10.0.0.5", 8776))
                         advanceUntilIdle()
                         recordingSocket.emit(WebSocketEvent.Connected)
                         advanceUntilIdle()
@@ -564,7 +564,7 @@ class ConnectionRepositoryTest {
                 testScope.runTest {
                         repository.startDiscovery()
                         discoveryStateFlow.value =
-                                DiscoveryState.Found(DiscoveredDaemon("Jibe", "10.0.0.5", 8765))
+                                DiscoveryState.Found(DiscoveredDaemon("Jibe", "10.0.0.5", 8776))
                         advanceUntilIdle()
                         recordingSocket.emit(WebSocketEvent.Connected)
                         advanceUntilIdle()
@@ -588,12 +588,12 @@ class ConnectionRepositoryTest {
 
                         repository.startDiscovery()
                         discoveryStateFlow.value =
-                                DiscoveryState.Found(DiscoveredDaemon("Jibe", "10.0.0.5", 8765))
+                                DiscoveryState.Found(DiscoveredDaemon("Jibe", "10.0.0.5", 8776))
                         advanceUntilIdle()
 
                         repository.state.test {
                                 assertEquals(
-                                        ConnectionState.Connecting("10.0.0.5", 8765),
+                                        ConnectionState.Connecting("10.0.0.5", 8776),
                                         awaitItem()
                                 )
 
@@ -616,7 +616,7 @@ class ConnectionRepositoryTest {
 
                         repository.startDiscovery()
                         discoveryStateFlow.value =
-                                DiscoveryState.Found(DiscoveredDaemon("Jibe", "10.0.0.5", 8765))
+                                DiscoveryState.Found(DiscoveredDaemon("Jibe", "10.0.0.5", 8776))
                         advanceUntilIdle()
                         recordingSocket.emit(WebSocketEvent.Connected)
                         advanceUntilIdle()
@@ -633,7 +633,7 @@ class ConnectionRepositoryTest {
                         advanceUntilIdle()
 
                         assertEquals(
-                                ConnectionState.Connecting("10.0.0.5", 8765),
+                                ConnectionState.Connecting("10.0.0.5", 8776),
                                 repository.state.value
                         )
                 }
@@ -643,12 +643,12 @@ class ConnectionRepositoryTest {
                 testScope.runTest {
                         repository.startDiscovery()
                         discoveryStateFlow.value =
-                                DiscoveryState.Found(DiscoveredDaemon("Jibe", "10.0.0.5", 8765))
+                                DiscoveryState.Found(DiscoveredDaemon("Jibe", "10.0.0.5", 8776))
                         advanceUntilIdle()
 
                         repository.state.test {
                                 assertEquals(
-                                        ConnectionState.Connecting("10.0.0.5", 8765),
+                                        ConnectionState.Connecting("10.0.0.5", 8776),
                                         awaitItem()
                                 )
 
@@ -707,7 +707,7 @@ class ConnectionRepositoryTest {
                 testScope.runTest {
                         repository.startDiscovery()
                         discoveryStateFlow.value =
-                                DiscoveryState.Found(DiscoveredDaemon("Jibe", "10.0.0.5", 8765))
+                                DiscoveryState.Found(DiscoveredDaemon("Jibe", "10.0.0.5", 8776))
                         advanceUntilIdle()
 
                         recordingSocket.emit(WebSocketEvent.Connected)
@@ -757,7 +757,7 @@ class ConnectionRepositoryTest {
                 testScope.runTest {
                         repository.startDiscovery()
                         discoveryStateFlow.value =
-                                DiscoveryState.Found(DiscoveredDaemon("Jibe", "10.0.0.5", 8765))
+                                DiscoveryState.Found(DiscoveredDaemon("Jibe", "10.0.0.5", 8776))
                         advanceUntilIdle()
                         recordingSocket.emit(WebSocketEvent.Connected)
                         advanceUntilIdle()
@@ -802,17 +802,17 @@ class ConnectionRepositoryTest {
                         assertEquals(ConnectionState.Discovering, repository.state.value)
 
                         discoveryStateFlow.value =
-                                DiscoveryState.Found(DiscoveredDaemon("Jibe", "10.0.0.5", 8765))
+                                DiscoveryState.Found(DiscoveredDaemon("Jibe", "10.0.0.5", 8776))
                         advanceUntilIdle()
 
                         assertEquals(
-                                ConnectionState.Connecting("10.0.0.5", 8765),
+                                ConnectionState.Connecting("10.0.0.5", 8776),
                                 repository.state.value
                         )
                         recordingSocket.emit(WebSocketEvent.Connected)
                         advanceUntilIdle()
                         assertEquals(
-                                ConnectionState.Connecting("10.0.0.5", 8765),
+                                ConnectionState.Connecting("10.0.0.5", 8776),
                                 repository.state.value
                         )
 
@@ -824,7 +824,7 @@ class ConnectionRepositoryTest {
 
                         assertTrue(repository.state.value !is ConnectionState.PairingFailed)
                         assertEquals(
-                                ConnectionState.Connecting("10.0.0.5", 8765),
+                                ConnectionState.Connecting("10.0.0.5", 8776),
                                 repository.state.value
                         )
                 }
@@ -833,7 +833,7 @@ class ConnectionRepositoryTest {
         fun `ping timeout after daemon death reconnects instead of staying connected`() =
                 testScope.runTest {
                         val creds =
-                                DeviceCredentials("dev_1", "finger_1", "10.0.0.5", 8765, "cert_fp")
+                                DeviceCredentials("dev_1", "finger_1", "10.0.0.5", 8776, "cert_fp")
                         credentialsFlow.value = creds
 
                         repository.start()
@@ -841,7 +841,7 @@ class ConnectionRepositoryTest {
 
                         repository.state.test {
                                 assertEquals(
-                                        ConnectionState.Connecting("10.0.0.5", 8765),
+                                        ConnectionState.Connecting("10.0.0.5", 8776),
                                         awaitItem()
                                 )
 
@@ -870,7 +870,7 @@ class ConnectionRepositoryTest {
                                 recordingSocket.emit(WebSocketEvent.MessageReceived(jibeMessage))
                                 advanceUntilIdle()
                                 assertEquals(
-                                        ConnectionState.Connected("10.0.0.5", 8765, "dev_123"),
+                                        ConnectionState.Connected("10.0.0.5", 8776, "dev_123"),
                                         awaitItem()
                                 )
 
@@ -879,7 +879,7 @@ class ConnectionRepositoryTest {
                                 advanceUntilIdle()
 
                                 assertEquals(
-                                        ConnectionState.Connecting("10.0.0.5", 8765),
+                                        ConnectionState.Connecting("10.0.0.5", 8776),
                                         awaitItem()
                                 )
                                 assertEquals(2, recordingSocket.connectCalls.size)

@@ -11,17 +11,17 @@ sequenceDiagram
     participant Client as Android App
 
     Note over Daemon: Startup
-    Daemon->>LAN: Multicast announcement<br/>"I am _jibe._tcp at 192.168.1.10:8765"
+    Daemon->>LAN: Multicast announcement<br/>"I am _jibe._tcp at 192.168.1.10:8776"
 
     Note over Daemon,LAN: Daemon is now silent — listening on UDP 5353
 
     Note over Client: User opens Jibe app
     Client->>LAN: Multicast query<br/>"Who provides _jibe._tcp?"
     LAN->>Daemon: (query forwarded)
-    Daemon->>Client: Reply: IP=192.168.1.10, port=8765,<br/>version=0.9.0, platform=linux
+    Daemon->>Client: Reply: IP=192.168.1.10, port=8776,<br/>version=0.9.0, platform=linux
 
     Note over Client: Discovery complete — client has IP + port
-    Client->>Daemon: Open WebSocket ws://192.168.1.10:8765/ws
+    Client->>Daemon: Open WebSocket ws://192.168.1.10:8776/ws
 ```
 
 The daemon does **not** continuously broadcast. It announces once at

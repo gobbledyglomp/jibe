@@ -8,7 +8,7 @@ network, mDNS, database, and logging.
 import os
 from pathlib import Path
 
-DEFAULT_PORT = 8765
+DEFAULT_PORT = 8776
 
 SERVICE_TYPE = "_jibe._tcp.local."
 SERVICE_NAME = "Jibe"

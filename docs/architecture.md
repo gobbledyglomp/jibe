@@ -73,7 +73,7 @@ sequenceDiagram
     Note over DB: Create tables if first run<br/>Enable WAL + foreign keys
 
     main.py->>Server: start()
-    Note over Server: Bind to 0.0.0.0:8765<br/>Ready for WebSocket + HTTP
+    Note over Server: Bind to 0.0.0.0:8776<br/>Ready for WebSocket + HTTP
 
     main.py->>Disc: start()
     Note over Disc: Register _jibe._tcp.local.<br/>on LAN via multicast

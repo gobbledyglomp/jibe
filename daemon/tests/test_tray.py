@@ -8,7 +8,7 @@ from jibe.core.auth import AuthManager
 from jibe.ui.tray import JibeTray, _make_tray_image
 
 
-_DASHBOARD_URL = "http://127.0.0.1:8766/"
+_DASHBOARD_URL = "http://127.0.0.1:8777/"
 
 
 def _make_tray(url: str = _DASHBOARD_URL) -> JibeTray:
@@ -32,7 +32,7 @@ def test_tray_open_dashboard_calls_webbrowser():
 
 def test_tray_open_dashboard_uses_http_loopback():
     """Dashboard URL must be plain HTTP on 127.0.0.1 (no TLS, no 0.0.0.0)."""
-    tray = _make_tray("http://127.0.0.1:8766/")
+    tray = _make_tray("http://127.0.0.1:8777/")
     with patch("jibe.ui.tray.webbrowser.open_new_tab") as mock_open:
         tray._open_dashboard()
     url = mock_open.call_args[0][0]

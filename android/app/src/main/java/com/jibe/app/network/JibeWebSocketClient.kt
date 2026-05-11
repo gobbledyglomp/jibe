@@ -83,7 +83,7 @@ class JibeWebSocketClient(
      * TrustManager handles cert validation.
      *
      * @param host The daemon's IP address (from mDNS discovery).
-     * @param port The daemon's port (from mDNS discovery, default 8765).
+     * @param port The daemon's port (from mDNS discovery, default 8776).
      */
     override fun connect(host: String, port: Int) {
         disconnect()
