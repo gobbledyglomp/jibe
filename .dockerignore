@@ -1,0 +1,23 @@
+.git
+android/
+branding/
+docs/
+.cursor/
+.vscode/
+*.md
+LICENSE
+docker-compose.yml
+.dockerignore
+
+# Python artifacts
+daemon/.venv/
+daemon/__pycache__/
+daemon/**/__pycache__/
+daemon/**/*.pyc
+daemon/.pytest_cache/
+daemon/tests/
+daemon/uv.lock
+
+# Build artifacts
+*.tar
+*.tar.gz
