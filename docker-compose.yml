@@ -1,29 +1,33 @@
 services:
   daemon:
     build: .
-    # host networking is required for mDNS multicast (zeroconf _jibe._tcp.local.)
-    # without it, Android discovery will not find the daemon
+    # host networking is required for mDNS multicast (_jibe._tcp.local.)
+    # without it the Android app will not discover the daemon automatically
     network_mode: host
     restart: unless-stopped
     environment:
-      # Override data dir so the volume mount is used instead of ~/.local/share/jibe
+      # Override the data directory so the volume mount is used instead of ~/.local/share/jibe
       XDG_DATA_HOME: /data
-      # Optional: change the WebSocket port (default 8776; dashboard = port+1 = 8777)
-      # JIBE_PORT: "8776"
-      # Optional: disable TLS for development — dashboard moves to same port as WS
-      # JIBE_NO_TLS: "1"
+      # --- Optional overrides ---
+      # JIBE_PORT: "8776"      # WebSocket port (dashboard = port+1)
+      # JIBE_NO_TLS: "1"       # Disable TLS — useful for testing; not recommended in production
     volumes:
-      # Persist device database, TLS certificates, and dashboard recovery key
+      # Persists the device database, TLS certificates, and dashboard recovery key.
       - ${XDG_DATA_HOME:-${HOME}/.local/share}/jibe:/data/jibe
 
+    # --- First-run dashboard password ---
+    # On first start, a random admin password is generated and printed to the log.
+    # Retrieve it with:   docker compose logs daemon | grep -A3 "Password"
+    # Change it in the dashboard under Settings → Users after first login.
+
     # --- Optional device/socket mounts for additional features ---
-    # Uncomment to enable presentation remote (requires ydotoold on host):
+    # Uncomment to enable presentation remote (requires ydotoold on the host):
     # devices:
     #   - /dev/uinput:/dev/uinput
 
-    # Uncomment to enable D-Bus notifications mirroring (Wayland/systemd user session):
+    # Uncomment to mirror D-Bus desktop notifications (systemd user session, Wayland):
     # volumes:
     #   - /run/user/1000/bus:/run/user/1000/bus
 
-    # Note: clipboard sync (X11/Wayland) and tray icon are desktop-session features
-    # and cannot be used in the standard headless Docker setup.
+    # Note: clipboard sync and tray icon are desktop-session features and cannot
+    # be used in the headless Docker setup.
