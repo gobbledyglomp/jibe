@@ -6,125 +6,139 @@
 
 ```
 daemon/
-├── main.py                 ← entrypoint: wires everything, runs the event loop
+├── main.py                  ← thin script entry; delegates to jibe.cli
 └── jibe/
-    ├── config.py            ← constants (port, PIN length, DB path, …)
-    ├── server.py            ← aiohttp: HTTP + WebSocket, owns the message loop
-    ├── discovery.py         ← mDNS broadcast via zeroconf
-    ├── connection.py        ← per-connection state machine + registry
-    ├── api.py               ← message parsing, validation, error formatting
-    ├── auth.py              ← PIN pairing, fingerprint trust, rate limiting
-    ├── db.py                ← async SQLite (devices, sessions)
-    ├── clipboard.py         ← (stub) clipboard sync
-    ├── notifications.py     ← (stub) notification mirroring
-    └── transfer.py          ← (stub) file transfer
+    ├── cli.py               ← CLI wiring, run_daemon(), entry point for pip install
+    ├── core/
+    │   ├── api.py           ← message parsing & protocol validation
+    │   ├── auth.py          ← PIN pairing, fingerprint trust, rate limiting
+    │   ├── auth_jwt.py      ← JWT session auth for the dashboard
+    │   ├── config.py        ← all constants (port, paths, timeouts, …)
+    │   ├── db.py            ← async SQLite (devices, history, sessions)
+    │   └── tls.py           ← self-signed certificate generation + SSL context
+    ├── handlers/
+    │   ├── battery.py       ← device battery telemetry
+    │   ├── clipboard.py     ← clipboard sync (pyperclip / wl-paste)
+    │   ├── device_features.py ← feature flag negotiation
+    │   ├── notifications.py ← notification mirroring via notify-send
+    │   ├── ping.py / pong.py ← heartbeat
+    │   ├── remote.py        ← presentation remote (xdotool / ydotool)
+    │   ├── ring.py          ← find-my-phone outbound ring
+    │   ├── router.py        ← MessageRouter: dispatches by message type
+    │   └── transfer.py      ← chunked file upload + checksum verification
+    ├── network/
+    │   ├── connection.py    ← per-connection state machine + ConnectionRegistry
+    │   ├── dashboard_event_log.py ← in-memory event log for dashboard live feed
+    │   ├── discovery.py     ← mDNS broadcast via zeroconf
+    │   ├── ping_probe.py    ← RTT probe tracker
+    │   └── server.py        ← aiohttp: WSS + plain-HTTP dashboard site
+    ├── ui/
+    │   └── tray.py          ← pystray system tray (optional, desktop only)
+    └── web/static/          ← dashboard HTML/CSS/JS (served at /web/)
 ```
 
 ## Layers
 
-The daemon is organised in three layers. Data flows **down** on
-incoming messages and **up** on outgoing responses.
+Data flows **down** on incoming messages and **up** on outgoing responses.
 
 ```mermaid
 graph TD
-    subgraph "Network"
-        WS["WebSocket (aiohttp)"]
-        MDNS["mDNS (zeroconf)"]
+    subgraph network_layer [Network]
+        WS["WebSocket — aiohttp WSS :8776"]
+        MDNS["mDNS — zeroconf"]
+        DASH["Dashboard HTTP :8777"]
     end
 
-    subgraph "Protocol"
-        API["api.py — parse + validate"]
-        CONN["connection.py — state machine"]
+    subgraph protocol_layer [Protocol]
+        API["core/api.py — parse + validate"]
+        CONN["network/connection.py — state machine"]
+        ROUTER["handlers/router.py — dispatch by type"]
     end
 
-    subgraph "Logic"
-        AUTH["auth.py — pairing + trust"]
-        CLIP["clipboard.py"]
-        NOTIF["notifications.py"]
-        XFER["transfer.py"]
+    subgraph logic_layer [Handlers]
+        AUTH["core/auth.py — pairing + trust"]
+        CLIP["handlers/clipboard.py"]
+        NOTIF["handlers/notifications.py"]
+        XFER["handlers/transfer.py"]
+        REMOTE["handlers/remote.py"]
+        RING["handlers/ring.py"]
+        BATT["handlers/battery.py"]
     end
 
-    subgraph "Storage"
-        DB["db.py — SQLite"]
+    subgraph storage_layer [Storage]
+        DB["core/db.py — SQLite"]
     end
 
-    WS --> API --> CONN
-    CONN --> AUTH --> DB
-    CONN --> CLIP
-    CONN --> NOTIF
-    CONN --> XFER --> DB
+    WS --> API --> CONN --> ROUTER
+    ROUTER --> AUTH --> DB
+    ROUTER --> CLIP
+    ROUTER --> NOTIF
+    ROUTER --> XFER --> DB
+    ROUTER --> REMOTE
+    ROUTER --> RING
+    ROUTER --> BATT
 ```
-
-**Network** accepts bytes from the outside world.
-**Protocol** turns bytes into typed, validated objects and enforces
-auth-before-anything. **Logic** acts on those objects. **Storage**
-persists state across restarts.
 
 ## Startup Sequence
 
 ```mermaid
 sequenceDiagram
-    participant main.py
+    participant cli as jibe.cli
     participant DB as JibeDatabase
     participant Server as JibeServer
     participant Disc as JibeDiscovery
+    participant Tray as JibeTray
 
-    main.py->>DB: open()
+    cli->>DB: open()
     Note over DB: Create tables if first run<br/>Enable WAL + foreign keys
 
-    main.py->>Server: start()
-    Note over Server: Bind to 0.0.0.0:8776<br/>Ready for WebSocket + HTTP
+    cli->>Server: start()
+    Note over Server: WSS on 0.0.0.0:8776<br/>Dashboard HTTP on 127.0.0.1:8777
 
-    main.py->>Disc: start()
+    cli->>Disc: start()
     Note over Disc: Register _jibe._tcp.local.<br/>on LAN via multicast
 
-    Note over main.py: asyncio.Event().wait()<br/>— runs forever until Ctrl+C
+    cli->>Tray: start() [optional]
+    Note over Tray: System tray if desktop session
 
-    main.py->>Disc: stop()
-    main.py->>Server: stop()
-    main.py->>DB: close()
+    Note over cli: asyncio.Event().wait()<br/>— runs forever until SIGTERM / Ctrl+C
+
+    cli->>Tray: stop()
+    cli->>Disc: stop()
+    cli->>Server: stop()
+    cli->>DB: close()
 ```
 
-All three services run concurrently in a **single asyncio event loop**.
-There are no threads (except the one `aiosqlite` uses internally to
-avoid blocking the loop on disk I/O).
+All services run concurrently in a **single asyncio event loop**.
 
 ## Ownership Graph
 
-Who creates whom, and who holds a reference to whom:
-
 ```
-main.py
+jibe.cli
   ├── creates JibeDatabase
   ├── creates JibeServer(db)
   │     ├── creates AuthManager(db)
-  │     └── creates ConnectionRegistry
+  │     ├── creates JWTAuth(db)
+  │     ├── creates ConnectionRegistry
+  │     ├── creates MessageRouter
+  │     ├── creates ClipboardMonitor
+  │     └── creates DashboardEventLog
   └── creates JibeDiscovery
 ```
-
-`JibeServer` is the central hub. It owns the `AuthManager` (which
-needs the database to look up trusted devices) and the
-`ConnectionRegistry` (which tracks every active WebSocket). Discovery
-is independent — it only needs the port number.
 
 ## Design Principles
 
 1. **Validate at the boundary.** Every raw JSON string passes through
-   `parse_message()` before anything else touches it. If it returns,
-   the message is well-formed. If it throws, the client gets a
-   structured error. The rest of the codebase never handles raw input.
+   `parse_message()` before anything else touches it. The rest of the
+   codebase only ever sees typed, validated objects.
 
-2. **Auth is a gate, not a check.** The connection state machine
-   enforces authentication as a hard prerequisite — not a flag that
-   handlers must remember to inspect. Once code runs inside the
-   `AUTHENTICATED` branch, auth is guaranteed.
+2. **Auth is a gate, not a check.** The connection state machine enforces
+   authentication as a hard prerequisite. Code running inside the
+   `AUTHENTICATED` branch has auth guaranteed — no handler needs to verify it.
 
-3. **One event loop, no threads.** Everything is `async/await` on a
-   single thread. This eliminates race conditions by design. The only
-   exception is `aiosqlite`, which uses one background thread for
-   SQLite — but its async interface hides that completely.
+3. **One event loop, no threads.** Everything is `async/await` on a single
+   thread, eliminating race conditions by design. The only exception is
+   `aiosqlite`, which uses one background thread for SQLite I/O.
 
-4. **Extend by adding, not modifying.** New features (clipboard,
-   files, notifications) will each be a handler function registered
-   on a message type. The server, protocol layer, and auth logic
-   remain untouched.
+4. **Extend by adding handlers.** New features are registered on the
+   `MessageRouter` without touching the server, protocol layer, or auth logic.
