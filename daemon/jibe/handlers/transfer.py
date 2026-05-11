@@ -34,8 +34,6 @@ FILE_CHUNK_BINARY_VERSION = 1
 FILE_CHUNK_HEADER_STRUCT = struct.Struct("!4sBBHII16s")
 FILE_CHUNK_HEADER_SIZE = FILE_CHUNK_HEADER_STRUCT.size
 
-_transfers: dict[str, "ActiveTransfer"] = {}
-
 
 def pack_binary_file_chunk(transfer_id: str, chunk_index: int, payload: bytes) -> bytes:
     """Build one binary WebSocket frame body for a file chunk (tests + documentation)."""
@@ -172,7 +170,7 @@ async def abort_transfers_for_connection(
     """
     to_remove = [
         tid
-        for tid, t in _transfers.items()
+        for tid, t in default_transfer_store.active.items()
         if t.owner_connection_id == connection_id
     ]
     for tid in to_remove:
@@ -200,7 +198,7 @@ async def _try_finish_transfer_history(
 
 
 def _abort_transfer(transfer_id: str, *, rm_temp: bool = True) -> None:
-    transfer = _transfers.pop(transfer_id, None)
+    transfer = default_transfer_store.active.pop(transfer_id, None)
     if transfer is None:
         return
     try:
@@ -235,6 +233,18 @@ class ActiveTransfer:
         self.hasher = hashlib.sha256()
 
 
+class TransferStore:
+    """Holds active inbound uploads; tests clear ``default_transfer_store.active`` for isolation."""
+
+    __slots__ = ("active",)
+
+    def __init__(self) -> None:
+        self.active: dict[str, ActiveTransfer] = {}
+
+
+default_transfer_store = TransferStore()
+
+
 async def handle_file_start(
     conn: JibeConnection,
     msg: JibeMessage,
@@ -250,7 +260,7 @@ async def handle_file_start(
     if not isinstance(transfer_id, str) or not transfer_id:
         await conn.send(format_error("malformed_payload", "file.start requires a non-empty string id"))
         return
-    if transfer_id in _transfers:
+    if transfer_id in default_transfer_store.active:
         await conn.send(format_error("transfer_conflict", f"Transfer id '{transfer_id}' is already active"))
         return
     if not isinstance(filename, str) or not filename.strip():
@@ -275,7 +285,7 @@ async def handle_file_start(
         await conn.send(format_error("internal_error", "Could not prepare transfer workspace"))
         return
 
-    _transfers[transfer_id] = ActiveTransfer(
+    default_transfer_store.active[transfer_id] = ActiveTransfer(
         transfer_id=transfer_id,
         owner_connection_id=conn.id,
         filename=filename,
@@ -353,11 +363,11 @@ async def handle_file_chunk_binary(
         await conn.send(format_error("malformed_payload", "Invalid transfer id in binary chunk"))
         return
 
-    if transfer_id not in _transfers:
+    if transfer_id not in default_transfer_store.active:
         await conn.send(format_error("unknown_transfer", "No active transfer for this id"))
         return
 
-    transfer = _transfers[transfer_id]
+    transfer = default_transfer_store.active[transfer_id]
 
     if transfer.owner_connection_id != conn.id:
         logger.warning(
@@ -438,11 +448,11 @@ async def handle_file_cancel(
     if not isinstance(transfer_id, str) or not transfer_id:
         await conn.send(format_error("malformed_payload", "file.cancel requires a non-empty string id"))
         return
-    if transfer_id not in _transfers:
+    if transfer_id not in default_transfer_store.active:
         await conn.send(format_error("unknown_transfer", "No active transfer for this id"))
         return
 
-    transfer = _transfers[transfer_id]
+    transfer = default_transfer_store.active[transfer_id]
     if transfer.owner_connection_id != conn.id:
         logger.warning(
             "file.cancel id=%s sent from wrong connection (owner=%s, got=%s)",
@@ -469,7 +479,7 @@ async def handle_file_done(
     transfer_id = payload.get("id")
     checksum = payload.get("checksum")
 
-    if not isinstance(transfer_id, str) or transfer_id not in _transfers:
+    if not isinstance(transfer_id, str) or transfer_id not in default_transfer_store.active:
         await conn.send(format_error("unknown_transfer", "No active transfer for this id"))
         return
     if not isinstance(checksum, str) or not checksum:
@@ -478,7 +488,7 @@ async def handle_file_done(
         await _send_ack(conn, transfer_id, False, "Missing checksum")
         return
 
-    transfer = _transfers[transfer_id]
+    transfer = default_transfer_store.active[transfer_id]
 
     if transfer.owner_connection_id != conn.id:
         logger.warning(
@@ -524,7 +534,7 @@ async def handle_file_done(
         await _send_ack(conn, transfer_id, False, "Failed to finalise temp file")
         return
 
-    transfer = _transfers.pop(transfer_id, None)
+    transfer = default_transfer_store.active.pop(transfer_id, None)
     if transfer is None:
         await _send_ack(conn, transfer_id, False, "Transfer disappeared during finalisation")
         return

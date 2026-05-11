@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.Jibe" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.Jibe" parent="Theme.AppCompat.Light.NoActionBar" />
 
     <!-- Zero-chrome transparent shell for activities that must briefly enter foreground
          (e.g. clipboard reads on Android 10+) without showing any UI. -->

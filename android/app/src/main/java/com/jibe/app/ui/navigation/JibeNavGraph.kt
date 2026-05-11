@@ -18,9 +18,12 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.jibe.app.data.local.DeviceCredentials
+import com.jibe.app.data.local.JibeDataStore
 import com.jibe.app.data.repository.ConnectionRepository
 import com.jibe.app.ui.screens.HomeScreen
 import com.jibe.app.ui.screens.PairingScreen
+import com.jibe.app.ui.screens.PresentationScreen
+import com.jibe.app.ui.screens.SettingsScreen
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 
@@ -36,7 +39,11 @@ import kotlinx.coroutines.flow.first
  * @param repository The connection state machine, shared between screens.
  */
 @Composable
-fun JibeNavGraph(credentialsFlow: Flow<DeviceCredentials?>, repository: ConnectionRepository) {
+fun JibeNavGraph(
+        credentialsFlow: Flow<DeviceCredentials?>,
+        repository: ConnectionRepository,
+        dataStore: JibeDataStore,
+) {
     /** Wait for DataStore's first emission so startDestination matches persisted credentials. */
     var bootstrapCredentials by remember { mutableStateOf<DeviceCredentials?>(null) }
     var bootstrapDone by remember { mutableStateOf(false) }
@@ -70,18 +77,36 @@ fun JibeNavGraph(credentialsFlow: Flow<DeviceCredentials?>, repository: Connecti
                         navController.navigate(Route.Home.path) {
                             popUpTo(Route.Pairing.path) { inclusive = true }
                         }
-                    }
+                    },
+                    onOpenSettings = { navController.navigate(Route.Settings.path) },
             )
         }
 
         composable(Route.Home.path) {
             HomeScreen(
                     repository = repository,
+                    dataStore = dataStore,
                     onDeviceForgotten = {
                         navController.navigate(Route.Pairing.path) {
                             popUpTo(Route.Home.path) { inclusive = true }
                         }
-                    }
+                    },
+                    onOpenSettings = { navController.navigate(Route.Settings.path) },
+                    onOpenPresentation = { navController.navigate(Route.Presentation.path) },
+            )
+        }
+
+        composable(Route.Presentation.path) {
+            PresentationScreen(
+                    repository = repository,
+                    onBack = { navController.popBackStack() },
+            )
+        }
+
+        composable(Route.Settings.path) {
+            SettingsScreen(
+                    dataStore = dataStore,
+                    onBack = { navController.popBackStack() },
             )
         }
     }

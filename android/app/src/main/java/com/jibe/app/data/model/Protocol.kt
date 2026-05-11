@@ -16,7 +16,11 @@ enum class MessageType(val value: String) {
         @SerializedName("file.cancel")   FILE_CANCEL("file.cancel"),
         @SerializedName("file.done")       FILE_DONE("file.done"),
         @SerializedName("file.ack")        FILE_ACK("file.ack"),
-        @SerializedName("error")           ERROR("error");
+        @SerializedName("error")           ERROR("error"),
+        @SerializedName("device.battery")  DEVICE_BATTERY("device.battery"),
+        @SerializedName("device.ring")     DEVICE_RING("device.ring"),
+        @SerializedName("device.features") DEVICE_FEATURES("device.features"),
+        @SerializedName("remote.key")      REMOTE_KEY("remote.key");
 
         companion object {
                 fun fromValue(value: String): MessageType? = entries.find { it.value == value }
@@ -29,7 +33,8 @@ data class AuthRequest(
         @SerializedName("type") val type: String = MessageType.AUTH_REQUEST.value,
         @SerializedName("device_name") val deviceName: String,
         @SerializedName("pin") val pin: String? = null,
-        @SerializedName("fingerprint") val fingerprint: String? = null
+        @SerializedName("fingerprint") val fingerprint: String? = null,
+        @SerializedName("feat_find_phone") val featFindPhone: Boolean = true,
 )
 
 data class AuthResponse(
@@ -105,4 +110,24 @@ data class FileAckMessage(
         @SerializedName("id") val id: String,
         @SerializedName("ok") val ok: Boolean,
         @SerializedName("reason") val reason: String? = null
+)
+
+data class DeviceBatteryMessage(
+        @SerializedName("type") val type: String = MessageType.DEVICE_BATTERY.value,
+        @SerializedName("level") val level: Int,
+        @SerializedName("charging") val charging: Boolean
+)
+
+data class DeviceRingMessage(
+        @SerializedName("type") val type: String = MessageType.DEVICE_RING.value
+)
+
+data class DeviceFeaturesMessage(
+        @SerializedName("type") val type: String = MessageType.DEVICE_FEATURES.value,
+        @SerializedName("feat_find_phone") val featFindPhone: Boolean,
+)
+
+data class RemoteKeyMessage(
+        @SerializedName("type") val type: String = MessageType.REMOTE_KEY.value,
+        @SerializedName("key") val key: String
 )

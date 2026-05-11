@@ -18,3 +18,12 @@ val JibeWarning = Color(0xFFF2C94C)
 val JibeError = Color(0xFFCF6679)
 
 val JibeAccent = Color(0xFFFFFFFF)
+
+val JibeLightSurface = Color(0xFFFAFAFC)
+val JibeLightSurfaceContainer = Color(0xFFF0F2F5)
+val JibeLightSurfaceContainerHigh = Color(0xFFE6E9EE)
+val JibeLightSurfaceContainerHighest = Color(0xFFDCE0E7)
+val JibeLightOnSurface = Color(0xFF1A1D23)
+val JibeLightOnSurfaceVariant = Color(0xFF5F6672)
+val JibeLightPrimary = Color(0xFF2C3545)
+val JibeLightOnPrimary = Color(0xFFFFFFFF)

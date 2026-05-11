@@ -120,11 +120,15 @@
     let devPage = 1;
     let devList = [];
 
+    let batteryCache = {};
+
     root.innerHTML =
       '<h1>' +
       esc(T('devices.title')) +
       '</h1><div id="dev-wrap"><table class="data"><thead><tr><th></th><th>' +
       esc(T('devices.name')) +
+      '</th><th>' +
+      esc(T('devices.battery')) +
       '</th><th>' +
       esc(T('devices.lastSeen')) +
       '</th><th>' +
@@ -149,6 +153,9 @@
         const tr = document.createElement('tr');
         const dot = d.online ? 'dot-online' : 'dot-offline';
         const ol = d.online ? T('common.online') : T('common.offline');
+        const bat = batteryCache[d.id];
+        const batStr =
+          bat != null ? bat.level + '% ' + (bat.charging ? '⚡' : '🔌') : '—';
         tr.innerHTML =
           '<td><span class="' +
           dot +
@@ -160,6 +167,9 @@
           '">' +
           esc(d.name) +
           '</td>' +
+          '<td class="mono">' +
+          esc(batStr) +
+          '</td>' +
           '<td>' +
           relativeTime(d.last_seen) +
           '</td>' +
@@ -168,10 +178,38 @@
           '</td>';
         if (role === 'admin') {
           const td = document.createElement('td');
-          const btn = document.createElement('button');
-          btn.className = 'btn btn-danger btn-sm';
-          btn.textContent = T('common.revoke');
-          btn.addEventListener('click', async () => {
+          td.style.cssText = 'display:flex;gap:0.35rem;';
+          if (d.online) {
+            const ringBtn = document.createElement('button');
+            ringBtn.className = 'btn btn-sm';
+            ringBtn.textContent = T('devices.ring');
+            const ringDisabled = d.feat_find_phone === false;
+            if (ringDisabled) {
+              ringBtn.disabled = true;
+              ringBtn.classList.add('btn-disabled-ring');
+              ringBtn.setAttribute('aria-disabled', 'true');
+              ringBtn.title = T('devices.ringDisabledTitle');
+            } else {
+              ringBtn.title = T('devices.ringTitle');
+              ringBtn.addEventListener('click', async () => {
+                ringBtn.disabled = true;
+                try {
+                  await window.JibeApi.request('/api/ring/' + encodeURIComponent(d.id), {
+                    method: 'POST',
+                  });
+                } catch (e) {
+                  alert(T('devices.ringFail') + ' ' + (e.message || e));
+                } finally {
+                  ringBtn.disabled = false;
+                }
+              });
+            }
+            td.appendChild(ringBtn);
+          }
+          const revokeBtn = document.createElement('button');
+          revokeBtn.className = 'btn btn-danger btn-sm';
+          revokeBtn.textContent = T('common.revoke');
+          revokeBtn.addEventListener('click', async () => {
             if (!confirm(T('devices.revokeConfirm') + ' ' + d.name + '?')) return;
             try {
               await window.JibeApi.request('/api/devices/' + encodeURIComponent(d.id), {
@@ -182,7 +220,7 @@
               alert(T('devices.revokeFail') + ' ' + (e.message || e));
             }
           });
-          td.appendChild(btn);
+          td.appendChild(revokeBtn);
           tr.appendChild(td);
         }
         tbody.appendChild(tr);
@@ -233,8 +271,12 @@
     }
 
     async function fetchDevices() {
-      const data = await window.JibeApi.json('/api/devices');
-      devList = data.devices || [];
+      const [devData, batData] = await Promise.all([
+        window.JibeApi.json('/api/devices'),
+        window.JibeApi.json('/api/battery').catch(() => ({ battery: {} })),
+      ]);
+      devList = devData.devices || [];
+      batteryCache = batData.battery || {};
       paintDeviceRows();
     }
 

@@ -11,10 +11,10 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import com.jibe.app.ui.theme.JibePrimary
 
 private const val SPINNER_PERIOD_NS = 900_000_000L
 private const val SPINNER_ARC_SWEEP_DEGREES = 260f
@@ -25,7 +25,7 @@ private const val SPINNER_ARC_SWEEP_DEGREES = 260f
 @Composable
 fun JibeSpinner(
         modifier: Modifier = Modifier,
-        color: Color = JibePrimary,
+        color: Color = MaterialTheme.colorScheme.primary,
         strokeWidth: Float = 3f
 ) {
         var angle by remember { mutableFloatStateOf(0f) }

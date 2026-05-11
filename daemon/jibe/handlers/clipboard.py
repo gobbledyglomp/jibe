@@ -34,7 +34,7 @@ def _snapshot_via_wlpaste() -> str | None:
     types = ("text/plain;charset=utf-8", "text/plain", "UTF8_STRING", "STRING")
     for mime in types:
         proc = subprocess.run(
-            [wl, "-t", mime],
+            [wl, "--no-newline", "-t", mime],
             capture_output=True,
             text=True,
             timeout=2,
@@ -178,7 +178,7 @@ async def handle_clipboard_sync(
 
     monitor.sync_after_remote_push(raw)
     try:
-        pyperclip.copy(raw)
+        await asyncio.to_thread(pyperclip.copy, raw)
     except Exception:
         logger.exception("pyperclip.copy failed for connection %s", conn.id)
         return

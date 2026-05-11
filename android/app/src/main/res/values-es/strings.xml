@@ -1,0 +1,105 @@
+<resources>
+    <string name="app_name">Jibe</string>
+    <string name="app_brand">jibe</string>
+
+    <!-- Accessibility -->
+    <string name="accessibility_pin_slot_empty">Posición %1$d de 6 del PIN, vacía</string>
+    <string name="accessibility_pin_slot_filled">Posición %1$d de 6 del PIN: %2$s</string>
+
+    <!-- Connection states -->
+    <string name="state_connected">Conectado</string>
+    <string name="state_connecting">Conectando…</string>
+    <string name="state_authenticating">Autenticando…</string>
+    <string name="state_discovering">Buscando…</string>
+    <string name="state_pairing_failed">Vinculación fallida</string>
+    <string name="state_pairing_unavailable">Vinculación no disponible</string>
+    <string name="state_failed">Error</string>
+    <string name="state_disconnected">Desconectado</string>
+
+    <!-- Common actions -->
+    <string name="action_send">Enviar</string>
+    <string name="action_cancel">Cancelar</string>
+    <string name="action_retry">Reintentar</string>
+    <string name="action_back">Atrás</string>
+
+    <!-- Labels -->
+    <string name="label_host">Host</string>
+    <string name="label_device">Dispositivo</string>
+
+    <!-- Pairing screen -->
+    <string name="pairing_tagline">Android ↔ Linux</string>
+    <string name="pairing_searching">Buscando daemon…</string>
+    <string name="pairing_run_hint">Ejecuta: python main.py --pair</string>
+    <string name="pairing_enter_pin">Ingresa el PIN que aparece en tu daemon</string>
+    <string name="pairing_pair">Vincular</string>
+    <string name="pairing_pin_rejected">PIN rechazado</string>
+    <string name="pairing_pin_rejected_body">Comprueba el PIN en tu equipo Linux y vuelve a intentarlo.</string>
+    <string name="pairing_unavailable_title">Vinculación inactiva</string>
+    <string name="pairing_unavailable_body">Inicia la vinculación en Linux y reintenta.</string>
+    <string name="pairing_unavailable_retry">Reintentar</string>
+
+    <!-- Clipboard -->
+    <string name="clipboard_title">Portapapeles</string>
+    <string name="clipboard_subtitle">Sincronizar texto con el daemon</string>
+    <string name="clipboard_sync_action">Sincronizar</string>
+    <string name="clipboard_sync_sent">Enviado</string>
+    <string name="clipboard_sync_empty">Portapapeles vacío</string>
+    <string name="clipboard_sync_not_connected">Sin conexión</string>
+    <string name="clipboard_sync_not_ready">Conexión no lista</string>
+
+    <!-- File transfer -->
+    <string name="file_title">Enviar archivo</string>
+    <string name="file_subtitle">Subir a ~/Downloads en el daemon</string>
+    <string name="file_pick">Elegir</string>
+    <string name="transfer_cancelled">Cancelada</string>
+    <string name="transfer_saved">Guardado en daemon ✓</string>
+    <string name="transfer_verifying">Verificando…</string>
+
+    <!-- Ping -->
+    <string name="ping_title">Ping</string>
+
+    <!-- Present -->
+    <string name="present_title">Presentar</string>
+    <string name="present_subtitle">Controla diapositivas desde tu teléfono</string>
+    <string name="present_open">Abrir</string>
+    <string name="present_not_connected">Sin conexión</string>
+    <string name="present_prev">Diapositiva anterior</string>
+    <string name="present_stop">Detener presentación</string>
+    <string name="present_next">Diapositiva siguiente</string>
+
+    <!-- Notifications -->
+    <string name="notif_title">Duplicado de notificaciones</string>
+    <string name="notif_body">Reenviar notificaciones de Android al escritorio Linux. Otorga acceso a notificaciones para Jibe.</string>
+    <string name="notif_open_settings">Abrir ajustes de notificaciones</string>
+
+    <!-- Forget device -->
+    <string name="home_forget_device">Olvidar dispositivo</string>
+    <string name="forget_title">¿Olvidar este dispositivo?</string>
+    <string name="forget_body">Esto elimina el certificado guardado y vuelve al modo de vinculación.</string>
+    <string name="forget_confirm">Olvidar</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Ajustes</string>
+    <string name="settings_appearance">Apariencia</string>
+    <string name="settings_dark_theme">Tema oscuro</string>
+    <string name="settings_dark_theme_desc">Si está desactivado, usa superficies claras</string>
+    <string name="settings_language">Idioma</string>
+    <string name="settings_features">Funciones</string>
+    <string name="settings_feat_clipboard">Sincronizar portapapeles</string>
+    <string name="settings_feat_clipboard_desc">Enviar y recibir texto del portapapeles</string>
+    <string name="settings_feat_notifications">Duplicar notificaciones</string>
+    <string name="settings_feat_notifications_desc">Reenviar notificaciones a Linux</string>
+    <string name="settings_feat_file_transfer">Transferencia de archivos</string>
+    <string name="settings_feat_file_transfer_desc">Subir archivos al daemon</string>
+    <string name="settings_feat_presentation">Control de presentación</string>
+    <string name="settings_feat_presentation_desc">Controles de diapositivas desde la pantalla Presentar</string>
+    <string name="settings_feat_find_phone">Encontrar mi teléfono</string>
+    <string name="settings_feat_find_phone_desc">Permitir comandos de timbre del daemon</string>
+    <string name="settings_feat_ping">Ping (diagnóstico)</string>
+    <string name="settings_feat_ping_desc">Botón de latencia ping/pong</string>
+
+    <!-- Ring alert -->
+    <string name="ring_title">Encontrar dispositivo</string>
+    <string name="ring_subtitle">Sonando…</string>
+    <string name="ring_stop">Detener</string>
+</resources>

@@ -66,5 +66,21 @@
     "type": "error",
     "code": "malformed_json",
     "message": "Failed to parse JSON"
+  },
+  "device.battery": {
+    "type": "device.battery",
+    "level": 85,
+    "charging": true
+  },
+  "device.ring": {
+    "type": "device.ring"
+  },
+  "device.features": {
+    "type": "device.features",
+    "feat_find_phone": true
+  },
+  "remote.key": {
+    "type": "remote.key",
+    "key": "next"
   }
 }

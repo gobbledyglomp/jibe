@@ -13,4 +13,10 @@ sealed class Route(val path: String) {
 
     /** Dashboard — shown when authenticated with a saved device. */
     data object Home : Route("home")
+
+    /** Presentation remote control (authenticated only). */
+    data object Presentation : Route("presentation")
+
+    /** App preferences (theme, language, feature toggles). */
+    data object Settings : Route("settings")
 }

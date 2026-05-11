@@ -9,7 +9,6 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -18,12 +17,17 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
+import androidx.core.os.LocaleListCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.jibe.app.data.local.JibeDataStore
 import com.jibe.app.service.JibeService
 import com.jibe.app.ui.navigation.JibeNavGraph
@@ -41,7 +45,7 @@ import com.jibe.app.ui.theme.JibeTheme
  * When the user closes the app, the Activity is destroyed but the service keeps running — the
  * WebSocket stays connected.
  */
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
 
     private var service: JibeService? by mutableStateOf(null)
 
@@ -81,17 +85,29 @@ class MainActivity : ComponentActivity() {
         // Render UI first — so the user sees something immediately, even
         // during the brief window before the service binds.
         setContent {
-            JibeTheme {
+            val themeStr by dataStore.theme.collectAsStateWithLifecycle(initialValue = "dark")
+            LaunchedEffect(Unit) {
+                dataStore.language.collect { lang ->
+                    val tag = if (lang == "es") "es" else "en-US"
+                    val desired = LocaleListCompat.forLanguageTags(tag)
+                    if (AppCompatDelegate.getApplicationLocales() != desired) {
+                        AppCompatDelegate.setApplicationLocales(desired)
+                    }
+                }
+            }
+
+            JibeTheme(isDark = themeStr != "light") {
                 Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.surface
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.surface
                 ) {
                     val currentService = service
 
                     if (currentService != null) {
                         JibeNavGraph(
-                            credentialsFlow = dataStore.credentials,
-                            repository = currentService.repository
+                                credentialsFlow = dataStore.credentials,
+                                repository = currentService.repository,
+                                dataStore = dataStore,
                         )
                     } else {
                         Box(

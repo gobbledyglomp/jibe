@@ -69,6 +69,7 @@ class JibeConnection:
         self.device_id: str | None = None
         self.device_name: str | None = None
         self.client_ip: str = client_ip
+        self.feat_find_phone: bool = True
 
     @property
     def is_authenticated(self) -> bool:
@@ -143,7 +144,7 @@ class ConnectionRegistry:
             message_json: Full JSON string for one protocol message.
             exclude: If set, this connection does not receive the message.
         """
-        for conn in self.get_authenticated():
+        for conn in list(self.get_authenticated()):
             if exclude is not None and conn.id == exclude.id:
                 continue
             await conn.send(message_json)

@@ -5,10 +5,14 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
+import android.os.BatteryManager
 import android.graphics.drawable.Icon
 import android.os.Binder
 import android.os.Build
@@ -69,6 +73,19 @@ class JibeService : Service() {
     lateinit var repository: ConnectionRepository
         private set
 
+    private val batteryReceiver =
+            object : BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    if (intent?.action != Intent.ACTION_BATTERY_CHANGED) return
+                    if (repository.state.value !is ConnectionState.Connected) return
+                    val bm = getSystemService(BATTERY_SERVICE) as BatteryManager
+                    val pct = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+                    if (pct < 0) return
+                    val charging = bm.isCharging
+                    repository.sendBatteryLevel(pct, charging)
+                }
+            }
+
     override fun onCreate() {
         super.onCreate()
         Log.i(TAG, "Service created")
@@ -80,6 +97,7 @@ class JibeService : Service() {
 
         repository =
                 ConnectionRepository(
+                        appContext = applicationContext,
                         dataStore = dataStore,
                         discovery = discovery,
                         scope = serviceScope,
@@ -99,8 +117,32 @@ class JibeService : Service() {
                                 },
                 )
         JibeRepositoryHolder.connectionRepository = repository
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(
+                    batteryReceiver,
+                    IntentFilter(Intent.ACTION_BATTERY_CHANGED),
+                    Context.RECEIVER_NOT_EXPORTED,
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        }
         serviceScope.launch { repository.state.collect { _ -> rebuildNotification() } }
         serviceScope.launch { repository.transferProgress.collect { _ -> rebuildNotification() } }
+        serviceScope.launch {
+            repository.state.collect { st ->
+                if (st is ConnectionState.Connected) {
+                    sendBatterySnapshotFromSystem()
+                }
+            }
+        }
+    }
+
+    private fun sendBatterySnapshotFromSystem() {
+        val bm = getSystemService(BATTERY_SERVICE) as BatteryManager
+        val pct = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+        if (pct < 0) return
+        repository.sendBatteryLevel(pct, bm.isCharging)
     }
 
     private var started = false
@@ -135,6 +177,7 @@ class JibeService : Service() {
 
     override fun onDestroy() {
         Log.i(TAG, "Service destroyed")
+        unregisterReceiver(batteryReceiver)
         repository.disconnect()
         JibeRepositoryHolder.connectionRepository = null
         serviceScope.cancel()

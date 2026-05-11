@@ -20,9 +20,9 @@ from jibe.network.connection import JibeConnection
 
 @pytest.fixture(autouse=True)
 def _clear_transfers():
-    transfer_mod._transfers.clear()
+    transfer_mod.default_transfer_store.active.clear()
     yield
-    transfer_mod._transfers.clear()
+    transfer_mod.default_transfer_store.active.clear()
 
 
 def _msg(msg_type: MessageType, **payload) -> JibeMessage:
@@ -168,7 +168,7 @@ async def test_abort_transfers_for_connection_removes_workspace(mock_ws, monkeyp
 
     await abort_transfers_for_connection(conn.id)
 
-    assert tid not in transfer_mod._transfers
+    assert tid not in transfer_mod.default_transfer_store.active
     assert not workspace.exists()
     assert not temp_root.exists()
     assert not (tmp_path / "Downloads" / ".jibe-tmp").exists()
@@ -200,6 +200,6 @@ async def test_file_cancel_sends_ack_without_closing(mock_ws, monkeypatch, tmp_p
     assert acks, "expected a file.ack frame"
     assert acks[-1]["ok"] is False
     assert acks[-1]["reason"] == "Cancelled"
-    assert tid not in transfer_mod._transfers
+    assert tid not in transfer_mod.default_transfer_store.active
 
     mock_ws.close.assert_not_called()

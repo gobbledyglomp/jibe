@@ -1,6 +1,6 @@
 # Jibe WebSocket Protocol Specification
 
-> Version: 0.5.1-beta · Status: Draft
+> Version: 0.9.0 · Status: Draft · Track: pre-1.0 stabilization (not a GA release)
 
 ## Design Philosophy
 
@@ -413,6 +413,75 @@ The daemon removes partial data for that transfer and responds with [`file.ack`]
 
 ---
 
+### `device.battery`
+
+| Field         | Value                                                       |
+| ------------- | ----------------------------------------------------------- |
+| **Direction** | Android → Linux                                             |
+| **Purpose**   | Report the current battery state of the Android device      |
+
+Sent once after authentication and again whenever the battery level or charging state changes.
+
+```json
+{
+  "type": "device.battery",
+  "level": 85,
+  "charging": true
+}
+```
+
+| Field      | Type      | Description                                                         |
+| ---------- | --------- | ------------------------------------------------------------------- |
+| `type`     | `string`  | Always `"device.battery"`                                           |
+| `level`    | `integer` | Battery percentage (0–100)                                          |
+| `charging` | `boolean` | `true` if the device is connected to a charger                      |
+
+---
+
+### `device.ring`
+
+| Field         | Value                                                      |
+| ------------- | ---------------------------------------------------------- |
+| **Direction** | Linux → Android                                            |
+| **Purpose**   | Command the Android device to play a ringtone and show a full-screen alert |
+
+```json
+{
+  "type": "device.ring"
+}
+```
+
+| Field  | Type     | Description            |
+| ------ | -------- | ---------------------- |
+| `type` | `string` | Always `"device.ring"` |
+
+No additional fields. The Android app plays the system ringtone and presents a dismissible full-screen alert.
+
+---
+
+### `remote.key`
+
+| Field         | Value                                                      |
+| ------------- | ---------------------------------------------------------- |
+| **Direction** | Android → Linux                                            |
+| **Purpose**   | Trigger a key event on the Linux desktop (presentation remote) |
+
+```json
+{
+  "type": "remote.key",
+  "key": "next"
+}
+```
+
+| Field  | Type     | Description                                                                 |
+| ------ | -------- | --------------------------------------------------------------------------- |
+| `type` | `string` | Always `"remote.key"`                                                       |
+| `key`  | `string` | One of `"next"` (→), `"prev"` (←), `"stop"` (Escape), `"blank"` (B key)   |
+
+The daemon maps the key name to the OS key event and dispatches it to the focused window via `xdotool` (X11) or `ydotool` (Wayland).
+
+---
+
 ### `error`
 
 | Field         | Value                                           |
@@ -454,5 +523,7 @@ The protocol version follows [SemVer](https://semver.org/):
 - **Patch** (0.1.x) — bug fixes, clarifications, no message changes
 - **Minor** (0.x.0) — new message types added, existing types unchanged
 - **Major** (x.0.0) — breaking changes to existing message types
+
+**0.9.x** is used as the stabilization track immediately before **1.0.0** GA: feature-complete for typical use, but the project version stays below 1.0 until a deliberate general-availability cut.
 
 The daemon advertises its version via mDNS TXT records and the `GET /` health endpoint. Clients should check compatibility before connecting.

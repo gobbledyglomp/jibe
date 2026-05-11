@@ -31,6 +31,8 @@ from pathlib import Path
 
 from PIL import Image
 
+from collections.abc import Callable
+
 from jibe.core.auth import AuthManager
 
 logger = logging.getLogger(__name__)
@@ -163,7 +165,7 @@ def _best_icon_class():
 # ---------------------------------------------------------------------------
 
 class JibeTray:
-    """pystray icon: open dashboard, pairing controls, quit."""
+    """pystray icon: open dashboard, pairing controls, ring phone, quit."""
 
     def __init__(
         self,
@@ -173,6 +175,8 @@ class JibeTray:
         shutdown_event: asyncio.Event,
         auth_manager: AuthManager,
         icon_path: Path | None = None,
+        get_battery_fn: "Callable[[], dict] | None" = None,
+        ring_fn: "Callable[[], None] | None" = None,
     ) -> None:
         self._dashboard_url = dashboard_url
         self._loop = loop
@@ -181,6 +185,8 @@ class JibeTray:
         self._icon_path = icon_path or _DEFAULT_ICON
         self._icon = None
         self._thread: threading.Thread | None = None
+        self._get_battery = get_battery_fn
+        self._ring_fn = ring_fn
 
     def _open_dashboard(self) -> None:
         try:
@@ -193,6 +199,25 @@ class JibeTray:
 
     def _pairing_stop(self) -> None:
         self._loop.call_soon_threadsafe(self._auth.stop_pairing)
+
+    def _do_ring(self) -> None:
+        if self._ring_fn is not None:
+            self._ring_fn()
+
+    def _battery_label(self) -> str:
+        """Build a human-readable battery string for the menu, or empty string."""
+        if self._get_battery is None:
+            return ""
+        batteries = self._get_battery()
+        if not batteries:
+            return ""
+        parts: list[str] = []
+        for info in batteries.values():
+            level = info.get("level", "?")
+            charging = info.get("charging", False)
+            icon = "⚡" if charging else "🔋"
+            parts.append(f"{level}% {icon}")
+        return " | ".join(parts)
 
     def start(self) -> None:
         """Load the icon and run the GLib/tray event loop on a dedicated thread."""
@@ -217,12 +242,36 @@ class JibeTray:
                 loop.call_soon_threadsafe(shutdown_event.set)
                 icon.stop()
 
-            menu = pystray.Menu(
+            get_battery = self._get_battery
+            ring_fn = self._ring_fn
+
+            menu_items: list = [
                 pystray.MenuItem(
                     "Open Dashboard",
                     lambda _icon, _item: self._open_dashboard(),
                     default=True,
                 ),
+            ]
+
+            if get_battery is not None:
+
+                def _battery_menu_title(_item: object) -> str:
+                    label = self._battery_label()
+                    return f"Battery: {label}" if label else "Battery: —"
+
+                menu_items.append(pystray.Menu.SEPARATOR)
+                menu_items.append(pystray.MenuItem(_battery_menu_title, None, enabled=False))
+
+            if ring_fn is not None:
+                menu_items.append(pystray.Menu.SEPARATOR)
+                menu_items.append(
+                    pystray.MenuItem(
+                        "Ring phone",
+                        lambda _icon, _item: self._do_ring(),
+                    )
+                )
+
+            menu_items += [
                 pystray.Menu.SEPARATOR,
                 pystray.MenuItem(
                     "Start Pairing",
@@ -234,7 +283,9 @@ class JibeTray:
                 ),
                 pystray.Menu.SEPARATOR,
                 pystray.MenuItem("Quit", on_quit),
-            )
+            ]
+
+            menu = pystray.Menu(*menu_items)
 
             icon = IconClass("jibe", img, "Jibe", menu=menu)
             self._icon = icon
