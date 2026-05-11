@@ -7,6 +7,10 @@ Wayland ``wl-paste`` prints noisy diagnostics to stderr when the clipboard holds
 non-text MIME type (e.g. images); we read via subprocess with stderr suppressed
 and skip broadcasts when no UTF-8/plain selection exists — avoids log spam and
 phantom change loops.
+
+In headless environments (Docker, SSH without X forwarding) no clipboard mechanism
+is present.  The monitor detects this once on startup and exits cleanly so the
+daemon doesn't spam error logs.
 """
 
 from __future__ import annotations
@@ -17,6 +21,7 @@ import logging
 import shutil
 import subprocess
 import pyperclip
+from pyperclip import PyperclipException
 
 from jibe.core.api import JibeMessage, MessageType
 from jibe.core.db import JibeDatabase
@@ -25,6 +30,27 @@ from jibe.network.connection import ConnectionRegistry, JibeConnection
 logger = logging.getLogger(__name__)
 
 CLIPBOARD_POLL_INTERVAL_SECONDS = 0.5
+
+
+def _clipboard_mechanism_available() -> bool:
+    """Return True if any read/write clipboard tool is present on this system.
+
+    Checked once at monitor startup to avoid log spam in headless environments.
+    pyperclip raises ``PyperclipException`` immediately (no subprocess, no blocking)
+    when no mechanism is found, so this probe is cheap.
+    """
+    if shutil.which("wl-paste") is not None:
+        return True
+    if shutil.which("xclip") is not None:
+        return True
+    try:
+        pyperclip.paste()
+        return True
+    except PyperclipException:
+        return False
+    except Exception:
+        # Unknown error — assume a mechanism exists and let the monitor handle it.
+        return True
 
 
 def _snapshot_via_wlpaste() -> str | None:
@@ -119,6 +145,13 @@ class ClipboardMonitor:
 
     async def run(self) -> None:
         """Poll forever until cancelled."""
+        if not await asyncio.to_thread(_clipboard_mechanism_available):
+            logger.warning(
+                "No clipboard mechanism found (wl-paste, xclip). "
+                "Clipboard sync disabled — install xclip or wl-clipboard to enable it."
+            )
+            return
+
         baseline_ready = False
         try:
             while True:
@@ -179,6 +212,9 @@ async def handle_clipboard_sync(
     monitor.sync_after_remote_push(raw)
     try:
         await asyncio.to_thread(pyperclip.copy, raw)
+    except PyperclipException:
+        logger.warning("pyperclip.copy unavailable (headless environment) for %s", conn.id)
+        return
     except Exception:
         logger.exception("pyperclip.copy failed for connection %s", conn.id)
         return

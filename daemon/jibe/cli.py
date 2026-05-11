@@ -208,6 +208,19 @@ def _configure_logging(*, verbose: bool) -> None:
 def main() -> None:
     """Entry point. Parses args, sets up the event loop, handles Ctrl+C."""
     args = _build_parser().parse_args()
+
+    # Environment variable overrides for Docker/headless deployments.
+    # These are checked after arg parsing so CLI flags still take precedence.
+    if "JIBE_PORT" in os.environ:
+        try:
+            args.port = int(os.environ["JIBE_PORT"])
+        except ValueError:
+            pass
+    if os.environ.get("JIBE_NO_TLS", "").lower() in ("1", "true", "yes"):
+        args.no_tls = True
+    if os.environ.get("JIBE_NO_TRAY", "").lower() in ("1", "true", "yes"):
+        args.no_tray = True
+
     _configure_logging(verbose=args.verbose)
 
     if args.regen_certs:
