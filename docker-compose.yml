@@ -8,9 +8,9 @@ services:
     environment:
       # Override data dir so the volume mount is used instead of ~/.local/share/jibe
       XDG_DATA_HOME: /data
-      # Optional: change the WebSocket port (default 8765)
-      # JIBE_PORT: "8765"
-      # Optional: disable TLS for development (not recommended)
+      # Optional: change the WebSocket port (default 8776; dashboard = port+1 = 8777)
+      # JIBE_PORT: "8776"
+      # Optional: disable TLS for development — dashboard moves to same port as WS
       # JIBE_NO_TLS: "1"
     volumes:
       # Persist device database, TLS certificates, and dashboard recovery key

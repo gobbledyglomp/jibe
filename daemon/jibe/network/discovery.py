@@ -91,7 +91,7 @@ class JibeDiscovery:
     can read before even connecting.
 
     Usage:
-        discovery = JibeDiscovery(port=8765)
+        discovery = JibeDiscovery(port=8776)
         await discovery.start()
         # ... daemon is now discoverable ...
         await discovery.stop()

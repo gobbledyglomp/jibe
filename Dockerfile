@@ -19,10 +19,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY daemon/ .
 
-EXPOSE 8765
+EXPOSE 8776 8777
 
+# Port 8776: WSS (Android WebSocket, TLS)
+# Port 8777: plain-HTTP dashboard/REST (localhost-only when TLS is active)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -sf http://localhost:8765/ || exit 1
+    CMD curl -sf http://localhost:8777/health || exit 1
 
 # --no-tray: system tray requires a desktop session; Docker runs headless.
 # Mount /dev/uinput and /run/user/1000/bus for presentation remote and notifications.
