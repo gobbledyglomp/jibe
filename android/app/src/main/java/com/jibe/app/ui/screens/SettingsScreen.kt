@@ -56,6 +56,7 @@ import com.jibe.app.data.local.FeatureId
 import com.jibe.app.data.local.JibeDataStore
 import com.jibe.app.ui.components.dragHandle
 import com.jibe.app.ui.components.rememberReorderState
+import com.jibe.app.ui.components.reorderItemAnimateModifier
 import com.jibe.app.ui.components.reorderableItem
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Box
@@ -175,11 +176,10 @@ fun SettingsScreen(dataStore: JibeDataStore, onBack: () -> Unit) {
                     items = featureOrder,
                     key = { it.key }
             ) { featureId ->
-                val isDragged = reorderState.isDragged(featureId.key)
                 Column(
                         modifier = Modifier
                                 .reorderableItem(reorderState, featureId.key)
-                                .then(if (!isDragged) Modifier.animateItem() else Modifier)
+                                .then(reorderItemAnimateModifier(reorderState, featureId.key))
                 ) {
                     FeatureToggleRow(
                             featureId = featureId,

@@ -2,6 +2,7 @@ package com.jibe.app.ui.components
 
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
@@ -24,8 +25,7 @@ import androidx.compose.ui.zIndex
  *
  * Usage:
  * 1. Create with [rememberReorderState].
- * 2. On each reorderable item: `Modifier.reorderableItem(state, key)`.
- *    Only call `.animateItem()` when `!state.isDragged(key)`.
+ * 2. On each reorderable item: `Modifier.reorderableItem(state, key).then(reorderItemAnimateModifier(state, key))`.
  * 3. On the drag handle / drag surface: `Modifier.dragHandle(state, key)`.
  */
 @Stable
@@ -144,6 +144,23 @@ fun Modifier.dragHandle(state: ReorderState, key: Any): Modifier {
                 },
                 onDragEnd = { state.end() },
                 onDragCancel = { state.end() },
+        )
+    }
+}
+
+/**
+ * Item placement/fade animation only while a reorder drag is active (neighbor cards easing aside).
+ * When the list updates from storage or toggles, items snap without a reorder "flash".
+ */
+fun LazyItemScope.reorderItemAnimateModifier(reorderState: ReorderState, key: Any): Modifier {
+    if (reorderState.isDragged(key)) return Modifier
+    return if (reorderState.isDragging) {
+        Modifier.animateItem()
+    } else {
+        Modifier.animateItem(
+                fadeInSpec = null,
+                fadeOutSpec = null,
+                placementSpec = null,
         )
     }
 }

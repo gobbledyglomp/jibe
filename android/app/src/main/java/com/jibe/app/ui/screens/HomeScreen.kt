@@ -53,7 +53,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -87,6 +86,7 @@ import com.jibe.app.data.repository.TransferProgress
 import com.jibe.app.ui.components.JibeSpinner
 import com.jibe.app.ui.components.dragHandle
 import com.jibe.app.ui.components.rememberReorderState
+import com.jibe.app.ui.components.reorderItemAnimateModifier
 import com.jibe.app.ui.components.reorderableItem
 import com.jibe.app.ui.theme.JibeError
 import com.jibe.app.ui.theme.JibeSuccess
@@ -111,7 +111,10 @@ fun HomeScreen(
 ) {
         val state by repository.state.collectAsState()
         val transferProgress by repository.transferProgress.collectAsState()
-        val settings by dataStore.allSettings.collectAsStateWithLifecycle(initialValue = AppSettings())
+        var settings by remember { mutableStateOf<AppSettings?>(null) }
+        LaunchedEffect(Unit) {
+                dataStore.allSettings.collect { settings = it }
+        }
         val context = LocalContext.current
         val scope = rememberCoroutineScope()
         val pickDocument =
@@ -144,15 +147,16 @@ fun HomeScreen(
         val isConnected = state is ConnectionState.Connected
 
         val visibleFeatures = remember { mutableStateListOf<FeatureId>() }
-        val fullOrder = settings.featureOrder
 
-        LaunchedEffect(fullOrder, settings.featClipboard, settings.featFileTransfer, settings.featPresentation, settings.featPing) {
+        LaunchedEffect(settings, settings?.featClipboard, settings?.featFileTransfer, settings?.featPresentation, settings?.featPing) {
+                val s = settings ?: return@LaunchedEffect
+                val fullOrder = s.featureOrder
                 val ordered = fullOrder.filter { id ->
                         id in HOME_CARD_FEATURES && when (id) {
-                                FeatureId.CLIPBOARD -> settings.featClipboard
-                                FeatureId.FILE_TRANSFER -> settings.featFileTransfer
-                                FeatureId.PRESENTATION -> settings.featPresentation
-                                FeatureId.PING -> settings.featPing
+                                FeatureId.CLIPBOARD -> s.featClipboard
+                                FeatureId.FILE_TRANSFER -> s.featFileTransfer
+                                FeatureId.PRESENTATION -> s.featPresentation
+                                FeatureId.PING -> s.featPing
                                 else -> false
                         }
                 }
@@ -161,6 +165,8 @@ fun HomeScreen(
                         visibleFeatures.addAll(ordered)
                 }
         }
+
+        val fullOrder = settings?.featureOrder ?: FeatureId.DEFAULT_ORDER
 
         val listState = rememberLazyListState()
         val reorderableKeys by remember {
@@ -225,11 +231,10 @@ fun HomeScreen(
                                 items = visibleFeatures,
                                 key = { it.key }
                         ) { featureId ->
-                                val isDragged = reorderState.isDragged(featureId.key)
                                 Column(
                                         modifier = Modifier
                                                 .reorderableItem(reorderState, featureId.key)
-                                                .then(if (!isDragged) Modifier.animateItem() else Modifier)
+                                                .then(reorderItemAnimateModifier(reorderState, featureId.key))
                                 ) {
                                         when (featureId) {
                                                 FeatureId.CLIPBOARD ->
