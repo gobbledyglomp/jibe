@@ -1,6 +1,6 @@
 # Jibe WebSocket Protocol Specification
 
-> Version: 0.6.0-beta · Status: Draft
+> Version: 0.9.0 · Status: Draft · Track: pre-1.0 stabilization (not a GA release)
 
 ## Design Philosophy
 
@@ -523,5 +523,7 @@ The protocol version follows [SemVer](https://semver.org/):
 - **Patch** (0.1.x) — bug fixes, clarifications, no message changes
 - **Minor** (0.x.0) — new message types added, existing types unchanged
 - **Major** (x.0.0) — breaking changes to existing message types
+
+**0.9.x** is used as the stabilization track immediately before **1.0.0** GA: feature-complete for typical use, but the project version stays below 1.0 until a deliberate general-availability cut.
 
 The daemon advertises its version via mDNS TXT records and the `GET /` health endpoint. Clients should check compatibility before connecting.
