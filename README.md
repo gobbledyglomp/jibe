@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="branding/logos/banner.svg" alt="Jibe" width="720" />
+  <img src="branding/logos/banner.png" alt="Jibe" width="720" />
 
   [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
   [![Version](https://img.shields.io/badge/version-0.9.0--pre-orange)](https://github.com/gobbledyglomp/jibe/releases)
