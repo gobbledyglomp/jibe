@@ -7,73 +7,104 @@
 
 ---
 
-Clipboard sync, file transfer, notification mirroring, find my phone, presentation remote, and battery status — all over your local network. No accounts, no cloud, no cables.
+Clipboard sync · file transfer · notification mirroring · find my phone · presentation remote · battery status — over LAN. No accounts, no cloud, no cables.
 
 ---
 
-## Install
+## Android
 
-### Linux daemon
+Download [`app-release.apk`](https://github.com/gobbledyglomp/jibe/releases) and sideload it. Keep the phone on the same Wi-Fi as the daemon. It discovers the daemon automatically.
 
-Requires Python 3.13+ and `xdotool` (X11) or `ydotool` (Wayland) for presentation remote.
+---
+
+## Linux daemon
+
+| | `install.sh` | `pipx` | Docker |
+|---|---|---|---|
+| Icon in app launcher | ✓ | optional | ✗ |
+| System tray | ✓ | optional | ✗ |
+| Autostart on login | ✓ (default) | optional | ✓ (`restart: unless-stopped`) |
+| Clipboard sync | ✓ | ✓ | ✗ |
+| Presentation remote | ✓ | ✓ | ✗ |
+| Terminal required day-to-day | ✗ | ✗ | ✗ |
+
+Dashboard is always at **http://127.0.0.1:8777/** (same for all paths).
+
+---
+
+### `install.sh` (recommended for desktop users)
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/gobbledyglomp/jibe/main/deploy/install.sh)
+# 1. Prerequisites (example — Arch)
+sudo pacman -S python-pipx git xdotool   # pipx is required; rest is optional
+
+# 2. Clone and install
+git clone https://github.com/gobbledyglomp/jibe.git && cd jibe
+bash deploy/install.sh          # adds icon, launcher entry, starts on login
 ```
 
-Or manually with pipx:
+> Omit autostart: `bash deploy/install.sh --no-autostart`
+
+**First-run password** — generated once, printed to the log:
+```bash
+journalctl --user -u jibe -b --no-pager | grep -A4 'Password (save now)'
+```
+
+Then: bookmark **http://127.0.0.1:8777/** → log in as `admin` → go to [Pair](#pairing).
+
+---
+
+### `pipx` (minimal, bring your own launcher)
 
 ```bash
+# 1. Prerequisites
+sudo pacman -S python-pipx       # Arch; or: sudo apt install pipx
+
+# 2. Install
 pipx install git+https://github.com/gobbledyglomp/jibe.git#subdirectory=daemon
+pipx ensurepath && exec $SHELL   # make 'jibe' available
+
+# 3. First run — copy the password from the output
+jibe
 ```
 
-The dashboard is at **http://127.0.0.1:8777/** — check the terminal on first run for the generated admin password.
+**First-run password** is printed on stdout. Save it, then Ctrl+C.
 
-To start on login:
+Optional autostart (systemd user service):
 ```bash
 cp deploy/jibe.service ~/.config/systemd/user/
-systemctl --user enable --now jibe
+systemctl --user daemon-reload && systemctl --user enable --now jibe
 ```
 
-### Docker (headless)
+Then: bookmark **http://127.0.0.1:8777/** → log in as `admin` → go to [Pair](#pairing).
 
-> Clipboard sync, tray icon, and presentation remote are desktop-session features and are unavailable in the standard headless Docker setup.
+---
+
+### Docker (headless — no clipboard, tray, or remote)
 
 ```bash
+# 1. Prerequisites: Docker + Compose v2
+
+# 2. Start
 git clone https://github.com/gobbledyglomp/jibe.git && cd jibe
 docker compose up -d
-docker compose logs daemon | grep -A3 "Password"   # initial dashboard password
+
+# 3. Retrieve the first-run password
+docker compose logs daemon | grep -A4 'Password (save now)'
 ```
 
-### Android
-
-Download `app-release.apk` from [Releases](https://github.com/gobbledyglomp/jibe/releases) and sideload it. The app discovers the daemon automatically via mDNS.
-
-To build from source: [android/README.md](android/README.md)
+Then: bookmark **http://127.0.0.1:8777/** → log in as `admin` → go to [Pair](#pairing).
 
 ---
 
-## Pair a device
+### Pairing
 
-1. Run `jibe --pair` (or use the tray menu / dashboard → Pairing).
-2. A 6-digit PIN appears — enter it in the Android app.
-3. Done. The device is trusted for all future connections.
+1. Open the dashboard → **Daemon → Start Pairing** (or tray → Start Pairing).
+2. A 6-digit PIN appears.
+3. Open the Android app → enter the PIN.
+4. Done. The device reconnects automatically from now on.
 
----
-
-## Architecture
-
-```
-Android App  ──WSS──►  Jibe Daemon (Python, aiohttp)
-                              │
-                    ┌─────────┼─────────┐
-                 SQLite    mDNS       REST API
-               (devices) (zeroconf)  (dashboard)
-```
-
-- [docs/architecture.md](docs/architecture.md) — module map and design decisions
-- [docs/protocol.md](docs/protocol.md) — WebSocket message reference
-- [docs/flows.md](docs/flows.md) — discovery, pairing, and connection state diagrams
+After pairing, change the default admin password under **Settings → Users**.
 
 ---
 
