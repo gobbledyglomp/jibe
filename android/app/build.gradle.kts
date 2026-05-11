@@ -1,7 +1,18 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
 }
+
+// Load signing properties from local.properties (gitignored).
+// CI can supply them via environment variables instead.
+val localProps = Properties().also { props ->
+    val f = rootProject.file("local.properties")
+    if (f.exists()) props.load(f.inputStream())
+}
+fun localProp(key: String): String? =
+    System.getenv(key.uppercase().replace(".", "_")) ?: localProps.getProperty(key)
 
 android {
     namespace = "com.jibe.app"
@@ -21,13 +32,27 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile     = localProp("signing.storeFile")?.let { file(it) }
+            storePassword = localProp("signing.storePassword")
+            keyAlias      = localProp("signing.keyAlias")
+            keyPassword   = localProp("signing.keyPassword")
+        }
+    }
+
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
-                    getDefaultProguardFile("proguard-android-optimize.txt"),
-                    "proguard-rules.pro"
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
             )
+            val releaseCfg = signingConfigs.getByName("release")
+            if (releaseCfg.storeFile != null) {
+                signingConfig = releaseCfg
+            }
         }
     }
     compileOptions {
