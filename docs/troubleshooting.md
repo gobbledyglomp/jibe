@@ -113,6 +113,40 @@ Use `adb install -v` for the exact failure reason.
 
 ---
 
+## Presentation remote not working (ydotool exit 2)
+
+On **Wayland** (default on Arch/KDE/GNOME), Jibe uses `ydotool`, which needs the `ydotoold` daemon and access to `/dev/uinput`.
+
+**Symptoms:** log lines like `ydotool exited 2` or `ydotoold exited immediately with code 2`.
+
+**Fix (Arch):**
+
+```bash
+sudo pacman -S ydotool
+sudo usermod -aG input $USER
+# log out and back in (or reboot)
+systemctl --user enable --now ydotoold
+systemctl --user restart jibe
+```
+
+If `/dev/uinput` is missing: `sudo modprobe uinput`.
+
+`install.sh` enables the `ydotoold` user service and prints a warning when you are not in the `input` group yet.
+
+On **X11**, install `xdotool` instead — no `ydotoold` required.
+
+---
+
+## `jibe: command not found` after install
+
+pipx installs to `~/.local/bin`. Either open a **new terminal**, run `pipx ensurepath` and restart your shell, or:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+---
+
 ## Install / packaging audit (high-risk areas)
 
 Areas that historically caused user-visible bugs and deserve extra scrutiny:
@@ -125,7 +159,7 @@ Areas that historically caused user-visible bugs and deserve extra scrutiny:
 | **Docker** | Medium | No clipboard (no display), `JIBE_NO_TRAY=1`; mDNS needs `network_mode: host`. |
 | **TLS + dashboard** | Medium | WSS on 8776, plain HTTP dashboard on 8777 localhost only. |
 | **Clipboard monitor** | Medium | Headless hosts log once and disable; incoming sync still works. |
-| **Remote input** | Medium | Needs `ydotoold` + uinput permissions; not wired in Docker by default. |
+| **Remote input** | Medium | Wayland: `input` group + `ydotoold` user service; X11: `xdotool`. See above. |
 | **Tests vs CLI** | Low | Some tests still import `_build_parser` from `main` instead of `jibe.cli` — CI may fail until updated. |
 | **Android discovery** | Low | mDNS on isolated Wi-Fi/VLANs; firewall must allow 8776/tcp on the LAN. |
 

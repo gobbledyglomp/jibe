@@ -32,13 +32,7 @@ git clone https://github.com/gobbledyglomp/jibe.git && cd jibe
 bash deploy/install.sh
 ```
 
-On first start the admin password is written once to the service log:
-
-```bash
-journalctl --user -u jibe -b | grep -A4 'Password (save now)'
-```
-
-With default autostart, Jibe already runs in the background — use the app menu or tray, not a second `jibe` in the terminal.
+`install.sh` prints the first-run admin password when it creates one. With default autostart, Jibe runs in the background — use the app menu or tray, not a second `jibe` in the terminal. Open a **new terminal** (or `export PATH="$HOME/.local/bin:$PATH"`) so the `jibe` command is found.
 
 ### `pipx`
 
