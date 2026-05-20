@@ -87,9 +87,11 @@ Done. Jibe is already running as a background service.
 Do not run `jibe` in a terminal while the service is active (port 8776 conflict).
 Use the application menu launcher, or stop the service first: systemctl --user stop jibe
 
-To remove Jibe completely: bash deploy/uninstall.sh
+To remove Jibe: bash deploy/uninstall.sh
+To factory-reset (fresh DB, new password): bash deploy/reset-data.sh
 EOF
 else
   echo "Done. Launch Jibe from your application menu or run 'jibe' in a terminal."
   echo "To remove Jibe: bash deploy/uninstall.sh"
+  echo "To factory-reset data: bash deploy/reset-data.sh"
 fi
