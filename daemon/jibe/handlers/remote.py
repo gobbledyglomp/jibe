@@ -4,9 +4,9 @@ Receives ``remote.key`` messages from Android and dispatches the corresponding
 key event to the focused Linux window via ``xdotool`` (X11) or ``ydotool``
 (Wayland).  The tool is detected once and cached for the process lifetime.
 
-On Wayland, ``ydotool`` requires the ``ydotoold`` companion daemon.  If the
-socket is missing the first time a key is dispatched, we attempt to start
-``ydotoold`` automatically and retry.
+On Wayland, ``ydotool`` requires the ``ydotoold`` companion daemon (prefer the
+user systemd unit from ``deploy/ydotoold.service``).  Jibe can try to start it
+when the socket is missing, but uinput permissions must be configured on the host.
 """
 
 from __future__ import annotations
@@ -17,6 +17,8 @@ import logging
 import os
 import shutil
 import signal
+import time
+from pathlib import Path
 
 from jibe.core.api import JibeMessage, format_error
 from jibe.core.config import REMOTE_KEY_ALLOWED
@@ -42,9 +44,41 @@ _detected_tool: str | None = None
 _detection_done: bool = False
 _ydotoold_proc: asyncio.subprocess.Process | None = None
 _ydotoold_started: bool = False
+_ydotool_setup_hint_logged: bool = False
+_last_ydotoold_attempt_monotonic: float = 0.0
 
 YDOTOOLD_SETTLE_SECONDS = 0.6
 YDOTOOLD_MAX_WAIT_SECONDS = 3.0
+YDOTOOLD_RETRY_COOLDOWN_SECONDS = 60.0
+
+
+def _ydotool_socket_path() -> Path:
+    runtime = os.environ.get("XDG_RUNTIME_DIR")
+    if runtime:
+        return Path(runtime) / ".ydotool_socket"
+    return Path(f"/run/user/{os.getuid()}") / ".ydotool_socket"
+
+
+def _ydotool_socket_ready() -> bool:
+    return _ydotool_socket_path().is_socket()
+
+
+def _log_ydotool_setup_hint(*, ydotoold_stderr: str = "") -> None:
+    global _ydotool_setup_hint_logged
+    if _ydotool_setup_hint_logged:
+        return
+    _ydotool_setup_hint_logged = True
+
+    detail = f" ({ydotoold_stderr.strip()})" if ydotoold_stderr.strip() else ""
+    logger.warning(
+        "Presentation remote on Wayland needs ydotoold with access to /dev/uinput%s.\n"
+        "  1. sudo pacman -S ydotool   (or your distro equivalent)\n"
+        "  2. sudo usermod -aG input $USER   then log out and back in\n"
+        "  3. bash deploy/install.sh   (enables the ydotoold user service), or:\n"
+        "       systemctl --user enable --now ydotoold\n"
+        "  4. If /dev/uinput is missing: sudo modprobe uinput",
+        detail,
+    )
 
 
 def _detect_tool() -> str | None:
@@ -79,59 +113,119 @@ def _detect_tool() -> str | None:
     return None
 
 
-async def _ensure_ydotoold() -> bool:
-    """Start ``ydotoold`` if it is not already running.
+async def _try_systemd_ydotoold() -> bool:
+    """Start ``ydotoold`` via the user systemd unit when install.sh registered it."""
+    if shutil.which("systemctl") is None:
+        return False
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "systemctl",
+            "--user",
+            "start",
+            "ydotoold",
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _, stderr = await proc.communicate()
+        if proc.returncode != 0:
+            logger.debug(
+                "systemctl --user start ydotoold failed (code %d): %s",
+                proc.returncode,
+                stderr.decode(errors="replace").strip(),
+            )
+            return False
+        await asyncio.sleep(YDOTOOLD_SETTLE_SECONDS)
+        return _ydotool_socket_ready()
+    except Exception:
+        logger.debug("systemctl ydotoold start failed", exc_info=True)
+        return False
 
-    Returns ``True`` when the daemon is believed to be ready.
-    """
+
+async def _start_ydotoold_subprocess() -> tuple[bool, str]:
+    """Spawn ``ydotoold`` directly. Returns (ready, stderr_text)."""
     global _ydotoold_proc, _ydotoold_started
-
-    if _ydotoold_started:
-        if _ydotoold_proc is not None and _ydotoold_proc.returncode is None:
-            return True
-        logger.warning("ydotoold exited unexpectedly, restarting")
-        _ydotoold_started = False
 
     ydotoold = shutil.which("ydotoold")
     if ydotoold is None:
-        logger.warning(
-            "ydotoold not found — install it alongside ydotool for presentation remote"
-        )
-        return False
+        return False, "ydotoold not found in PATH"
 
     try:
         _ydotoold_proc = await asyncio.create_subprocess_exec(
             ydotoold,
             stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.PIPE,
         )
         _ydotoold_started = True
         atexit.register(_kill_ydotoold_sync)
-        logger.info("Started ydotoold (PID %d) for presentation remote", _ydotoold_proc.pid)
 
+        await asyncio.sleep(0.25)
+        if _ydotoold_proc.returncode is not None:
+            stderr_bytes = (
+                await _ydotoold_proc.stderr.read() if _ydotoold_proc.stderr else b""
+            )
+            stderr_text = stderr_bytes.decode(errors="replace").strip()
+            logger.warning(
+                "ydotoold exited immediately with code %d%s",
+                _ydotoold_proc.returncode,
+                f": {stderr_text}" if stderr_text else "",
+            )
+            _ydotoold_started = False
+            return False, stderr_text
+
+        logger.info("Started ydotoold (PID %d) for presentation remote", _ydotoold_proc.pid)
         await asyncio.sleep(YDOTOOLD_SETTLE_SECONDS)
 
         elapsed = YDOTOOLD_SETTLE_SECONDS
+        stderr_text = ""
         while elapsed < YDOTOOLD_MAX_WAIT_SECONDS:
             if _ydotoold_proc.returncode is not None:
-                logger.warning("ydotoold exited immediately with code %d", _ydotoold_proc.returncode)
                 _ydotoold_started = False
-                return False
+                return False, stderr_text
+            if _ydotool_socket_ready():
+                return True, stderr_text
             probe = await asyncio.create_subprocess_exec(
-                "ydotool", "key", "0:0",
+                "ydotool",
+                "key",
+                "0:0",
                 stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.PIPE,
             )
-            await probe.wait()
+            _, probe_err = await probe.communicate()
             if probe.returncode == 0:
-                return True
+                return True, stderr_text
+            stderr_text = probe_err.decode(errors="replace").strip() or stderr_text
             await asyncio.sleep(0.3)
             elapsed += 0.3
 
-        return _ydotoold_proc.returncode is None
+        return _ydotool_socket_ready(), stderr_text
     except Exception:
         logger.exception("Failed to start ydotoold")
+        _ydotoold_started = False
+        return False, ""
+
+
+async def _ensure_ydotoold() -> bool:
+    """Ensure ``ydotoold`` is running and the socket is reachable."""
+    global _last_ydotoold_attempt_monotonic
+
+    if _ydotool_socket_ready():
+        return True
+
+    now = time.monotonic()
+    if now - _last_ydotoold_attempt_monotonic < YDOTOOLD_RETRY_COOLDOWN_SECONDS:
         return False
+    _last_ydotoold_attempt_monotonic = now
+
+    if _ydotoold_started and _ydotoold_proc is not None and _ydotoold_proc.returncode is None:
+        return _ydotool_socket_ready()
+
+    if await _try_systemd_ydotoold():
+        return True
+
+    ready, stderr = await _start_ydotoold_subprocess()
+    if not ready:
+        _log_ydotool_setup_hint(ydotoold_stderr=stderr)
+    return ready
 
 
 def _kill_ydotoold_sync() -> None:
@@ -152,6 +246,9 @@ async def _dispatch_key(logical_key: str) -> bool:
     tool = _detect_tool()
     if tool is None:
         return False
+
+    if tool == "ydotool" and not _ydotool_socket_ready():
+        await _ensure_ydotoold()
 
     if tool == "ydotool":
         press, release = YDOTOOL_KEY[logical_key]
@@ -216,14 +313,15 @@ async def handle_remote_key(
     ok = await _dispatch_key(key)
 
     if not ok and tool == "ydotool":
-        logger.info("ydotool dispatch failed — attempting to start ydotoold")
+        logger.info("ydotool dispatch failed — ensuring ydotoold is running")
         ready = await _ensure_ydotoold()
         if ready:
-            await _dispatch_key(key)
-        else:
+            ok = await _dispatch_key(key)
+        if not ok:
             await conn.send(
                 format_error(
                     "remote_unavailable",
-                    "ydotoold could not be started. Check permissions on /dev/uinput.",
+                    "ydotoold is not available. See daemon logs for setup steps "
+                    "(input group, systemctl --user start ydotoold).",
                 )
             )
