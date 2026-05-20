@@ -14,7 +14,9 @@ SERVICE_TYPE = "_jibe._tcp.local."
 SERVICE_NAME = "Jibe"
 
 _xdg_data_home = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
+_xdg_cache_home = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
 DATABASE_DIR = _xdg_data_home / "jibe"
+JIBE_CACHE_DIR = _xdg_cache_home / "jibe"
 DATABASE_NAME = "jibe.db"
 DASHBOARD_RECOVERY_KEY_FILE = "dashboard_recovery.key"
 SCHEMA_VERSION = 2

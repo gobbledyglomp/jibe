@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any, BinaryIO
 
 from jibe.core.api import JibeMessage, MessageType, format_error
-from jibe.core.config import FILE_TRANSFER_CHUNK_RAW_BYTES
+from jibe.core.config import FILE_TRANSFER_CHUNK_RAW_BYTES, JIBE_CACHE_DIR
 from jibe.core.db import JibeDatabase
 from jibe.network.connection import JibeConnection
 
@@ -57,8 +57,7 @@ def _downloads_root() -> Path:
 
 def _transfer_temp_root() -> Path:
     """Root for in-progress transfer assembly under the user's cache directory."""
-    xdg_cache_home = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
-    return xdg_cache_home / "jibe" / "transfers"
+    return JIBE_CACHE_DIR / "transfers"
 
 
 def _temp_transfer_dir(transfer_id: str) -> Path:
