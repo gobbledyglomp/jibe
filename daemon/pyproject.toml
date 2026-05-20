@@ -53,7 +53,7 @@ where = ["."]
 include = ["jibe*"]
 
 [tool.setuptools.package-data]
-"jibe" = ["web/**/*"]
+"jibe" = ["web/**/*", "assets/**/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
