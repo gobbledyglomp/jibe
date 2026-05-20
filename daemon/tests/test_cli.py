@@ -4,11 +4,10 @@ Covers argument parsing, --verbose log level, --regen-certs behaviour,
 --port forwarding, and --no-tls flag.
 """
 
-import logging
 from unittest.mock import patch
 
 import pytest
-from main import _build_parser, _handle_regen_certs, main
+from jibe.cli import _build_parser, _handle_regen_certs, main
 
 class TestBuildParser:
     """Tests for _build_parser()."""
@@ -87,8 +86,8 @@ class TestHandleRegenCerts:
         certs_dir.mkdir()
         (certs_dir / "old.crt").write_text("old cert")
 
-        with patch("main.CERTS_DIR", certs_dir):
-            with patch("main.generate_self_signed_cert") as mock_gen:
+        with patch("jibe.cli.CERTS_DIR", certs_dir):
+            with patch("jibe.cli.generate_self_signed_cert") as mock_gen:
                 _handle_regen_certs()
 
         assert not (certs_dir / "old.crt").exists()
@@ -98,8 +97,8 @@ class TestHandleRegenCerts:
         """Should not fail if the certs directory doesn't exist yet."""
         certs_dir = tmp_path / "nonexistent"
 
-        with patch("main.CERTS_DIR", certs_dir):
-            with patch("main.generate_self_signed_cert") as mock_gen:
+        with patch("jibe.cli.CERTS_DIR", certs_dir):
+            with patch("jibe.cli.generate_self_signed_cert") as mock_gen:
                 _handle_regen_certs()
 
         mock_gen.assert_called_once()
@@ -113,26 +112,26 @@ class TestVerboseFlag:
         async def noop(**kwargs):
             pass
 
-        with patch("main.logging.basicConfig") as mock_basic:
-            with patch("main.run_daemon", noop):
-                with patch("sys.argv", ["main.py", "--verbose", "--no-tls"]):
-                    main()
+        with patch("jibe.cli._configure_logging") as mock_configure:
+            with patch("jibe.cli.run_daemon", noop):
+                with patch("jibe.cli.assert_ports_available"):
+                    with patch("sys.argv", ["jibe", "--verbose", "--no-tls"]):
+                        main()
 
-        mock_basic.assert_called_once()
-        assert mock_basic.call_args.kwargs["level"] == logging.DEBUG
+        mock_configure.assert_called_once_with(verbose=True)
 
     def test_default_sets_info_level(self):
         """Default (no --verbose) should pass INFO level to logging.basicConfig."""
         async def noop(**kwargs):
             pass
 
-        with patch("main.logging.basicConfig") as mock_basic:
-            with patch("main.run_daemon", noop):
-                with patch("sys.argv", ["main.py", "--no-tls"]):
-                    main()
+        with patch("jibe.cli._configure_logging") as mock_configure:
+            with patch("jibe.cli.run_daemon", noop):
+                with patch("jibe.cli.assert_ports_available"):
+                    with patch("sys.argv", ["jibe", "--no-tls"]):
+                        main()
 
-        mock_basic.assert_called_once()
-        assert mock_basic.call_args.kwargs["level"] == logging.INFO
+        mock_configure.assert_called_once_with(verbose=False)
 
 
 class TestPortFlag:
@@ -145,9 +144,10 @@ class TestPortFlag:
         async def fake_run_daemon(**kwargs):
             captured_port["port"] = kwargs["port"]
 
-        with patch("main.run_daemon", fake_run_daemon):
-            with patch("sys.argv", ["main.py", "--port", "4242", "--no-tls"]):
-                main()
+        with patch("jibe.cli.run_daemon", fake_run_daemon):
+            with patch("jibe.cli.assert_ports_available"):
+                with patch("sys.argv", ["jibe", "--port", "4242", "--no-tls"]):
+                    main()
 
         assert captured_port["port"] == 4242
 
@@ -162,9 +162,10 @@ class TestNoTlsFlag:
         async def fake_run_daemon(**kwargs):
             captured["use_tls"] = kwargs["use_tls"]
 
-        with patch("main.run_daemon", fake_run_daemon):
-            with patch("sys.argv", ["main.py", "--no-tls"]):
-                main()
+        with patch("jibe.cli.run_daemon", fake_run_daemon):
+            with patch("jibe.cli.assert_ports_available"):
+                with patch("sys.argv", ["jibe", "--no-tls"]):
+                    main()
 
         assert captured["use_tls"] is False
 
@@ -175,9 +176,10 @@ class TestNoTlsFlag:
         async def fake_run_daemon(**kwargs):
             captured["use_tls"] = kwargs["use_tls"]
 
-        with patch("main.run_daemon", fake_run_daemon):
-            with patch("sys.argv", ["main.py"]):
-                main()
+        with patch("jibe.cli.run_daemon", fake_run_daemon):
+            with patch("jibe.cli.assert_ports_available"):
+                with patch("sys.argv", ["jibe"]):
+                    main()
 
         assert captured["use_tls"] is True
 
@@ -192,9 +194,10 @@ class TestPairFlag:
         async def fake_run_daemon(**kwargs):
             captured["start_pairing"] = kwargs["start_pairing"]
 
-        with patch("main.run_daemon", fake_run_daemon):
-            with patch("sys.argv", ["main.py", "--pair", "--no-tls"]):
-                main()
+        with patch("jibe.cli.run_daemon", fake_run_daemon):
+            with patch("jibe.cli.assert_ports_available"):
+                with patch("sys.argv", ["jibe", "--pair", "--no-tls"]):
+                    main()
 
         assert captured["start_pairing"] is True
 
@@ -205,8 +208,9 @@ class TestPairFlag:
         async def fake_run_daemon(**kwargs):
             captured["start_pairing"] = kwargs["start_pairing"]
 
-        with patch("main.run_daemon", fake_run_daemon):
-            with patch("sys.argv", ["main.py", "--no-tls"]):
-                main()
+        with patch("jibe.cli.run_daemon", fake_run_daemon):
+            with patch("jibe.cli.assert_ports_available"):
+                with patch("sys.argv", ["jibe", "--no-tls"]):
+                    main()
 
         assert captured["start_pairing"] is False
