@@ -12,7 +12,29 @@ From the repo you cloned:
 bash deploy/uninstall.sh
 ```
 
-This stops the user systemd unit, runs `pipx uninstall jibe`, and removes the `.desktop` entry and launcher icon. **User data** (`~/.local/share/jibe` — SQLite DB, TLS certs, admin password hash) is kept on purpose; delete that folder for a full reset.
+This stops the user systemd unit, runs `pipx uninstall jibe`, and removes the `.desktop` entry and launcher icon. **User data is kept by default** (`~/.local/share/jibe`).
+
+| Goal | Command |
+|---|---|
+| Re-test from scratch (keep app installed) | `bash deploy/reset-data.sh` or `jibe --reset-data` |
+| Uninstall app but keep pairing for later | `bash deploy/uninstall.sh` |
+| Remove everything | `bash deploy/uninstall.sh --purge` |
+
+### Factory reset (testing / fresh password)
+
+Stops Jibe, deletes:
+
+- `~/.local/share/jibe` — SQLite DB, TLS certs, dashboard recovery key
+- `~/.cache/jibe` — incomplete file transfers
+
+```bash
+bash deploy/reset-data.sh        # asks for confirmation
+bash deploy/reset-data.sh --yes  # no prompt
+```
+
+Without the repo: `systemctl --user stop jibe && jibe --reset-data --yes`
+
+On next start you get a **new** admin password (check logs as on first install). **Re-pair Android** — old device tokens are invalid. TLS cert changes — you may need to clear the app’s trust or reinstall the APK if pinning fails.
 
 ### `pipx` only — remove
 
@@ -74,7 +96,7 @@ systemctl --user restart jibe
 | `jibe` in foreground | Printed once on stdout when the DB is created |
 | Docker | `docker compose logs daemon \| grep -A4 'Password (save now)'` |
 
-It is shown **once**. If you missed it, reset by stopping Jibe and removing `~/.local/share/jibe/jibe.db` (you will lose paired devices and settings).
+It is shown **once**. If you missed it, run `bash deploy/reset-data.sh` (or `jibe --reset-data`) and start Jibe again.
 
 ---
 

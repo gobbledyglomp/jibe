@@ -55,11 +55,17 @@ Then: bookmark **http://127.0.0.1:8777/** → log in as `admin` → go to [Pair]
 
 **Running Jibe** — with default autostart, the daemon already runs in the background. Use the application menu or `systemctl --user status jibe`. Do not run `jibe` in a terminal unless you stopped the service first (`systemctl --user stop jibe`).
 
+**Factory reset** (fresh database, new admin password, re-pair Android):
+```bash
+bash deploy/reset-data.sh
+```
+Or: `systemctl --user stop jibe && jibe --reset-data`
+
 **Uninstall** — from the cloned repo:
 ```bash
-bash deploy/uninstall.sh
+bash deploy/uninstall.sh          # keeps data (reinstall preserves pairing)
+bash deploy/uninstall.sh --purge  # also deletes ~/.local/share/jibe
 ```
-Removes pipx, the launcher entry, icon, and systemd unit. Keeps `~/.local/share/jibe` (database and certs) unless you delete it manually.
 
 ---
 
@@ -89,7 +95,9 @@ Then: bookmark **http://127.0.0.1:8777/** → log in as `admin` → go to [Pair]
 
 If you also enabled the systemd service, do not run `jibe` manually at the same time (port conflict). See [docs/troubleshooting.md](docs/troubleshooting.md).
 
-**Uninstall:** `pipx uninstall jibe` and remove `~/.config/systemd/user/jibe.service` if you added it.
+**Factory reset:** `systemctl --user stop jibe && jibe --reset-data`
+
+**Uninstall:** `pipx uninstall jibe` (data remains in `~/.local/share/jibe` unless you run `jibe --reset-data --yes` first).
 
 ---
 

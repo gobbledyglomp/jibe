@@ -40,6 +40,15 @@ jibe --pair
 
 `pipx` creates an isolated environment automatically. The `jibe` binary lands in `~/.local/bin/`.
 
+**Factory reset** (wipe DB, pairing, certs — useful when testing):
+
+```bash
+systemctl --user stop jibe   # if the service is running
+jibe --reset-data
+```
+
+From a repo clone you can also use `bash deploy/reset-data.sh` (stops the service and restarts it when enabled).
+
 ---
 
 ## Install — development (venv)
