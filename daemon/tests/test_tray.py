@@ -50,12 +50,9 @@ def test_tray_make_image_returns_white_transparent_from_filled_png():
     """The real filled logo PNG should produce a white-on-transparent icon."""
     from PIL import Image
 
-    real_icon = (
-        Path(__file__).resolve().parent.parent.parent.parent
-        / "branding"
-        / "logos"
-        / "jibe-icon-filled-512.png"
-    )
+    from jibe.ui.icons import default_tray_icon_path
+
+    real_icon = default_tray_icon_path()
     if not real_icon.exists():
         return  # skip in environments without the asset
 

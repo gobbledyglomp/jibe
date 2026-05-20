@@ -34,11 +34,11 @@ from PIL import Image
 from collections.abc import Callable
 
 from jibe.core.auth import AuthManager
+from jibe.ui.icons import default_tray_icon_path
 
 logger = logging.getLogger(__name__)
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
-_DEFAULT_ICON = _REPO_ROOT / "branding" / "logos" / "jibe-icon-filled-512.png"
+_DEFAULT_ICON = default_tray_icon_path()
 
 _TRAY_ICON_SIZE = 64
 """RGBA PNG size passed to StatusNotifier / Gtk (px)."""
