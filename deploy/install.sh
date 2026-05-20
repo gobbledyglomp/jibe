@@ -31,8 +31,8 @@ if ! command -v pipx &>/dev/null; then
   exit 1
 fi
 
-echo "Installing jibe via pipx..."
-pipx install --force "git+https://github.com/gobbledyglomp/jibe.git#subdirectory=daemon"
+echo "Installing jibe via pipx (from ${REPO_ROOT}/daemon)..."
+pipx install --force "${REPO_ROOT}/daemon"
 
 # ---------------------------------------------------------------------------
 # 2. Install icon into XDG icon theme
@@ -64,11 +64,32 @@ if "$AUTOSTART"; then
   mkdir -p "$SYSTEMD_DIR"
   cp "$REPO_ROOT/deploy/jibe.service" "$SYSTEMD_DIR/jibe.service"
   systemctl --user daemon-reload
-  systemctl --user enable --now jibe
-  echo "Systemd service enabled — Jibe will start automatically on login."
+  if systemctl --user is-enabled jibe &>/dev/null; then
+    systemctl --user restart jibe
+  else
+    systemctl --user enable --now jibe
+  fi
+  echo "Systemd service enabled — Jibe runs in the background and starts on login."
 else
-  echo "Autostart skipped. Run 'jibe' from your application launcher or terminal."
+  echo "Autostart skipped. Run 'jibe' once from your application launcher or terminal."
 fi
 
 echo ""
-echo "Done. Launch Jibe from your application menu or run 'jibe' in a terminal."
+if "$AUTOSTART"; then
+  cat <<'EOF'
+Done. Jibe is already running as a background service.
+
+  Dashboard:  http://127.0.0.1:8777/
+  Status:     systemctl --user status jibe
+  Logs:       journalctl --user -u jibe -f
+  Password:   journalctl --user -u jibe -b | grep -A4 'Password (save now)'
+
+Do not run `jibe` in a terminal while the service is active (port 8776 conflict).
+Use the application menu launcher, or stop the service first: systemctl --user stop jibe
+
+To remove Jibe completely: bash deploy/uninstall.sh
+EOF
+else
+  echo "Done. Launch Jibe from your application menu or run 'jibe' in a terminal."
+  echo "To remove Jibe: bash deploy/uninstall.sh"
+fi
