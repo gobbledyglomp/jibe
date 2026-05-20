@@ -25,6 +25,7 @@ import sys
 
 from jibe.core.config import CERTS_DIR, DEFAULT_PORT, LOG_DATE_FORMAT, LOG_FORMAT
 from jibe.core.ports import assert_ports_available
+from jibe.core.user_data import reset_user_data
 from jibe.core.db import JibeDatabase
 from jibe.core.tls import create_ssl_context, generate_self_signed_cert
 from jibe.handlers.battery import get_all_batteries
@@ -168,6 +169,16 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Enable debug logging",
     )
+    parser.add_argument(
+        "--reset-data",
+        action="store_true",
+        help="Delete all local Jibe data (database, pairing, certs, cache) and exit",
+    )
+    parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="Skip confirmation (use with --reset-data)",
+    )
     return parser
 
 
@@ -223,6 +234,10 @@ def main() -> None:
         args.no_tray = True
 
     _configure_logging(verbose=args.verbose)
+
+    if args.reset_data:
+        reset_user_data(assume_yes=args.yes)
+        return
 
     if args.regen_certs:
         _handle_regen_certs()
