@@ -53,6 +53,14 @@ journalctl --user -u jibe -b --no-pager | grep -A4 'Password (save now)'
 
 Then: bookmark **http://127.0.0.1:8777/** → log in as `admin` → go to [Pair](#pairing).
 
+**Running Jibe** — with default autostart, the daemon already runs in the background. Use the application menu or `systemctl --user status jibe`. Do not run `jibe` in a terminal unless you stopped the service first (`systemctl --user stop jibe`).
+
+**Uninstall** — from the cloned repo:
+```bash
+bash deploy/uninstall.sh
+```
+Removes pipx, the launcher entry, icon, and systemd unit. Keeps `~/.local/share/jibe` (database and certs) unless you delete it manually.
+
 ---
 
 ### `pipx` (minimal, bring your own launcher)
@@ -78,6 +86,10 @@ systemctl --user daemon-reload && systemctl --user enable --now jibe
 ```
 
 Then: bookmark **http://127.0.0.1:8777/** → log in as `admin` → go to [Pair](#pairing).
+
+If you also enabled the systemd service, do not run `jibe` manually at the same time (port conflict). See [docs/troubleshooting.md](docs/troubleshooting.md).
+
+**Uninstall:** `pipx uninstall jibe` and remove `~/.config/systemd/user/jibe.service` if you added it.
 
 ---
 
@@ -106,6 +118,12 @@ Then: bookmark **http://127.0.0.1:8777/** → log in as `admin` → go to [Pair]
 4. Done. The device reconnects automatically from now on.
 
 After pairing, change the default admin password under **Settings → Users**.
+
+---
+
+## Troubleshooting
+
+Install issues, port conflicts, tray icons, and known limitations: [docs/troubleshooting.md](docs/troubleshooting.md).
 
 ---
 
