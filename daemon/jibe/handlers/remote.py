@@ -74,8 +74,9 @@ def _log_ydotool_setup_hint(*, ydotoold_stderr: str = "") -> None:
         "Presentation remote on Wayland needs ydotoold with access to /dev/uinput%s.\n"
         "  1. sudo pacman -S ydotool   (or your distro equivalent)\n"
         "  2. sudo usermod -aG input $USER   then log out and back in\n"
-        "  3. bash deploy/install.sh   (enables the ydotoold user service), or:\n"
-        "       systemctl --user enable --now ydotoold\n"
+        "  3. bash deploy/install.sh   (enables the ydotool user service), or:\n"
+        "       systemctl --user enable --now ydotool    # Arch (pacman ydotool)\n"
+        "       systemctl --user enable --now ydotoold   # when using deploy/ydotoold.service\n"
         "  4. If /dev/uinput is missing: sudo modprobe uinput",
         detail,
     )
@@ -113,32 +114,38 @@ def _detect_tool() -> str | None:
     return None
 
 
+_YDOTOOL_SYSTEMD_UNITS = ("ydotool", "ydotoold")
+
+
 async def _try_systemd_ydotoold() -> bool:
-    """Start ``ydotoold`` via the user systemd unit when install.sh registered it."""
+    """Start ``ydotoold`` via a user systemd unit (distro ``ydotool`` or Jibe ``ydotoold``)."""
     if shutil.which("systemctl") is None:
         return False
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            "systemctl",
-            "--user",
-            "start",
-            "ydotoold",
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        _, stderr = await proc.communicate()
-        if proc.returncode != 0:
-            logger.debug(
-                "systemctl --user start ydotoold failed (code %d): %s",
-                proc.returncode,
-                stderr.decode(errors="replace").strip(),
+    for unit in _YDOTOOL_SYSTEMD_UNITS:
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "systemctl",
+                "--user",
+                "start",
+                unit,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.PIPE,
             )
-            return False
-        await asyncio.sleep(YDOTOOLD_SETTLE_SECONDS)
-        return _ydotool_socket_ready()
-    except Exception:
-        logger.debug("systemctl ydotoold start failed", exc_info=True)
-        return False
+            _, stderr = await proc.communicate()
+            if proc.returncode != 0:
+                logger.debug(
+                    "systemctl --user start %s failed (code %d): %s",
+                    unit,
+                    proc.returncode,
+                    stderr.decode(errors="replace").strip(),
+                )
+                continue
+            await asyncio.sleep(YDOTOOLD_SETTLE_SECONDS)
+            if _ydotool_socket_ready():
+                return True
+        except Exception:
+            logger.debug("systemctl --user start %s failed", unit, exc_info=True)
+    return False
 
 
 async def _start_ydotoold_subprocess() -> tuple[bool, str]:

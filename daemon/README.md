@@ -101,7 +101,12 @@ journalctl --user -u jibe -f
 
 For the Wayland presentation remote, also enable the companion unit:
 ```bash
+# Arch (pacman ydotool): use the distro unit
+systemctl --user enable --now ydotool
+
+# Other distros / manual: Jibe’s unit
 cp ../deploy/ydotoold.service ~/.config/systemd/user/
+systemctl --user daemon-reload
 systemctl --user enable --now ydotoold
 ```
 

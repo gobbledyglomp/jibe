@@ -50,20 +50,48 @@ _fetch_initial_password() {
   return 1
 }
 
+_session_is_wayland() {
+  [[ -n "${WAYLAND_DISPLAY:-}" || "${XDG_SESSION_TYPE:-}" == "wayland" ]]
+}
+
+_enable_ydotool_user_service() {
+  # Arch and some distros ship /usr/lib/systemd/user/ydotool.service (not ydotoold).
+  if [[ -f /usr/lib/systemd/user/ydotool.service ]]; then
+    systemctl --user daemon-reload
+    systemctl --user enable ydotool 2>/dev/null || true
+    systemctl --user start ydotool 2>/dev/null || true
+    return
+  fi
+  local systemd_dir="${CONFIG_HOME}/systemd/user"
+  mkdir -p "$systemd_dir"
+  cp "${REPO_ROOT}/deploy/ydotoold.service" "${systemd_dir}/ydotoold.service"
+  systemctl --user daemon-reload
+  systemctl --user enable ydotoold 2>/dev/null || true
+  systemctl --user start ydotoold 2>/dev/null || true
+}
+
+_ydotool_systemd_unit_name() {
+  if [[ -f /usr/lib/systemd/user/ydotool.service ]]; then
+    echo "ydotool"
+  else
+    echo "ydotoold"
+  fi
+}
+
 _setup_presentation_remote() {
-  if [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
+  if _session_is_wayland; then
     if ! command -v ydotool &>/dev/null; then
       echo ""
       echo "Wayland detected — install ydotool for presentation remote:"
       echo "  sudo pacman -S ydotool    # Arch"
       return
     fi
-    local systemd_dir="${CONFIG_HOME}/systemd/user"
-    mkdir -p "$systemd_dir"
-    cp "${REPO_ROOT}/deploy/ydotoold.service" "${systemd_dir}/ydotoold.service"
-    systemctl --user daemon-reload
-    systemctl --user enable ydotoold 2>/dev/null || true
-    systemctl --user start ydotoold 2>/dev/null || true
+    _enable_ydotool_user_service
+  elif command -v ydotool &>/dev/null; then
+    # Install from SSH/tty often has no WAYLAND_DISPLAY — still register the daemon unit.
+    _enable_ydotool_user_service
+    echo ""
+    echo "ydotool user service registered (install was not in a Wayland session)."
   elif ! command -v xdotool &>/dev/null; then
     echo ""
     echo "Optional: install xdotool for presentation remote on X11:"
@@ -78,10 +106,12 @@ _setup_presentation_remote() {
   fi
 
   if getent group input &>/dev/null && ! id -nG "$USER" | grep -qw input; then
+    local ydotool_unit
+    ydotool_unit="$(_ydotool_systemd_unit_name)"
     echo ""
     echo "Presentation remote on Wayland requires the 'input' group:"
     echo "  sudo usermod -aG input $USER"
-    echo "  Log out and back in, then: systemctl --user restart ydotoold jibe"
+    echo "  Log out and back in, then: systemctl --user restart ${ydotool_unit} jibe"
   fi
 }
 

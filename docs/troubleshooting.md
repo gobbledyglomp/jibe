@@ -125,13 +125,22 @@ On **Wayland** (default on Arch/KDE/GNOME), Jibe uses `ydotool`, which needs the
 sudo pacman -S ydotool
 sudo usermod -aG input $USER
 # log out and back in (or reboot)
-systemctl --user enable --now ydotoold
+systemctl --user enable --now ydotool    # unit name from the Arch package
 systemctl --user restart jibe
+```
+
+On Arch the systemd unit is **`ydotool.service`**, not `ydotoold`. If you see `Unit ydotoold.service does not exist`, use `ydotool` above, re-run `bash deploy/install.sh`, or install Jibe’s unit manually:
+
+```bash
+mkdir -p ~/.config/systemd/user
+cp deploy/ydotoold.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now ydotoold
 ```
 
 If `/dev/uinput` is missing: `sudo modprobe uinput`.
 
-`install.sh` enables the `ydotoold` user service and prints a warning when you are not in the `input` group yet.
+`install.sh` enables the distro `ydotool` unit when present, otherwise copies `deploy/ydotoold.service`. It also registers the service when `ydotool` is installed but the installer ran without a Wayland session (SSH/tty).
 
 On **X11**, install `xdotool` instead — no `ydotoold` required.
 
