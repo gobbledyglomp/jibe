@@ -24,6 +24,7 @@ import signal
 import sys
 
 from jibe.core.config import CERTS_DIR, DEFAULT_PORT, LOG_DATE_FORMAT, LOG_FORMAT
+from jibe.core.ports import assert_ports_available
 from jibe.core.db import JibeDatabase
 from jibe.core.tls import create_ssl_context, generate_self_signed_cert
 from jibe.handlers.battery import get_all_batteries
@@ -227,6 +228,8 @@ def main() -> None:
         _handle_regen_certs()
 
     enable_tray = not args.no_tray
+
+    assert_ports_available(args.port, use_tls=not args.no_tls)
 
     try:
         asyncio.run(
