@@ -24,6 +24,7 @@ import signal
 import sys
 
 from jibe.core.config import CERTS_DIR, DEFAULT_PORT, LOG_DATE_FORMAT, LOG_FORMAT
+from jibe.core.desktop_env import desktop_env_summary, have_desktop_session
 from jibe.core.ports import assert_ports_available
 from jibe.core.user_data import reset_user_data
 from jibe.core.db import JibeDatabase
@@ -37,10 +38,6 @@ from jibe.ui.tray import JibeTray
 _QUIET_LOGGERS = ("aiosqlite", "asyncio", "zeroconf", "aiohttp.access")
 
 logger = logging.getLogger("jibe.main")
-
-
-def _have_desktop() -> bool:
-    return bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
 
 
 async def run_daemon(
@@ -79,7 +76,7 @@ async def run_daemon(
     loop.add_signal_handler(signal.SIGTERM, _request_shutdown)
 
     tray: JibeTray | None = None
-    if enable_tray and _have_desktop():
+    if enable_tray and have_desktop_session():
         def _ring_any_device() -> None:
             """Ring the first authenticated device, scheduling on the asyncio loop."""
             conns = server.registry.get_authenticated()
@@ -98,6 +95,11 @@ async def run_daemon(
             auth_manager=server.auth,
             get_battery_fn=get_all_batteries,
             ring_fn=_ring_any_device,
+        )
+    elif enable_tray:
+        logger.warning(
+            "System tray disabled — no graphical session detected (%s)",
+            desktop_env_summary(),
         )
 
     try:
