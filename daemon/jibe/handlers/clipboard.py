@@ -20,6 +20,7 @@ import json
 import logging
 import shutil
 import subprocess
+import time
 import pyperclip
 from pyperclip import PyperclipException
 
@@ -30,6 +31,9 @@ from jibe.network.connection import ConnectionRegistry, JibeConnection
 logger = logging.getLogger(__name__)
 
 CLIPBOARD_POLL_INTERVAL_SECONDS = 0.5
+REMOTE_APPLY_SUPPRESS_SECONDS = 2.0
+REMOTE_APPLY_SETTLE_ATTEMPTS = 20
+REMOTE_APPLY_SETTLE_DELAY_SECONDS = 0.05
 
 
 def _clipboard_mechanism_available() -> bool:
@@ -114,6 +118,47 @@ def snapshot_plain_text_clipboard() -> str | None:
     return text
 
 
+def write_plain_text_clipboard(content: str) -> None:
+    """Write plain text to the clipboard using the same stack as snapshot reads."""
+    wl = shutil.which("wl-copy")
+    if wl is not None:
+        proc = subprocess.run(
+            [wl],
+            input=content,
+            text=True,
+            capture_output=True,
+            timeout=2,
+            check=False,
+        )
+        if proc.returncode == 0:
+            return
+        logger.warning(
+            "wl-copy failed (exit %s): %s",
+            proc.returncode,
+            (proc.stderr or "").strip(),
+        )
+
+    xc = shutil.which("xclip")
+    if xc is not None:
+        proc = subprocess.run(
+            [xc, "-selection", "clipboard"],
+            input=content,
+            text=True,
+            capture_output=True,
+            timeout=2,
+            check=False,
+        )
+        if proc.returncode == 0:
+            return
+        logger.warning(
+            "xclip copy failed (exit %s): %s",
+            proc.returncode,
+            (proc.stderr or "").strip(),
+        )
+
+    pyperclip.copy(content)
+
+
 class ClipboardMonitor:
     """Polls the OS clipboard and broadcasts ``clipboard.sync`` on change."""
 
@@ -131,17 +176,25 @@ class ClipboardMonitor:
         self._registry = registry
         self._db = db
         self._last_clipboard: str | None = None
+        self._suppress_broadcast_until: float = 0.0
+        self._pending_remote_content: str | None = None
+
+    def begin_remote_apply(self, content: str) -> None:
+        """Mark an inbound clipboard.sync so the monitor does not echo stale text."""
+        self._last_clipboard = content
+        self._pending_remote_content = content
+        self._suppress_broadcast_until = (
+            time.monotonic() + REMOTE_APPLY_SUPPRESS_SECONDS
+        )
 
     def sync_after_remote_push(self, content: str) -> None:
-        """Record clipboard contents applied from the wire before calling ``pyperclip.copy``.
-
-        Prevents the polling loop from treating that write as a new local edit and
-        broadcasting it again.
-
-        Args:
-            content: Exact string written to the clipboard.
-        """
+        """Align last-known clipboard after a verified remote write."""
         self._last_clipboard = content
+        self._pending_remote_content = None
+        self._suppress_broadcast_until = 0.0
+
+    def _broadcast_suppressed(self) -> bool:
+        return time.monotonic() < self._suppress_broadcast_until
 
     async def run(self) -> None:
         """Poll forever until cancelled."""
@@ -163,6 +216,19 @@ class ClipboardMonitor:
                 if not baseline_ready:
                     self._last_clipboard = current
                     baseline_ready = True
+                    continue
+
+                if self._broadcast_suppressed():
+                    if (
+                        self._pending_remote_content is not None
+                        and current == self._pending_remote_content
+                    ):
+                        self.sync_after_remote_push(current)
+                    continue
+
+                if self._pending_remote_content is not None:
+                    self._pending_remote_content = None
+                    self._last_clipboard = current
                     continue
 
                 if current == self._last_clipboard:
@@ -209,15 +275,30 @@ async def handle_clipboard_sync(
         logger.warning("clipboard.sync missing string content from %s", conn.id)
         return
 
-    monitor.sync_after_remote_push(raw)
+    monitor.begin_remote_apply(raw)
     try:
-        await asyncio.to_thread(pyperclip.copy, raw)
+        await asyncio.to_thread(write_plain_text_clipboard, raw)
     except PyperclipException:
-        logger.warning("pyperclip.copy unavailable (headless environment) for %s", conn.id)
+        logger.warning("clipboard write unavailable (headless environment) for %s", conn.id)
         return
     except Exception:
-        logger.exception("pyperclip.copy failed for connection %s", conn.id)
+        logger.exception("clipboard write failed for connection %s", conn.id)
         return
+
+    for _ in range(REMOTE_APPLY_SETTLE_ATTEMPTS):
+        snap = await asyncio.to_thread(snapshot_plain_text_clipboard)
+        if snap == raw:
+            monitor.sync_after_remote_push(raw)
+            break
+        await asyncio.sleep(REMOTE_APPLY_SETTLE_DELAY_SECONDS)
+    else:
+        snap = await asyncio.to_thread(snapshot_plain_text_clipboard)
+        if snap is not None:
+            monitor.sync_after_remote_push(snap)
+        logger.debug(
+            "clipboard.sync from %s: local clipboard did not match payload after write",
+            conn.id,
+        )
 
     if db is not None and conn.device_id:
         try:

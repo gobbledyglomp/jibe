@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -25,11 +25,59 @@ async def test_handle_clipboard_sync_writes_clipboard():
     conn.id = "conn-1"
     monitor = ClipboardMonitor(ConnectionRegistry())
 
-    with patch("jibe.handlers.clipboard.pyperclip.copy") as mock_copy:
+    with (
+        patch(
+            "jibe.handlers.clipboard.write_plain_text_clipboard",
+            MagicMock(),
+        ) as mock_write,
+        patch(
+            "jibe.handlers.clipboard.snapshot_plain_text_clipboard",
+            return_value="hello-world",
+        ),
+        patch("jibe.handlers.clipboard.asyncio.sleep", new=AsyncMock()),
+    ):
         await handle_clipboard_sync(conn, _make_clip_msg("hello-world"), monitor)
 
-    mock_copy.assert_called_once_with("hello-world")
+    mock_write.assert_called_once_with("hello-world")
     assert monitor._last_clipboard == "hello-world"
+    assert monitor._pending_remote_content is None
+
+
+@pytest.mark.asyncio
+async def test_inbound_clipboard_does_not_echo_stale_while_apply_pending(mock_ws):
+    """Monitor must not broadcast old clipboard text during a remote apply."""
+    registry = ConnectionRegistry()
+    conn = JibeConnection(mock_ws, "127.0.0.1")
+    conn.state = ConnectionState.AUTHENTICATED
+    registry.add(conn)
+
+    monitor = ClipboardMonitor(registry)
+    monitor.begin_remote_apply("from-android")
+
+    reads = iter(["stale-linux", "from-android"])
+
+    def fake_snapshot() -> str:
+        return next(reads, "from-android")
+
+    sleep_calls = 0
+
+    async def fake_sleep(_seconds: float) -> None:
+        nonlocal sleep_calls
+        sleep_calls += 1
+        if sleep_calls >= 3:
+            raise asyncio.CancelledError()
+
+    with (
+        patch(
+            "jibe.handlers.clipboard.snapshot_plain_text_clipboard",
+            side_effect=fake_snapshot,
+        ),
+        patch("jibe.handlers.clipboard.asyncio.sleep", new=fake_sleep),
+    ):
+        with pytest.raises(asyncio.CancelledError):
+            await monitor.run()
+
+    conn.ws.send_str.assert_not_awaited()
 
 
 @pytest.mark.asyncio
