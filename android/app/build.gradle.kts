@@ -26,7 +26,7 @@ android {
         applicationId = "com.jibe.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 7
+        versionCode = 8
         versionName = "0.9.0-pre"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
