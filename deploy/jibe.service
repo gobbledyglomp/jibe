@@ -1,13 +1,14 @@
 [Unit]
 Description=Jibe daemon — Android/Linux LAN bridge
 Documentation=https://github.com/gobbledyglomp/jibe
-After=network-online.target
-Wants=network-online.target
+After=network-online.target graphical-session.target
+Wants=network-online.target graphical-session.target
 
 [Service]
 Type=simple
 ExecStart=%h/.local/bin/jibe
 Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+PassEnvironment=WAYLAND_DISPLAY DISPLAY XAUTHORITY DBUS_SESSION_BUS_ADDRESS XDG_RUNTIME_DIR XDG_SESSION_TYPE
 Restart=on-failure
 RestartSec=3
 StandardOutput=journal

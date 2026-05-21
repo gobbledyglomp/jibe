@@ -172,6 +172,11 @@ if "$AUTOSTART"; then
   mkdir -p "$SYSTEMD_DIR"
   cp "$REPO_ROOT/deploy/jibe.service" "$SYSTEMD_DIR/jibe.service"
   systemctl --user daemon-reload
+  # Import display/D-Bus into the user manager when install runs inside a desktop session.
+  if [[ -n "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]]; then
+    systemctl --user import-environment \
+      WAYLAND_DISPLAY DISPLAY DBUS_SESSION_BUS_ADDRESS XDG_RUNTIME_DIR 2>/dev/null || true
+  fi
   echo "Starting Jibe..."
   if systemctl --user is-enabled jibe &>/dev/null; then
     systemctl --user restart jibe
