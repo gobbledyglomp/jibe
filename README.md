@@ -16,6 +16,8 @@ Install the latest [`jibe-0.9.0-pre.apk`](https://github.com/gobbledyglomp/jibe/
 
 ## Linux daemon
 
+**Dependencies (desktop):** `python-pipx`, `wl-clipboard` or `xclip`, `libnotify`; presentation remote — `xdotool` (X11) or `ydotool` (Wayland, user in `input` group). Arch: `sudo pacman -S python-pipx wl-clipboard libnotify xdotool ydotool`
+
 | | `install.sh` | `pipx` | Docker |
 |---|---|---|---|
 | Launcher & tray | ✓ | optional | ✗ |
