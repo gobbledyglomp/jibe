@@ -71,6 +71,32 @@ Check listeners: `ss -tlnp | grep -E '8776|8777'`
 
 ---
 
+## Tray icon missing after reboot or `systemctl restart`
+
+**Symptom:** Jibe runs (dashboard works) but no tray icon after login or service restart.
+
+**Cause:** The systemd user unit started before the graphical session, or without `WAYLAND_DISPLAY` / `DBUS_SESSION_BUS_ADDRESS` in the service environment.
+
+**Fix:** Reinstall or recopy the unit, reload, and restart:
+
+```bash
+cp deploy/jibe.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user restart jibe
+```
+
+Recent `jibe.service` units wait for `graphical-session.target`, pass desktop variables with `PassEnvironment`, and the daemon discovers `wayland-*` sockets under `XDG_RUNTIME_DIR` when only the runtime dir is set.
+
+If the tray is still missing, check logs:
+
+```bash
+journalctl --user -u jibe -b | grep -iE 'tray|desktop|AppIndicator|gi '
+```
+
+On Wayland, install `python-gobject` and `libayatana-appindicator3-gtk3` (package names vary by distro).
+
+---
+
 ## Tray icon invisible or blank
 
 **Symptom:** Log line `Tray icon not found at .../branding/... — using blank placeholder`.
