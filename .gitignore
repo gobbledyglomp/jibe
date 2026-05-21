@@ -25,7 +25,11 @@ Thumbs.db
 *.tar
 *.tar.gz
 
+# Tools / release staging
+.tools/
+
 # Android
+android/dist/
 *.apk
 *.aab
 *.dex

@@ -62,6 +62,21 @@ export SIGNING_KEY_PASSWORD=...
 
 The APK is suitable for sideloading and for attaching to a GitHub Release.
 
+### 4. Publish to GitHub (maintainers)
+
+```bash
+# from repo root — builds, copies to android/dist/, uploads release
+bash android/scripts/publish-release.sh
+```
+
+Requires [GitHub CLI](https://cli.github.com/) (`gh auth login`). Release tag: `v0.9.0-pre`, assets: `jibe-0.9.0-pre.apk` and `SHA256SUMS`.
+
+Build only (no upload):
+
+```bash
+bash android/scripts/publish-release.sh --build-only
+```
+
 ## Project structure
 
 ```

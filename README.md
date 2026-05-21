@@ -12,7 +12,7 @@ Clipboard sync, file transfer, notification mirroring, find-my-phone, presentati
 
 ## Android
 
-Install [`app-release.apk`](https://github.com/gobbledyglomp/jibe/releases) and keep the phone on the same Wi-Fi as the Linux daemon. Discovery is automatic.
+Install the latest [`jibe-0.9.0-pre.apk`](https://github.com/gobbledyglomp/jibe/releases/latest) and keep the phone on the same Wi-Fi as the Linux daemon. Discovery is automatic.
 
 ## Linux daemon
 
